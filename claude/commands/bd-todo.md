@@ -56,4 +56,6 @@ Task description here...
 echo '{"type":"todo","title":"...","summary":"...","tags":[...],"input":"original user input","status":"pending","created_at":"...","file_path":"..."}' >> "$BD/todos/index.jsonl"
 ```
 
-Respond only with `done: <file_path>` (no extra text).
+## Output
+
+CRITICAL: Your ONLY output must be exactly `done: <file_path>`. No confirmations, no summaries, no explanations. Just those two words and the path.

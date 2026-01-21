@@ -55,4 +55,6 @@ The thought or idea...
 echo '{"type":"thought","title":"...","summary":"...","tags":[...],"input":"original user input","created_at":"...","file_path":"..."}' >> "$BD/thoughts/index.jsonl"
 ```
 
-Respond only with `done: <file_path>` (no extra text).
+## Output
+
+CRITICAL: Your ONLY output must be exactly `done: <file_path>`. No confirmations, no summaries, no explanations. Just those two words and the path.

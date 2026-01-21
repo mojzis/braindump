@@ -48,6 +48,8 @@ if [ -d "$BRAINDUMP_DIR" ]; then
         mkdir -p "$BRAINDUMP_DIR/$type"
         [ -f "$BRAINDUMP_DIR/$type/index.jsonl" ] || touch "$BRAINDUMP_DIR/$type/index.jsonl"
     done
+    # Create sessions directory
+    mkdir -p "$BRAINDUMP_DIR/sessions"
 else
     cp -r "$SCRIPT_DIR/data-template" "$BRAINDUMP_DIR"
     chmod +x "$BRAINDUMP_DIR/scripts/"*.sh
@@ -66,4 +68,23 @@ echo "  /bd-prompt <content>  - Store a prompt"
 echo "  /bd-search <query>    - Search entries"
 echo "  /bd-list [type] [n]   - List recent entries"
 echo ""
+echo "Session tracking utilities:"
+echo "  ~/braindump/scripts/forgotten-sessions.sh [days]  - Find unfinished sessions"
+echo ""
 echo "Data stored in: $BRAINDUMP_DIR"
+echo ""
+echo "========================================"
+echo "SESSION TRACKING SETUP (Optional)"
+echo "========================================"
+echo ""
+echo "To enable automatic session tracking, add the following to ~/.claude/settings.json:"
+echo ""
+echo '{'
+echo '  "hooks": {'
+echo '    "SessionStart": [{"hooks": [{"type": "command", "command": "'"$BRAINDUMP_DIR"'/scripts/session-start.sh"}]}],'
+echo '    "SessionEnd": [{"hooks": [{"type": "command", "command": "'"$BRAINDUMP_DIR"'/scripts/session-end.sh"}]}]'
+echo '  }'
+echo '}'
+echo ""
+echo "This tracks when you start/stop Claude Code sessions."
+echo "Run forgotten-sessions.sh to find sessions you may have abandoned."
