@@ -95,6 +95,17 @@ When you need to:
 
 4. **Read an entry**: Read the markdown file directly from the path in the index
 
+## Output Style
+
+After successfully creating an entry, respond only with:
+```
+done: <file_path>
+```
+
+No extra text, summaries, or commentary unless:
+- There's an error to report
+- You need to ask a clarifying question
+
 ## Tips
 
 - All timestamps are UTC ISO 8601 format

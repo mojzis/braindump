@@ -55,4 +55,4 @@ What I learned...
 echo '{"type":"til","title":"...","summary":"...","tags":[...],"input":"original user input","created_at":"...","file_path":"..."}' >> "$BD/til/index.jsonl"
 ```
 
-After creating, confirm with the title and file path.
+Respond only with `done: <file_path>` (no extra text).

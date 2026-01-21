@@ -74,7 +74,4 @@ $ARGUMENTS
 
 ---
 
-After creating the entry, confirm with a brief message showing:
-- Type chosen and why
-- Title generated
-- File path created
+Respond only with `done: <file_path>` (no extra text).

@@ -55,4 +55,4 @@ The thought or idea...
 echo '{"type":"thought","title":"...","summary":"...","tags":[...],"input":"original user input","created_at":"...","file_path":"..."}' >> "$BD/thoughts/index.jsonl"
 ```
 
-After creating, confirm with the title and file path.
+Respond only with `done: <file_path>` (no extra text).

@@ -56,4 +56,4 @@ Task description here...
 echo '{"type":"todo","title":"...","summary":"...","tags":[...],"input":"original user input","status":"pending","created_at":"...","file_path":"..."}' >> "$BD/todos/index.jsonl"
 ```
 
-After creating, confirm with the title and file path.
+Respond only with `done: <file_path>` (no extra text).
