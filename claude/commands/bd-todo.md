@@ -2,6 +2,7 @@
 model: haiku
 allowed-tools: ["Bash", "Write", "Read"]
 description: Create a todo entry
+argument-hint: "<task>"
 ---
 
 # Braindump Todo

@@ -2,6 +2,7 @@
 model: haiku
 allowed-tools: ["Bash", "Write", "Read"]
 description: Capture a thought or idea
+argument-hint: "<idea or reflection>"
 ---
 
 # Braindump Thought

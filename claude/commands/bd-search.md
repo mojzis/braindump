@@ -1,6 +1,7 @@
 ---
 allowed-tools: ["Bash", "Read"]
 description: Search braindump entries
+argument-hint: "<query> [type]"
 ---
 
 # Braindump Search

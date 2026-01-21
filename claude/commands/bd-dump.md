@@ -2,6 +2,7 @@
 model: haiku
 allowed-tools: ["Bash", "Write", "Read"]
 description: Quick capture with auto-categorization
+argument-hint: "<content>"
 ---
 
 # Braindump Quick Capture

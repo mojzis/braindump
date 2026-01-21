@@ -2,6 +2,7 @@
 model: haiku
 allowed-tools: ["Bash", "Write", "Read"]
 description: Record a Today I Learned entry
+argument-hint: "<what you learned>"
 ---
 
 # Braindump TIL (Today I Learned)

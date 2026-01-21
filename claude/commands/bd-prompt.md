@@ -2,6 +2,7 @@
 model: haiku
 allowed-tools: ["Bash", "Write", "Read"]
 description: Store a prompt for later use
+argument-hint: "<prompt content>"
 ---
 
 # Braindump Prompt
