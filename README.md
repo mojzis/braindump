@@ -91,8 +91,10 @@ Start a new Claude Code session after installation. The following commands will 
 Each `index.jsonl` contains one JSON object per line:
 
 ```json
-{"type":"todo","title":"Fix auth bug","summary":"Fix login authentication","tags":["auth","bug"],"status":"pending","priority":"high","created_at":"2026-01-21T14:30:00Z","file_path":"2026/01/fix-auth-bug--2026-01-21-1430.md"}
+{"type":"todo","title":"Fix auth bug","summary":"Fix login authentication","tags":["auth","bug"],"input":"Need to fix the authentication bug in login.ts","status":"pending","created_at":"2026-01-21T14:30:00Z","file_path":"2026/01/fix-auth-bug--2026-01-21-1430.md"}
 ```
+
+The `input` field stores the original user input verbatim.
 
 ### Markdown File Format
 

@@ -14,16 +14,14 @@ $ARGUMENTS
 
 ## Instructions
 
-1. **Parse the input** for optional flags:
-   - `--mood=curious|excited|frustrated|reflective|...` (optional)
-   - `--related=project-or-topic` (optional)
-
-2. **Generate metadata:**
+1. **Analyze the content** and generate metadata (all inferred):
    - `title`: concise title capturing the thought (max 60 chars)
    - `summary`: one-line summary
    - `tags`: 1-3 relevant tags
+   - `mood`: if evident from the content
+   - `related_to`: if about something specific
 
-3. **Create the entry:**
+2. **Create the entry:**
 
 ```bash
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -35,7 +33,7 @@ BD="$HOME/braindump"
 mkdir -p "$BD/thoughts/$DATE_PATH"
 ```
 
-4. **Write markdown file** at `$BD/thoughts/$DATE_PATH/$SLUG--$FILE_DATE.md`:
+3. **Write markdown file** at `$BD/thoughts/$DATE_PATH/$SLUG--$FILE_DATE.md`:
 
 ```markdown
 ---
@@ -50,10 +48,10 @@ created_at: 2026-01-21T14:30:00Z
 The thought or idea...
 ```
 
-5. **Append to index.jsonl:**
+4. **Append to index.jsonl** (include `input` field with original content):
 
 ```bash
-echo '{"type":"thought","title":"...","summary":"...","tags":[...],"created_at":"...","file_path":"..."}' >> "$BD/thoughts/index.jsonl"
+echo '{"type":"thought","title":"...","summary":"...","tags":[...],"input":"original user input","created_at":"...","file_path":"..."}' >> "$BD/thoughts/index.jsonl"
 ```
 
 After creating, confirm with the title and file path.

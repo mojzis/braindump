@@ -14,17 +14,14 @@ $ARGUMENTS
 
 ## Instructions
 
-1. **Parse the input** for optional flags:
-   - `--category=programming|tools|concepts|debugging|general` (default: infer)
-   - `--source=URL or description` (optional)
-
-2. **Generate metadata:**
+1. **Analyze the content** and generate metadata (all inferred):
    - `title`: concise title describing what was learned (max 60 chars)
    - `summary`: one-line summary
    - `tags`: 1-3 relevant tags
-   - `category`: infer if not specified
+   - `category`: topic area (inferred from content)
+   - `source`: if a source is mentioned
 
-3. **Create the entry:**
+2. **Create the entry:**
 
 ```bash
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -36,12 +33,11 @@ BD="$HOME/braindump"
 mkdir -p "$BD/til/$DATE_PATH"
 ```
 
-4. **Write markdown file** at `$BD/til/$DATE_PATH/$SLUG--$FILE_DATE.md`:
+3. **Write markdown file** at `$BD/til/$DATE_PATH/$SLUG--$FILE_DATE.md`:
 
 ```markdown
 ---
 type: til
-category: programming
 title: Your Title
 tags: [tag1, tag2]
 created_at: 2026-01-21T14:30:00Z
@@ -52,10 +48,10 @@ created_at: 2026-01-21T14:30:00Z
 What I learned...
 ```
 
-5. **Append to index.jsonl:**
+4. **Append to index.jsonl** (include `input` field with original content):
 
 ```bash
-echo '{"type":"til","category":"programming","title":"...","summary":"...","tags":[...],"created_at":"...","file_path":"..."}' >> "$BD/til/index.jsonl"
+echo '{"type":"til","title":"...","summary":"...","tags":[...],"input":"original user input","created_at":"...","file_path":"..."}' >> "$BD/til/index.jsonl"
 ```
 
-After creating, confirm with the title and a brief note about what category was chosen.
+After creating, confirm with the title and file path.

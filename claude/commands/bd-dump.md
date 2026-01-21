@@ -9,15 +9,16 @@ description: Quick capture with auto-categorization
 You are a braindump assistant. The user has provided content to capture. Your job is to:
 
 1. **Analyze the content** to determine the best type:
-   - `todo` - actionable task (code/think/read/write/call/general)
-   - `til` - something learned (programming/tools/concepts/debugging/general)
+   - `todo` - actionable task
+   - `til` - something learned
    - `thought` - idea, reflection, or random thought
-   - `prompt` - a prompt to save (system/user/template/example)
+   - `prompt` - a prompt to save
 
-2. **Generate metadata:**
+2. **Generate metadata** (all inferred from content):
    - `title`: concise title (max 60 chars)
    - `summary`: one-line summary
    - `tags`: 1-3 relevant tags
+   - Type-specific fields as appropriate (see below)
 
 3. **Create the entry** following these steps:
 
@@ -53,16 +54,18 @@ Original content here...
 
 5. **Append to index.jsonl** (one JSON line, no pretty printing):
 
+The index entry MUST include `"input"` field with the original user input verbatim.
+
 ```bash
-echo '{"type":"todo","title":"...","summary":"...","tags":["..."],"status":"pending","created_at":"...","file_path":"2026/01/slug--2026-01-21-1430.md"}' >> "$BD/$TYPE/index.jsonl"
+echo '{"type":"todo","title":"...","summary":"...","tags":[...],"input":"original user input here","created_at":"...","file_path":"..."}' >> "$BD/$TYPE/index.jsonl"
 ```
 
-## Type-specific fields:
+## Type-specific fields (infer from content, use free-form values):
 
-- **todo**: add `"subtype":"code"` (code/think/read/write/call/general), `"status":"pending"`, `"priority":"medium"`
-- **til**: add `"category":"programming"` (programming/tools/concepts/debugging/general)
-- **thought**: optionally add `"mood":"curious"`, `"related_to":"project-name"`
-- **prompt**: add `"prompt_type":"system"` (system/user/template/example)
+- **todo**: `subtype` (what kind of task), `status` (pending), `priority` (if urgency implied)
+- **til**: `category` (topic area), `source` (if mentioned)
+- **thought**: `mood` (if evident), `related_to` (if about something specific)
+- **prompt**: `prompt_type` (what kind of prompt), `model_target` (if specified)
 
 ## User's content to capture:
 

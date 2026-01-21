@@ -35,10 +35,13 @@ Each line in `index.jsonl` is a JSON object:
   "title": "Short title",
   "summary": "One-line summary",
   "tags": ["tag1", "tag2"],
+  "input": "original user input verbatim",
   "created_at": "2026-01-21T14:30:00Z",
   "file_path": "2026/01/slug--2026-01-21-1430.md"
 }
 ```
+
+The `input` field always contains the original user input exactly as provided.
 
 ### Type-specific fields:
 

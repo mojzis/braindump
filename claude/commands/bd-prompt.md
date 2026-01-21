@@ -14,17 +14,14 @@ $ARGUMENTS
 
 ## Instructions
 
-1. **Parse the input** for optional flags:
-   - `--type=system|user|template|example` (default: infer)
-   - `--model=claude|gpt|gemini|...` (optional, target model)
-
-2. **Generate metadata:**
+1. **Analyze the content** and generate metadata (all inferred):
    - `title`: concise title for the prompt (max 60 chars)
    - `summary`: one-line description of what the prompt does
    - `tags`: 1-3 relevant tags
-   - `prompt_type`: infer if not specified (system for system prompts, user for user messages, template for fill-in-the-blank, example for few-shot examples)
+   - `prompt_type`: inferred type (system prompt, user message, template, example, etc.)
+   - `model_target`: if a specific model is mentioned
 
-3. **Create the entry:**
+2. **Create the entry:**
 
 ```bash
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -36,12 +33,11 @@ BD="$HOME/braindump"
 mkdir -p "$BD/prompts/$DATE_PATH"
 ```
 
-4. **Write markdown file** at `$BD/prompts/$DATE_PATH/$SLUG--$FILE_DATE.md`:
+3. **Write markdown file** at `$BD/prompts/$DATE_PATH/$SLUG--$FILE_DATE.md`:
 
 ```markdown
 ---
 type: prompt
-prompt_type: system
 title: Your Title
 tags: [tag1, tag2]
 created_at: 2026-01-21T14:30:00Z
@@ -52,10 +48,10 @@ created_at: 2026-01-21T14:30:00Z
 The prompt content...
 ```
 
-5. **Append to index.jsonl:**
+4. **Append to index.jsonl** (include `input` field with original content):
 
 ```bash
-echo '{"type":"prompt","prompt_type":"system","title":"...","summary":"...","tags":[...],"created_at":"...","file_path":"..."}' >> "$BD/prompts/index.jsonl"
+echo '{"type":"prompt","title":"...","summary":"...","tags":[...],"input":"original user input","created_at":"...","file_path":"..."}' >> "$BD/prompts/index.jsonl"
 ```
 
-After creating, confirm with the title, prompt type, and file path.
+After creating, confirm with the title and file path.
