@@ -22,7 +22,7 @@ braindump/
 │   ├── commands/      # Claude Code slash commands (bd-*.md)
 │   └── skills/        # Skill definitions with SKILL.md
 ├── data-template/     # Template copied to ~/braindump/ on install
-│   ├── scripts/       # Shell utilities (search.sh, list.sh, slugify.sh, session-*.sh)
+│   ├── scripts/       # Shell utilities (create-entry.sh, search.sh, list.sh, tags.sh, session-*.sh)
 │   └── {type}/        # Type directories with index.jsonl
 └── install.sh         # Installer script
 ```
@@ -31,7 +31,7 @@ braindump/
 
 ## Commands
 
-All commands are markdown files in `claude/commands/` using Haiku model:
+All commands are markdown files in `claude/commands/`:
 
 | Command | Purpose |
 |---------|---------|
@@ -42,12 +42,13 @@ All commands are markdown files in `claude/commands/` using Haiku model:
 | `/bd-prompt` | Store prompt |
 | `/bd-search` | Search entries |
 | `/bd-list` | List recent entries |
+| `/bd-tags` | Tag management and analytics |
 
 ## Data Format
 
 **JSONL index** (`index.jsonl` per type):
 ```json
-{"type":"todo","title":"...","summary":"...","tags":[...],"input":"original input","created_at":"ISO8601","file_path":"YYYY/MM/slug--YYYY-MM-DD-HHmm.md"}
+{"type":"todo","title":"...","summary":"...","tags":[...],"project":"project-name","input":"original input","created_at":"ISO8601","file_path":"YYYY/MM/slug--YYYY-MM-DD-HHmm.md"}
 ```
 
 **Markdown files** (`~/braindump/{type}/YYYY/MM/slug--timestamp.md`):
@@ -56,12 +57,22 @@ All commands are markdown files in `claude/commands/` using Haiku model:
 type: todo
 title: Title
 tags: [tag1, tag2]
+project: project-name
 created_at: ISO8601
 ---
 
 # Title
 
 Content...
+
+---
+
+<details>
+<summary>Original input</summary>
+
+[Original user input verbatim]
+
+</details>
 ```
 
 **File naming:** `slugified-title--YYYY-MM-DD-HHmm.md` (double-dash separator for easy title selection)

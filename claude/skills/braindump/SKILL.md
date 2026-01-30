@@ -11,7 +11,7 @@ Braindump is a system for capturing todos, TILs (Today I Learned), thoughts, and
 - **Base directory:** `~/braindump/`
 - **Types:** `todos/`, `til/`, `thoughts/`, `prompts/`
 - **Each type has:** `index.jsonl` + `YYYY/MM/` folders with markdown files
-- **Scripts:** `~/braindump/scripts/` (search.sh, slugify.sh, list.sh)
+- **Scripts:** `~/braindump/scripts/` (create-entry.sh, search.sh, list.sh, tags.sh)
 
 ## Commands Available
 
@@ -24,6 +24,44 @@ Braindump is a system for capturing todos, TILs (Today I Learned), thoughts, and
 | `/bd-prompt <content>` | Store a prompt |
 | `/bd-search <query>` | Search entries |
 | `/bd-list [type] [n]` | List recent entries |
+| `/bd-tags [command]` | Tag management and analytics |
+
+## Content Processing Levels
+
+Three modes based on input prefix or context:
+
+| Prefix | Level | Behavior |
+|--------|-------|----------|
+| `raw:` | Raw | Store verbatim. Title from first 50 chars. Tags still inferred. |
+| *(none)* | Medium | Light formatting, structure. Default mode |
+| `well:` | Well-done | Full elaboration, include relevant conversation context |
+
+Detection order:
+1. Input starts with "raw:" → raw mode, strip prefix
+2. Input starts with "well:" → well-done mode, strip prefix
+3. **Auto-well detection:** If input references prior conversation (e.g., "that feature", "what we discussed", "the thing from earlier"), auto-upgrade to well mode
+4. If unclear whether context is relevant → ask the user
+5. Otherwise → medium mode
+
+## Project Context
+
+Every entry captures the project context it was created in:
+
+- **Field:** `project` (separate from tags)
+- **Detection:** From current git repo name, or working directory name if not a git repo
+- **Value:** lowercase project name (e.g., `braindump`, `my-app`)
+- **Override:** User can specify explicitly if needed
+
+This allows filtering/searching entries by the project they were created in.
+
+## Tag Guidelines
+
+- **Format:** lowercase, hyphens for multi-word (e.g., `gitlab-ci`)
+- **Limit:** 1-5 tags per entry
+- **Specificity:** Prefer specific over generic (`gitlab-ci` > `ci`)
+- **Consistency:** Avoid duplicates (`docs` OR `documentation`, not both)
+
+Check existing tags before creating new ones: `~/braindump/scripts/tags.sh stats`
 
 ## JSONL Index Schema
 
@@ -35,6 +73,7 @@ Each line in `index.jsonl` is a JSON object:
   "title": "Short title",
   "summary": "One-line summary",
   "tags": ["tag1", "tag2"],
+  "project": "braindump",
   "input": "original user input verbatim",
   "created_at": "2026-01-21T14:30:00Z",
   "file_path": "2026/01/slug--2026-01-21-1430.md"
@@ -67,21 +106,41 @@ Example: `fix-auth-bug--2026-01-21-1430.md`
 type: todo
 title: Fix auth bug
 tags: [auth, bug]
+project: braindump
 created_at: 2026-01-21T14:30:00Z
 ---
 
 # Fix auth bug
 
-Content here...
+[Authored content based on doneness level]
+
+---
+
+<details>
+<summary>Original input</summary>
+
+[Original user input verbatim]
+
+</details>
 ```
+
+For raw mode: body IS the original input (no authoring), still include original section for consistency.
 
 ## Working with Braindump
 
 When you need to:
 
-1. **Create an entry**: Use the appropriate `/bd-*` command or manually:
-   - Create markdown file in `~/braindump/{type}/YYYY/MM/`
-   - Append JSON line to `~/braindump/{type}/index.jsonl`
+1. **Create an entry**: Use the appropriate `/bd-*` command or use the script:
+   ```bash
+   # Write content to temp file (body only, no frontmatter)
+   cat > /tmp/bd-content.md << 'EOF'
+   Content here...
+   EOF
+
+   # Create entry (handles paths, timestamps, frontmatter, index)
+   ~/braindump/scripts/create-entry.sh <type> "Title" /tmp/bd-content.md '{"type":"...","title":"...","tags":[...],...}'
+   ```
+   Types: `todos`, `til`, `thoughts`, `prompts`
 
 2. **Search**: Use `/bd-search` or:
    ```bash

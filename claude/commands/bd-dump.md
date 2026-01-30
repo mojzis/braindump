@@ -1,5 +1,4 @@
 ---
-model: haiku
 allowed-tools: ["Bash", "Write", "Read"]
 description: Quick capture with auto-categorization
 argument-hint: "<content>"
@@ -7,73 +6,52 @@ argument-hint: "<content>"
 
 # Braindump Quick Capture
 
-You are a braindump assistant. The user has provided content to capture. Your job is to:
+Auto-categorize and create an entry following the braindump skill rules.
 
-1. **Analyze the content** to determine the best type:
-   - `todo` - actionable task
-   - `til` - something learned
-   - `thought` - idea, reflection, or random thought
-   - `prompt` - a prompt to save
-
-2. **Generate metadata** (all inferred from content):
-   - `title`: concise title (max 60 chars)
-   - `summary`: one-line summary
-   - `tags`: 1-3 relevant tags
-   - Type-specific fields as appropriate (see below)
-
-3. **Create the entry** following these steps:
-
-```bash
-# Get current timestamp
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-DATE_PATH=$(date +"%Y/%m")
-FILE_DATE=$(date +"%Y-%m-%d-%H%M")
-
-# Slugify title (lowercase, hyphens, max 50 chars)
-SLUG=$(echo "YOUR_TITLE" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-//' | sed 's/-$//' | head -c 50 | sed 's/-$//')
-
-# Create directory and file
-BD="$HOME/braindump"
-TYPE="todos"  # or til, thoughts, prompts
-mkdir -p "$BD/$TYPE/$DATE_PATH"
-```
-
-4. **Write the markdown file** at `$BD/$TYPE/$DATE_PATH/$SLUG--$FILE_DATE.md`:
-
-```markdown
----
-type: todo
-title: Your Title Here
-tags: [tag1, tag2]
-created_at: 2026-01-21T14:30:00Z
----
-
-# Your Title Here
-
-Original content here...
-```
-
-5. **Append to index.jsonl** (one JSON line, no pretty printing):
-
-The index entry MUST include `"input"` field with the original user input verbatim.
-
-```bash
-echo '{"type":"todo","title":"...","summary":"...","tags":[...],"input":"original user input here","created_at":"...","file_path":"..."}' >> "$BD/$TYPE/index.jsonl"
-```
-
-## Type-specific fields (infer from content, use free-form values):
-
-- **todo**: `subtype` (what kind of task), `status` (pending), `priority` (if urgency implied)
-- **til**: `category` (topic area), `source` (if mentioned)
-- **thought**: `mood` (if evident), `related_to` (if about something specific)
-- **prompt**: `prompt_type` (what kind of prompt), `model_target` (if specified)
-
-## User's content to capture:
+## Input
 
 $ARGUMENTS
 
----
+## Instructions
+
+1. **Determine the type** based on content:
+   - `todos` - actionable task
+   - `til` - something learned
+   - `thoughts` - idea, reflection, or random thought
+   - `prompts` - a prompt to save
+
+2. **Process the input** according to doneness level (raw:/well:/default)
+
+3. **Infer metadata:**
+   - `title`: concise title (max 60 chars)
+   - `summary`: one-line summary
+   - `tags`: 1-5 relevant tags (check existing with `~/braindump/scripts/tags.sh stats`)
+   - `project`: from current git repo name or working directory
+   - Type-specific fields based on chosen type
+
+4. **Write content to temp file** (body only, with original input section):
+   ```bash
+   cat > /tmp/bd-content.md << 'CONTENT_EOF'
+   [Authored content based on doneness level]
+
+   ---
+
+   <details>
+   <summary>Original input</summary>
+
+   [Original user input verbatim]
+
+   </details>
+   CONTENT_EOF
+   ```
+
+5. **Create entry using script:**
+   ```bash
+   ~/braindump/scripts/create-entry.sh <type> "Your Title" /tmp/bd-content.md '{"type":"<singular-type>","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
+   ```
+
+   Note: Script type is plural (todos, thoughts, prompts) but JSON type field is singular (todo, thought, prompt). Exception: til stays as til.
 
 ## Output
 
-CRITICAL: Your ONLY output must be exactly `done: <file_path>`. No confirmations, no summaries, no explanations. Just those two words and the path.
+`done: <file_path>` (the path returned by create-entry.sh)

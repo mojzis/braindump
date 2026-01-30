@@ -36,10 +36,10 @@ echo "Initializing data directory at $BRAINDUMP_DIR..."
 
 if [ -d "$BRAINDUMP_DIR" ]; then
     echo "  - Data directory already exists, preserving existing data"
-    # Only copy scripts if they don't exist or are older
+    # Always update scripts (user data is in type directories, not scripts)
     if [ -d "$SCRIPT_DIR/data-template/scripts" ]; then
         mkdir -p "$BRAINDUMP_DIR/scripts"
-        cp -n "$SCRIPT_DIR/data-template/scripts/"* "$BRAINDUMP_DIR/scripts/" 2>/dev/null || true
+        cp "$SCRIPT_DIR/data-template/scripts/"* "$BRAINDUMP_DIR/scripts/" 2>/dev/null || true
         chmod +x "$BRAINDUMP_DIR/scripts/"*.sh 2>/dev/null || true
         echo "  - Scripts updated"
     fi
@@ -67,6 +67,7 @@ echo "  /bd-thought <idea>    - Capture a thought"
 echo "  /bd-prompt <content>  - Store a prompt"
 echo "  /bd-search <query>    - Search entries"
 echo "  /bd-list [type] [n]   - List recent entries"
+echo "  /bd-tags [command]    - Tag management and analytics"
 echo ""
 echo "Session tracking utilities:"
 echo "  ~/braindump/scripts/forgotten-sessions.sh [days]  - Find unfinished sessions"
