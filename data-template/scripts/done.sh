@@ -71,14 +71,13 @@ else
   fi
 fi
 
-# Resolve full and relative paths (handle both abs and rel in index)
-if [[ "$FILE_PATH" == /* ]]; then
-  FULL_PATH="$FILE_PATH"
-  REL_PATH="${FILE_PATH#$BD/todos/}"
-else
-  REL_PATH="$FILE_PATH"
-  FULL_PATH="$BD/todos/$FILE_PATH"
-fi
+# Normalize file_path to clean relative form (YYYY/MM/slug.md)
+# Strip absolute prefix if present
+FILE_PATH="${FILE_PATH#$BD/todos/}"
+# Strip type dir prefix if present (e.g. "todos/2026/..." -> "2026/...")
+FILE_PATH="${FILE_PATH#todos/}"
+REL_PATH="$FILE_PATH"
+FULL_PATH="$BD/todos/$FILE_PATH"
 
 # Verify file exists
 if [ ! -f "$FULL_PATH" ]; then
@@ -89,9 +88,9 @@ fi
 # Update markdown frontmatter
 sed -i '' 's/^status: .*/status: done/' "$FULL_PATH"
 
-# Update JSONL index (match by file_path, handle both abs and rel forms)
+# Update JSONL index
 TEMP=$(mktemp)
-jq -c "if (.file_path == \"$REL_PATH\" or .file_path == \"$FULL_PATH\") then .status = \"done\" else . end" "$INDEX" > "$TEMP"
+jq -c "if .file_path == \"$REL_PATH\" then .status = \"done\" else . end" "$INDEX" > "$TEMP"
 mv "$TEMP" "$INDEX"
 
 echo "done: $REL_PATH"

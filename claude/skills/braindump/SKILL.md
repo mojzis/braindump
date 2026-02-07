@@ -79,7 +79,7 @@ Each line in `index.jsonl` is a JSON object:
   "project": "braindump",
   "input": "original user input verbatim",
   "created_at": "2026-01-21T14:30:00Z",
-  "file_path": "2026/01/slug--2026-01-21-1430.md"
+  "file_path": "2026/01/slug--2026-01-21-1430.md"  // always relative to type dir
 }
 ```
 
@@ -101,6 +101,8 @@ Files are named: `slugified-title--YYYY-MM-DD-HHmm.md`
 - Date and time for uniqueness
 
 Example: `fix-auth-bug--2026-01-21-1430.md`
+
+**Important:** `file_path` in JSONL is always relative to the type directory, e.g., `2026/01/slug.md`. Never store absolute paths or include the type dir prefix (e.g., NOT `todos/2026/...` or `/Users/.../todos/2026/...`).
 
 ## Markdown File Format
 

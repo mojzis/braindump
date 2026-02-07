@@ -76,11 +76,10 @@ search_fulltext() {
   type_name=$(type_label "$type_dir")
   [ -d "$dir" ] || return 0
   ag -il --md "$QUERY" "$dir" 2>/dev/null | while IFS= read -r file; do
-    # Get relative path for dedup (strip BD/type_dir/ prefix)
+    # Get relative path for dedup (strip BD/type_dir/ prefix -> YYYY/MM/slug.md)
     local rel_path="${file#$BD/$type_dir/}"
-    local abs_path="$BD/$type_dir/$rel_path"
-    # Skip if already found in index search (check both relative and absolute forms)
-    if grep -qF "$rel_path" "$FOUND_FILES" 2>/dev/null || grep -qF "$abs_path" "$FOUND_FILES" 2>/dev/null; then
+    # Skip if already found in index search
+    if grep -qF "$rel_path" "$FOUND_FILES" 2>/dev/null; then
       continue
     fi
     # Extract basic info from frontmatter
