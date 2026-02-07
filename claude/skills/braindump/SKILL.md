@@ -11,7 +11,8 @@ Braindump is a system for capturing todos, TILs (Today I Learned), thoughts, and
 - **Base directory:** `~/braindump/`
 - **Types:** `todos/`, `til/`, `thoughts/`, `prompts/`
 - **Each type has:** `index.jsonl` + `YYYY/MM/` folders with markdown files
-- **Scripts:** `~/braindump/scripts/` (create-entry.sh, search.sh, list.sh, tags.sh)
+- **Scripts:** `~/braindump/scripts/` (create-entry.sh, search.sh, list.sh, tags.sh, done.sh)
+- **ID counter:** `~/braindump/.next_id` (auto-incremented on entry creation)
 
 ## Commands Available
 
@@ -25,6 +26,7 @@ Braindump is a system for capturing todos, TILs (Today I Learned), thoughts, and
 | `/bd-search <query>` | Search entries |
 | `/bd-list [type] [n]` | List recent entries |
 | `/bd-tags [command]` | Tag management and analytics |
+| `/bd-done <id or query>` | Mark a todo as done |
 
 ## Content Processing Levels
 
@@ -69,6 +71,7 @@ Each line in `index.jsonl` is a JSON object:
 
 ```json
 {
+  "id": 42,
   "type": "todo",
   "title": "Short title",
   "summary": "One-line summary",
@@ -154,6 +157,12 @@ When you need to:
 
 4. **Read an entry**: Read the markdown file directly from the path in the index
 
+5. **Mark a todo done**: Use `/bd-done` or:
+   ```bash
+   ~/braindump/scripts/done.sh 42        # by ID
+   ~/braindump/scripts/done.sh "query"   # by search
+   ```
+
 ## Output Style
 
 After successfully creating an entry, respond only with:
@@ -170,4 +179,6 @@ No extra text, summaries, or commentary unless:
 - All timestamps are UTC ISO 8601 format
 - Tags are lowercase, no spaces (use hyphens)
 - Summaries should be one line, under 100 chars
-- The index is append-only; to update, you'd need to rewrite the line
+- Every entry has a numeric `id` field, auto-assigned on creation from `~/braindump/.next_id`
+- Use IDs to reference entries (e.g., `done.sh 42`)
+- Search supports status filtering: `search.sh "query" --open` or `--done`

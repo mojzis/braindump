@@ -46,6 +46,7 @@ done | sort -r | head -n 10
 ```
 
 3. **Display results** in a clean, scannable format:
-   - Date [type] Title
+   - **#id** date [type] title
    - One entry per line
    - Sorted by most recent first
+   - Include the ID so users can reference entries (e.g., `/bd-done 42`)

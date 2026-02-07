@@ -2,6 +2,11 @@
 
 A portable Claude Code-integrated system for capturing todos, TILs, thoughts, and prompts with JSONL indexing for fast search.
 
+## Prerequisites
+
+- [ag (The Silver Searcher)](https://github.com/ggreer/the_silver_searcher) - used for fast full-text search across entries
+- `jq` - used for JSONL index queries
+
 ## Installation
 
 ```bash

@@ -82,8 +82,13 @@ FRONTMATTER=$(echo "$JSONL_DATA" | jq -r --arg ts "$TIMESTAMP" '
   cat "$CONTENT_FILE"
 } > "$FULL_PATH"
 
-# Add file_path and created_at to JSONL data and append to index
-echo "$JSONL_DATA" | jq -c --arg fp "$FILE_PATH" --arg ts "$TIMESTAMP" '. + {file_path: $fp, created_at: $ts}' >> "$BD/$TYPE/index.jsonl"
+# Assign next ID (atomic: read, increment, write)
+ID_FILE="$BD/.next_id"
+ENTRY_ID=$(cat "$ID_FILE" 2>/dev/null || echo 1)
+echo $((ENTRY_ID + 1)) > "$ID_FILE"
+
+# Add id, file_path and created_at to JSONL data and append to index
+echo "$JSONL_DATA" | jq -c --argjson id "$ENTRY_ID" --arg fp "$FILE_PATH" --arg ts "$TIMESTAMP" '. + {id: $id, file_path: $fp, created_at: $ts}' >> "$BD/$TYPE/index.jsonl"
 
 # Output the file path
 echo "$FILE_PATH"
