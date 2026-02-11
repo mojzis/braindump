@@ -1,16 +1,18 @@
 ---
-allowed-tools: ["Bash", "Write", "Read"]
 description: Quick capture with auto-categorization
+allowed-tools: ["Bash", "Write", "Read", "Skill"]
 argument-hint: "<content>"
 ---
 
 # Braindump Quick Capture
 
-Auto-categorize and create an entry following the braindump skill rules.
-
 ## Input
 
 $ARGUMENTS
+
+## Step 0: Load braindump conventions
+
+**Before doing anything else**, load the `braindump` skill for full system conventions (processing levels, tag rules, schemas, file format).
 
 ## Instructions
 

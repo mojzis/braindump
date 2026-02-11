@@ -1,6 +1,6 @@
 #!/bin/bash
 # Braindump Installation Script
-# Installs commands/skills to ~/.claude/ and data template to ~/braindump/
+# Installs skills to ~/.claude/ and data template to ~/braindump/
 
 set -e
 
@@ -12,16 +12,17 @@ echo "Braindump Installer"
 echo "==================="
 echo ""
 
-# Install Claude commands and skills
-echo "Installing Claude commands and skills to $CLAUDE_DIR..."
+# Install Claude skills
+echo "Installing Claude skills to $CLAUDE_DIR..."
 
-mkdir -p "$CLAUDE_DIR/commands"
 mkdir -p "$CLAUDE_DIR/skills"
 
-# Copy commands
-if [ -d "$SCRIPT_DIR/claude/commands" ]; then
-    cp -r "$SCRIPT_DIR/claude/commands/"* "$CLAUDE_DIR/commands/"
-    echo "  - Commands installed"
+# Clean up stale commands from previous installations
+if [ -d "$CLAUDE_DIR/commands" ]; then
+    for cmd in bd-dump bd-todo bd-til bd-thought bd-prompt bd-search bd-list bd-tags bd-done; do
+        rm -f "$CLAUDE_DIR/commands/$cmd.md"
+    done
+    echo "  - Cleaned up stale commands"
 fi
 
 # Copy skills
@@ -59,7 +60,7 @@ fi
 echo ""
 echo "Installation complete!"
 echo ""
-echo "Available commands:"
+echo "Available skills:"
 echo "  /bd-dump <content>    - Quick capture with auto-categorization"
 echo "  /bd-todo <task>       - Create a todo"
 echo "  /bd-til <learning>    - Record something learned"

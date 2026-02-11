@@ -1,6 +1,6 @@
 ---
-allowed-tools: ["Bash", "Read"]
 description: Mark a todo as done
+allowed-tools: ["Bash", "Read"]
 argument-hint: "<id or query>"
 ---
 

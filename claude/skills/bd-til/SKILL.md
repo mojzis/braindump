@@ -1,16 +1,18 @@
 ---
-allowed-tools: ["Bash", "Write", "Read"]
-description: Store a prompt for later use
-argument-hint: "<prompt content>"
+description: Record a Today I Learned entry
+allowed-tools: ["Bash", "Write", "Read", "Skill"]
+argument-hint: "<what you learned>"
 ---
 
-# Braindump Prompt
-
-Create a prompt entry following the braindump skill rules.
+# Braindump TIL
 
 ## Input
 
 $ARGUMENTS
+
+## Step 0: Load braindump conventions
+
+**Before doing anything else**, load the `braindump` skill for full system conventions (processing levels, tag rules, schemas, file format).
 
 ## Instructions
 
@@ -20,8 +22,8 @@ $ARGUMENTS
    - `summary`: one-line summary
    - `tags`: 1-5 relevant tags (check existing with `~/braindump/scripts/tags.sh stats`)
    - `project`: from current git repo name or working directory
-   - `prompt_type`: inferred type (system, user, template, example, etc.)
-   - `model_target`: if a specific model is mentioned
+   - `category`: topic area (programming, tools, concepts, debugging, etc.)
+   - `source`: if a source is mentioned
 
 3. **Write content to temp file** (body only, with original input section):
    ```bash
@@ -41,7 +43,7 @@ $ARGUMENTS
 
 4. **Create entry using script:**
    ```bash
-   ~/braindump/scripts/create-entry.sh prompts "Your Title" /tmp/bd-content.md '{"type":"prompt","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
+   ~/braindump/scripts/create-entry.sh til "Your Title" /tmp/bd-content.md '{"type":"til","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
 ## Output

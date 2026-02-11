@@ -1,16 +1,18 @@
 ---
-allowed-tools: ["Bash", "Write", "Read"]
 description: Create a todo entry
+allowed-tools: ["Bash", "Write", "Read", "Skill"]
 argument-hint: "<task>"
 ---
 
 # Braindump Todo
 
-Create a todo entry following the braindump skill rules.
-
 ## Input
 
 $ARGUMENTS
+
+## Step 0: Load braindump conventions
+
+**Before doing anything else**, load the `braindump` skill for full system conventions (processing levels, tag rules, schemas, file format).
 
 ## Instructions
 

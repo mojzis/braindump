@@ -1,12 +1,14 @@
 ---
-allowed-tools: ["Bash", "Read"]
 description: Search braindump entries
-argument-hint: "<query> [type] [--open|--done]"
+allowed-tools: ["Bash", "Read"]
+argument-hint: "<query...> [type] [--open|--done]"
 ---
 
 # Braindump Search
 
 Search across all braindump entries.
+
+> For data format details, load the `braindump` skill.
 
 ## Input
 
@@ -16,14 +18,22 @@ $ARGUMENTS
 
 1. **Parse the query** - the user may provide:
    - A simple search term: `auth`
-   - A type filter: `todo:auth` or `--type=todo auth`
-   - Multiple terms: `auth login`
+   - A type filter: `auth todo` (known types: todo, til, thought, prompt)
+   - Multiple words: `auth login` — AND-matched (all words must appear)
+   - Exact phrase: `"auth login flow"` — quoted for phrase matching
    - Status filter: `--open` (exclude done), `--done` (only done), `--all` (default)
 
 2. **Run the search** using the search script:
 
 ```bash
+# Single word
 "$HOME/braindump/scripts/search.sh" "QUERY" [TYPE] [--open|--done]
+
+# Multiword AND search — pass each word as a separate argument
+"$HOME/braindump/scripts/search.sh" word1 word2 [TYPE] [--open|--done]
+
+# Exact phrase — pass as a single quoted argument
+"$HOME/braindump/scripts/search.sh" "exact phrase" [TYPE] [--open|--done]
 ```
 
 The script searches JSONL indexes (title, summary, tags) first, then falls back to full-text search through markdown file content via ag.

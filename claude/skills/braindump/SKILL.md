@@ -1,3 +1,7 @@
+---
+description: Core braindump system conventions, schemas, and guidelines
+---
+
 # Braindump Skill
 
 You have access to the Braindump personal knowledge management system.

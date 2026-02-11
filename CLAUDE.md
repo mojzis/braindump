@@ -12,15 +12,24 @@ Braindump is a portable Claude Code-integrated personal knowledge management sys
 ./install.sh
 ```
 
-Installs Claude commands/skills to `~/.claude/` and initializes data directory at `~/braindump/`.
+Installs Claude skills to `~/.claude/` and initializes data directory at `~/braindump/`.
 
 ## Architecture
 
 ```
 braindump/
 ├── claude/
-│   ├── commands/      # Claude Code slash commands (bd-*.md)
-│   └── skills/        # Skill definitions with SKILL.md
+│   └── skills/        # All skills as bd-*/SKILL.md directories
+│       ├── braindump/  # Shared conventions (also user-invocable via /braindump)
+│       ├── bd-todo/    # Creation skills load braindump skill first
+│       ├── bd-til/
+│       ├── bd-thought/
+│       ├── bd-prompt/
+│       ├── bd-dump/
+│       ├── bd-search/  # Query/utility skills
+│       ├── bd-list/
+│       ├── bd-tags/
+│       └── bd-done/
 ├── data-template/     # Template copied to ~/braindump/ on install
 │   ├── scripts/       # Shell utilities (create-entry.sh, search.sh, list.sh, tags.sh, session-*.sh)
 │   └── {type}/        # Type directories with index.jsonl
@@ -29,12 +38,12 @@ braindump/
 
 **Runtime data location:** `~/braindump/`
 
-## Commands
+## Skills
 
-All commands are markdown files in `claude/commands/`:
+All skills are in `claude/skills/bd-*/SKILL.md`. Creation skills (bd-todo, bd-til, bd-thought, bd-prompt, bd-dump) load the shared `braindump` skill first for full conventions.
 
-| Command | Purpose |
-|---------|---------|
+| Skill | Purpose |
+|-------|---------|
 | `/bd-dump` | Auto-categorizing quick capture |
 | `/bd-todo` | Create todo |
 | `/bd-til` | Record TIL |
@@ -43,6 +52,7 @@ All commands are markdown files in `claude/commands/`:
 | `/bd-search` | Search entries |
 | `/bd-list` | List recent entries |
 | `/bd-tags` | Tag management and analytics |
+| `/bd-done` | Mark a todo as done |
 
 ## Data Format
 
@@ -86,7 +96,7 @@ Content...
 
 ## Key Conventions
 
-- Commands output only `done: <file_path>` on success
+- Skills output only `done: <file_path>` on success
 - All timestamps are UTC ISO 8601
 - Tags are lowercase with hyphens
 - The `input` field in JSONL always stores original user input verbatim

@@ -1,6 +1,6 @@
 ---
-allowed-tools: ["Bash", "Read"]
 description: Tag management and analytics
+allowed-tools: ["Bash", "Read"]
 argument-hint: "[stats|similar|show <tag>]"
 ---
 

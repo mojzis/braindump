@@ -1,12 +1,14 @@
 ---
-allowed-tools: ["Bash", "Read"]
 description: List recent braindump entries
+allowed-tools: ["Bash", "Read"]
 argument-hint: "[type] [limit]"
 ---
 
 # Braindump List
 
 List recent braindump entries.
+
+> For data format details, load the `braindump` skill.
 
 ## Input
 

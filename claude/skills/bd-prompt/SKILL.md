@@ -1,16 +1,18 @@
 ---
-allowed-tools: ["Bash", "Write", "Read"]
-description: Capture a thought or idea
-argument-hint: "<idea or reflection>"
+description: Store a prompt for later use
+allowed-tools: ["Bash", "Write", "Read", "Skill"]
+argument-hint: "<prompt content>"
 ---
 
-# Braindump Thought
-
-Create a thought entry following the braindump skill rules.
+# Braindump Prompt
 
 ## Input
 
 $ARGUMENTS
+
+## Step 0: Load braindump conventions
+
+**Before doing anything else**, load the `braindump` skill for full system conventions (processing levels, tag rules, schemas, file format).
 
 ## Instructions
 
@@ -20,8 +22,8 @@ $ARGUMENTS
    - `summary`: one-line summary
    - `tags`: 1-5 relevant tags (check existing with `~/braindump/scripts/tags.sh stats`)
    - `project`: from current git repo name or working directory
-   - `mood`: if evident from the content
-   - `related_to`: if about something specific
+   - `prompt_type`: inferred type (system, user, template, example, etc.)
+   - `model_target`: if a specific model is mentioned
 
 3. **Write content to temp file** (body only, with original input section):
    ```bash
@@ -41,7 +43,7 @@ $ARGUMENTS
 
 4. **Create entry using script:**
    ```bash
-   ~/braindump/scripts/create-entry.sh thoughts "Your Title" /tmp/bd-content.md '{"type":"thought","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
+   ~/braindump/scripts/create-entry.sh prompts "Your Title" /tmp/bd-content.md '{"type":"prompt","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
 ## Output

@@ -1,16 +1,18 @@
 ---
-allowed-tools: ["Bash", "Write", "Read"]
-description: Record a Today I Learned entry
-argument-hint: "<what you learned>"
+description: Capture a thought or idea
+allowed-tools: ["Bash", "Write", "Read", "Skill"]
+argument-hint: "<idea or reflection>"
 ---
 
-# Braindump TIL
-
-Create a TIL (Today I Learned) entry following the braindump skill rules.
+# Braindump Thought
 
 ## Input
 
 $ARGUMENTS
+
+## Step 0: Load braindump conventions
+
+**Before doing anything else**, load the `braindump` skill for full system conventions (processing levels, tag rules, schemas, file format).
 
 ## Instructions
 
@@ -20,8 +22,8 @@ $ARGUMENTS
    - `summary`: one-line summary
    - `tags`: 1-5 relevant tags (check existing with `~/braindump/scripts/tags.sh stats`)
    - `project`: from current git repo name or working directory
-   - `category`: topic area (programming, tools, concepts, debugging, etc.)
-   - `source`: if a source is mentioned
+   - `mood`: if evident from the content
+   - `related_to`: if about something specific
 
 3. **Write content to temp file** (body only, with original input section):
    ```bash
@@ -41,7 +43,7 @@ $ARGUMENTS
 
 4. **Create entry using script:**
    ```bash
-   ~/braindump/scripts/create-entry.sh til "Your Title" /tmp/bd-content.md '{"type":"til","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
+   ~/braindump/scripts/create-entry.sh thoughts "Your Title" /tmp/bd-content.md '{"type":"thought","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
 ## Output
