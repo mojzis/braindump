@@ -67,7 +67,9 @@ This allows filtering/searching entries by the project they were created in.
 - **Specificity:** Prefer specific over generic (`gitlab-ci` > `ci`)
 - **Consistency:** Avoid duplicates (`docs` OR `documentation`, not both)
 
-Check existing tags before creating new ones: `~/braindump/scripts/tags.sh stats`
+**Available tags:**
+
+!bash ~/braindump/scripts/tags.sh stats
 
 ## JSONL Index Schema
 
@@ -141,13 +143,10 @@ When you need to:
 
 1. **Create an entry**: Use the appropriate `/bd-*` command or use the script:
    ```bash
-   # Write content to temp file (body only, no frontmatter)
-   cat > /tmp/bd-content.md << 'EOF'
+   # Pipe content directly to create-entry.sh (body only, no frontmatter)
+   cat << 'EOF' | ~/braindump/scripts/create-entry.sh <type> "Title" '{"type":"...","title":"...","tags":[...],...}'
    Content here...
    EOF
-
-   # Create entry (handles paths, timestamps, frontmatter, index)
-   ~/braindump/scripts/create-entry.sh <type> "Title" /tmp/bd-content.md '{"type":"...","title":"...","tags":[...],...}'
    ```
    Types: `todos`, `til`, `thoughts`, `prompts`
 

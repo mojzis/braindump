@@ -1,25 +1,28 @@
 #!/bin/bash
 # create-entry.sh - Create a braindump entry with correct structure
-# Usage: create-entry.sh <type> <title> <content_file> <jsonl_data>
+# Usage: create-entry.sh <type> <title> <jsonl_data>
+#        echo "content" | create-entry.sh <type> <title> <jsonl_data>
 #
 # Arguments:
 #   type         - Entry type (todos, til, thoughts, prompts)
 #   title        - Entry title (will be slugified)
-#   content_file - Path to temp file containing markdown content (body only, no frontmatter)
 #   jsonl_data   - JSON object with metadata (will have file_path and created_at added)
+#
+# Content is read from stdin (body only, no frontmatter)
 #
 # Output: Prints the created file path on success
 #
 # Example:
-#   echo "Task description here" > /tmp/content.md
-#   create-entry.sh todos "Fix auth bug" /tmp/content.md '{"type":"todo","title":"Fix auth bug","tags":["auth"]}'
+#   echo "Task description here" | create-entry.sh todos "Fix auth bug" '{"type":"todo","title":"Fix auth bug","tags":["auth"]}'
 
 set -e
 
-TYPE="${1:?Usage: create-entry.sh <type> <title> <content_file> <jsonl_data>}"
+TYPE="${1:?Usage: create-entry.sh <type> <title> <jsonl_data>}"
 TITLE="${2:?Missing title}"
-CONTENT_FILE="${3:?Missing content file}"
-JSONL_DATA="${4:?Missing JSONL data}"
+JSONL_DATA="${3:?Missing JSONL data}"
+
+# Read content from stdin
+CONTENT=$(cat)
 
 BD="${BRAINDUMP_DIR:-$HOME/braindump}"
 
@@ -79,7 +82,7 @@ FRONTMATTER=$(echo "$JSONL_DATA" | jq -r --arg ts "$TIMESTAMP" '
   echo ""
   echo "# $TITLE"
   echo ""
-  cat "$CONTENT_FILE"
+  echo "$CONTENT"
 } > "$FULL_PATH"
 
 # Assign next ID (atomic: read, increment, write)

@@ -1,7 +1,7 @@
 ---
 description: Mark a todo as done
-allowed-tools: ["Bash", "Read"]
-argument-hint: "<id or query>"
+allowed-tools: Bash, Read
+argument-hint: <id or query>
 ---
 
 # Braindump Done

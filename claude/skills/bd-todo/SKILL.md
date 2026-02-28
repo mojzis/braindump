@@ -1,7 +1,7 @@
 ---
 description: Create a todo entry
-allowed-tools: ["Bash", "Write", "Read", "Skill"]
-argument-hint: "<task>"
+allowed-tools: Bash, Write, Read, Skill
+argument-hint: <task>
 ---
 
 # Braindump Todo
@@ -26,9 +26,9 @@ $ARGUMENTS
    - `status`: "pending"
    - `priority`: if urgency is implied
 
-3. **Write content to temp file** (body only, with original input section):
+3. **Create entry using script** (pipe content via stdin):
    ```bash
-   cat > /tmp/bd-content.md << 'CONTENT_EOF'
+   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh todos "Your Title" '{"type":"todo","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name","status":"pending"}'
    [Authored content based on doneness level]
 
    ---
@@ -40,11 +40,6 @@ $ARGUMENTS
 
    </details>
    CONTENT_EOF
-   ```
-
-4. **Create entry using script:**
-   ```bash
-   ~/braindump/scripts/create-entry.sh todos "Your Title" /tmp/bd-content.md '{"type":"todo","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name","status":"pending"}'
    ```
 
 ## Output

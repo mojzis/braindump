@@ -1,7 +1,7 @@
 ---
 description: List recent braindump entries
-allowed-tools: ["Bash", "Read"]
-argument-hint: "[type] [limit]"
+allowed-tools: Bash, Read
+argument-hint: [type] [limit]
 ---
 
 # Braindump List

@@ -1,7 +1,7 @@
 ---
 description: Quick capture with auto-categorization
-allowed-tools: ["Bash", "Write", "Read", "Skill"]
-argument-hint: "<content>"
+allowed-tools: Bash, Write, Read, Skill
+argument-hint: <content>
 ---
 
 # Braindump Quick Capture
@@ -31,9 +31,9 @@ $ARGUMENTS
    - `project`: from current git repo name or working directory
    - Type-specific fields based on chosen type
 
-4. **Write content to temp file** (body only, with original input section):
+4. **Create entry using script** (pipe content via stdin):
    ```bash
-   cat > /tmp/bd-content.md << 'CONTENT_EOF'
+   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh <type> "Your Title" '{"type":"<singular-type>","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    [Authored content based on doneness level]
 
    ---
@@ -45,11 +45,6 @@ $ARGUMENTS
 
    </details>
    CONTENT_EOF
-   ```
-
-5. **Create entry using script:**
-   ```bash
-   ~/braindump/scripts/create-entry.sh <type> "Your Title" /tmp/bd-content.md '{"type":"<singular-type>","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
    Note: Script type is plural (todos, thoughts, prompts) but JSON type field is singular (todo, thought, prompt). Exception: til stays as til.

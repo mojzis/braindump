@@ -1,7 +1,7 @@
 ---
 description: Capture a thought or idea
-allowed-tools: ["Bash", "Write", "Read", "Skill"]
-argument-hint: "<idea or reflection>"
+allowed-tools: Bash, Write, Read, Skill
+argument-hint: <idea or reflection>
 ---
 
 # Braindump Thought
@@ -25,9 +25,9 @@ $ARGUMENTS
    - `mood`: if evident from the content
    - `related_to`: if about something specific
 
-3. **Write content to temp file** (body only, with original input section):
+3. **Create entry using script** (pipe content via stdin):
    ```bash
-   cat > /tmp/bd-content.md << 'CONTENT_EOF'
+   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh thoughts "Your Title" '{"type":"thought","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    [Authored content based on doneness level]
 
    ---
@@ -39,11 +39,6 @@ $ARGUMENTS
 
    </details>
    CONTENT_EOF
-   ```
-
-4. **Create entry using script:**
-   ```bash
-   ~/braindump/scripts/create-entry.sh thoughts "Your Title" /tmp/bd-content.md '{"type":"thought","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
 ## Output

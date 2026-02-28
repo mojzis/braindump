@@ -1,7 +1,7 @@
 ---
 description: Store a prompt for later use
-allowed-tools: ["Bash", "Write", "Read", "Skill"]
-argument-hint: "<prompt content>"
+allowed-tools: Bash, Write, Read, Skill
+argument-hint: <prompt content>
 ---
 
 # Braindump Prompt
@@ -25,9 +25,9 @@ $ARGUMENTS
    - `prompt_type`: inferred type (system, user, template, example, etc.)
    - `model_target`: if a specific model is mentioned
 
-3. **Write content to temp file** (body only, with original input section):
+3. **Create entry using script** (pipe content via stdin):
    ```bash
-   cat > /tmp/bd-content.md << 'CONTENT_EOF'
+   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh prompts "Your Title" '{"type":"prompt","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    [Authored content based on doneness level]
 
    ---
@@ -39,11 +39,6 @@ $ARGUMENTS
 
    </details>
    CONTENT_EOF
-   ```
-
-4. **Create entry using script:**
-   ```bash
-   ~/braindump/scripts/create-entry.sh prompts "Your Title" /tmp/bd-content.md '{"type":"prompt","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
 ## Output

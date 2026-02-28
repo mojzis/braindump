@@ -1,7 +1,7 @@
 ---
 description: Record a Today I Learned entry
-allowed-tools: ["Bash", "Write", "Read", "Skill"]
-argument-hint: "<what you learned>"
+allowed-tools: Bash, Write, Read, Skill
+argument-hint: <what you learned>
 ---
 
 # Braindump TIL
@@ -25,9 +25,9 @@ $ARGUMENTS
    - `category`: topic area (programming, tools, concepts, debugging, etc.)
    - `source`: if a source is mentioned
 
-3. **Write content to temp file** (body only, with original input section):
+3. **Create entry using script** (pipe content via stdin):
    ```bash
-   cat > /tmp/bd-content.md << 'CONTENT_EOF'
+   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh til "Your Title" '{"type":"til","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    [Authored content based on doneness level]
 
    ---
@@ -39,11 +39,6 @@ $ARGUMENTS
 
    </details>
    CONTENT_EOF
-   ```
-
-4. **Create entry using script:**
-   ```bash
-   ~/braindump/scripts/create-entry.sh til "Your Title" /tmp/bd-content.md '{"type":"til","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
    ```
 
 ## Output
