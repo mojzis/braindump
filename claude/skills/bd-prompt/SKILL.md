@@ -1,18 +1,28 @@
 ---
 description: Store a prompt for later use
-allowed-tools: Bash, Write, Read, Skill
+allowed-tools: Bash, Write, Read
 argument-hint: <prompt content>
 ---
 
 # Braindump Prompt
 
+## Conventions
+
+!`awk '/^---$/{n++;next}n>1' ~/.claude/skills/braindump/SKILL.md`
+
+## Context
+
+<current-project>
+!`git rev-parse --show-toplevel 2>/dev/null | xargs basename || basename "$PWD"`
+</current-project>
+
+<existing-tags>
+!`~/braindump/scripts/tags.sh stats`
+</existing-tags>
+
 ## Input
 
 $ARGUMENTS
-
-## Step 0: Load braindump conventions
-
-**Before doing anything else**, load the `braindump` skill for full system conventions (processing levels, tag rules, schemas, file format).
 
 ## Instructions
 
@@ -20,8 +30,8 @@ $ARGUMENTS
 2. **Infer metadata:**
    - `title`: concise title (max 60 chars)
    - `summary`: one-line summary
-   - `tags`: 1-5 relevant tags (check existing with `~/braindump/scripts/tags.sh stats`)
-   - `project`: from current git repo name or working directory
+   - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse)
+   - `project`: use <current-project> value
    - `prompt_type`: inferred type (system, user, template, example, etc.)
    - `model_target`: if a specific model is mentioned
 

@@ -69,7 +69,9 @@ This allows filtering/searching entries by the project they were created in.
 
 **Available tags:**
 
-!bash ~/braindump/scripts/tags.sh stats
+<existing-tags>
+!`~/braindump/scripts/tags.sh stats`
+</existing-tags>
 
 ## JSONL Index Schema
 
