@@ -25,7 +25,7 @@
     </section>
   {% else %}
     <h2>{{ project.name }}</h2>
-    <div class="active-banner unregistered-row" style="border-radius:6px;padding:10px 16px;margin-bottom:16px;">
+    <div class="unregistered-banner">
       this project is unregistered.
       <a href="/capture?type=project&title={{ project.name | urlencode }}">register it</a>
       to record description, state, local dir, and tech stack.

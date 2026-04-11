@@ -279,12 +279,13 @@ def capture_post(
         # A project entry does not belong to itself; ignore any submitted project value
         # and let entries.create_entry enforce project=None.
         effective_project = None
-        if description.strip():
-            type_fields["description"] = description.strip()
-        if state.strip():
-            type_fields["state"] = state.strip()
-        if local_dir.strip():
-            type_fields["local_dir"] = local_dir.strip()
+        for key, raw in (
+            ("description", description),
+            ("state", state),
+            ("local_dir", local_dir),
+        ):
+            if raw.strip():
+                type_fields[key] = raw.strip()
         tech_list = _csv(tech_stack)
         if tech_list:
             type_fields["tech_stack"] = tech_list

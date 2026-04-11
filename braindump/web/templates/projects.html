@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}projects{% endblock %}
 {% block body %}
+{% macro focus_cell(p) %}
+  <td>
+    {% if p.name != "(none)" %}
+      <form hx-post="/api/project/focus" hx-swap="none" class="inline-form">
+        <input type="hidden" name="name" value="{{ p.name }}" />
+        <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
+      </form>
+    {% endif %}
+  </td>
+{% endmacro %}
+
 <h2>projects</h2>
 
 {% set registered = project_stats | selectattr("registered") | list %}
@@ -24,14 +35,7 @@
     <tbody>
     {% for p in registered %}
       <tr>
-        <td>
-          {% if p.name != "(none)" %}
-            <form hx-post="/api/project/focus" hx-swap="none" style="display:inline">
-              <input type="hidden" name="name" value="{{ p.name }}" />
-              <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
-            </form>
-          {% endif %}
-        </td>
+        {{ focus_cell(p) }}
         <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
         <td>
           {% if p.state %}
@@ -72,14 +76,7 @@
     <tbody>
     {% for p in unregistered %}
       <tr class="unregistered-row">
-        <td>
-          {% if p.name != "(none)" %}
-            <form hx-post="/api/project/focus" hx-swap="none" style="display:inline">
-              <input type="hidden" name="name" value="{{ p.name }}" />
-              <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
-            </form>
-          {% endif %}
-        </td>
+        {{ focus_cell(p) }}
         <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
         <td>{{ p.entry_count }}</td>
         <td>{{ p.open_todos }}</td>
