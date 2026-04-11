@@ -135,17 +135,20 @@ def create(
     if tech:
         type_fields["tech_stack"] = list(tech)
 
-    result = entries.create_entry(
-        cfg,
-        entry_type,
-        title,
-        body,
-        tags=tag,
-        project=project,
-        summary=summary,
-        original_input=original_input,
-        type_fields=type_fields,
-    )
+    try:
+        result = entries.create_entry(
+            cfg,
+            entry_type,
+            title,
+            body,
+            tags=tag,
+            project=project,
+            summary=summary,
+            original_input=original_input,
+            type_fields=type_fields,
+        )
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
     typer.echo(f"done: {result.entry.file_path}")
 
 
