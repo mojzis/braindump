@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block body %}
+<div class="project-detail">
+  <h2>{{ project.name }}</h2>
+  <p class="muted">
+    {{ project.entry_count }} entries · {{ project.open_todos }} open / {{ project.done_todos }} done · last {{ (project.last_activity or '')[:10] }}
+  </p>
+
+  <form hx-post="/api/project/focus" hx-swap="none">
+    <input type="hidden" name="name" value="{{ project.name }}" />
+    <button type="submit">
+      {% if project.name == active_project %}★ focused{% else %}focus on {{ project.name }}{% endif %}
+    </button>
+  </form>
+
+  <div class="grid">
+    <section class="card">
+      <h3>open todos</h3>
+      {% if open_todos %}
+        <ul class="todo-list">
+          {% for h in open_todos %}
+            <li>
+              <form hx-post="/api/entries/{{ h.entry.id }}/done" hx-swap="none" style="display:inline">
+                <button class="done-btn">✓</button>
+              </form>
+              <a href="/entries/{{ h.entry.id }}">#{{ h.entry.id }} {{ h.entry.title }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">none.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h3>recent activity</h3>
+      {% if recent %}
+        <ul class="recent-list">
+          {% for h in recent %}
+            <li>
+              <span class="date">{{ (h.entry.created_at or '')[:10] }}</span>
+              <span class="type-chip">{{ h.entry.type }}</span>
+              <a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">nothing recent.</p>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <h3>top tags</h3>
+      {% if project.tag_counts %}
+        <ul class="tag-list">
+          {% for tag, n in project.tag_counts.most_common(20) %}
+            <li><a href="/entries?tag={{ tag }}&project={{ project.name }}">{{ tag }}</a> <span class="muted">{{ n }}</span></li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">no tags.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

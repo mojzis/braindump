@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}projects{% endblock %}
+{% block body %}
+<h2>projects</h2>
+{% if project_stats %}
+  <table class="projects-table">
+    <thead><tr><th></th><th>project</th><th>entries</th><th>open todos</th><th>done todos</th><th>last activity</th></tr></thead>
+    <tbody>
+    {% for p in project_stats %}
+      <tr>
+        <td>
+          {% if p.name != "(none)" %}
+            <form hx-post="/api/project/focus" hx-swap="none" style="display:inline">
+              <input type="hidden" name="name" value="{{ p.name }}" />
+              <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
+            </form>
+          {% endif %}
+        </td>
+        <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
+        <td>{{ p.entry_count }}</td>
+        <td>{{ p.open_todos }}</td>
+        <td>{{ p.done_todos }}</td>
+        <td class="muted">{{ (p.last_activity or "")[:10] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="muted">no projects yet.</p>
+{% endif %}
+{% endblock %}

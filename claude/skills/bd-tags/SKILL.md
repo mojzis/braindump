@@ -1,7 +1,7 @@
 ---
 description: Tag management and analytics
 allowed-tools: Bash, Read
-argument-hint: [stats|similar|show <tag>]
+argument-hint: [stats|show <tag>]
 ---
 
 # Braindump Tags
@@ -14,10 +14,13 @@ $ARGUMENTS
 
 ## Instructions
 
-Run `~/braindump/scripts/tags.sh` with the provided arguments.
+Run the appropriate `bd tags` subcommand:
 
-If no arguments provided, default to `stats`.
+- `bd tags stats` — show tag frequency (default)
+- `bd tags show <tag>` — list entries carrying a tag
+
+If no argument is provided, default to `stats`.
 
 ## Output
 
-Display the script output to the user.
+Display the command output to the user.

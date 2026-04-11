@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Braindump{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://unpkg.com/htmx.org@1.9.12"
+          integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
+          crossorigin="anonymous"></script>
+  <script src="/static/live-refresh.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <nav class="nav">
+      <a class="logo" href="/">braindump</a>
+      <a href="/" data-shortcut="g d">dashboard</a>
+      <a href="/journal" data-shortcut="g j">journal</a>
+      <a href="/capture" data-shortcut="g c">capture</a>
+      <a href="/entries" data-shortcut="g e">entries</a>
+      <a href="/projects" data-shortcut="g p">projects</a>
+      <a href="/tags">tags</a>
+    </nav>
+    <form class="project-focus" hx-post="/api/project/focus" hx-swap="none">
+      <label>focus:</label>
+      <input type="text" name="name" value="{{ active_project or '' }}" placeholder="(all projects)" list="project-datalist" />
+      <button type="submit">set</button>
+      {% if active_project %}
+        <button type="submit" name="name" value="">clear</button>
+      {% endif %}
+    </form>
+  </header>
+
+  {% if active_project %}
+    <div class="active-banner">active project: <b>{{ active_project }}</b></div>
+  {% endif %}
+
+  <main>
+    {% block body %}{% endblock %}
+  </main>
+
+  <footer>
+    <small>press <kbd>?</kbd> for shortcuts</small>
+  </footer>
+
+  <dialog id="shortcuts">
+    <h3>keyboard shortcuts</h3>
+    <ul>
+      <li><kbd>g d</kbd> dashboard</li>
+      <li><kbd>g j</kbd> today's journal</li>
+      <li><kbd>g c</kbd> capture</li>
+      <li><kbd>g e</kbd> entries list</li>
+      <li><kbd>g p</kbd> projects</li>
+      <li><kbd>/</kbd> focus search on entries page</li>
+      <li><kbd>c</kbd> quick capture (from any page)</li>
+      <li><kbd>?</kbd> this help</li>
+      <li><kbd>esc</kbd> close dialogs</li>
+    </ul>
+    <button onclick="document.getElementById('shortcuts').close()">close</button>
+  </dialog>
+
+  <script>
+    (function () {
+      const DIALOG = document.getElementById("shortcuts");
+      let gPending = false;
+      let gTimer = null;
+
+      function isTyping(e) {
+        const t = e.target;
+        return t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      }
+
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") {
+          if (DIALOG.open) DIALOG.close();
+          return;
+        }
+        if (isTyping(e)) return;
+        if (e.key === "?") { e.preventDefault(); DIALOG.showModal(); return; }
+        if (e.key === "c") { e.preventDefault(); window.location = "/capture"; return; }
+        if (e.key === "/") {
+          const s = document.querySelector('input[name="q"]');
+          if (s) { e.preventDefault(); s.focus(); return; }
+        }
+        if (e.key === "g") {
+          gPending = true;
+          clearTimeout(gTimer);
+          gTimer = setTimeout(function () { gPending = false; }, 800);
+          return;
+        }
+        if (gPending) {
+          gPending = false;
+          clearTimeout(gTimer);
+          const map = { d: "/", j: "/journal", c: "/capture", e: "/entries", p: "/projects", t: "/tags" };
+          if (map[e.key]) { e.preventDefault(); window.location = map[e.key]; }
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

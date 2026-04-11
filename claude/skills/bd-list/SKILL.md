@@ -17,38 +17,19 @@ $ARGUMENTS
 ## Instructions
 
 1. **Parse arguments:**
-   - No args: list all types, last 10
-   - Type name: `todo`, `til`, `thought`, `prompt` - list that type only
+   - No args: all types, last 10
+   - Type name: `todo`, `til`, `thought`, `prompt`, `journal`
    - Number: limit results (e.g., `todo 5`)
 
-2. **Run the list script:**
+2. **Run the list command:**
 
-```bash
-BD="$HOME/braindump"
-TYPE="${1:-all}"
-LIMIT="${2:-10}"
+   ```bash
+   bd list [type] --limit N
+   ```
 
-# Using the list script
-"$BD/scripts/list.sh" "$TYPE" "$LIMIT"
-```
+   Add `--project NAME` to scope to a specific project, or `--all` to override the active project filter.
 
-Or directly:
-```bash
-BD="$HOME/braindump"
-
-list_type() {
-  local t="$1"
-  [ -f "$BD/$t/index.jsonl" ] && tail -n 10 "$BD/$t/index.jsonl" | \
-    jq -r '"\(.created_at | .[0:10]) [\(.type)] \(.title)"'
-}
-
-for t in todos til thoughts prompts; do
-  list_type "$t"
-done | sort -r | head -n 10
-```
-
-3. **Display results** in a clean, scannable format:
-   - **#id** date [type] title
-   - One entry per line
-   - Sorted by most recent first
+3. **Display results** in the format produced by `bd list`:
+   - `#id date [type] [status] title (project)`
+   - Sorted newest first
    - Include the ID so users can reference entries (e.g., `/bd-done 42`)

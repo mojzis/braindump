@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}journal {{ day.isoformat() }}{% endblock %}
+{% block body %}
+<div class="journal-page">
+  <header class="journal-header">
+    <div class="nav-dates">
+      <a href="/journal/{{ prior_day.isoformat() }}">← {{ prior_day.isoformat() }}</a>
+      <h2>{{ day.isoformat() }}{% if is_today %} <span class="today-tag">today</span>{% endif %}</h2>
+      <a href="/journal/{{ next_day.isoformat() }}">{{ next_day.isoformat() }} →</a>
+    </div>
+    {% if is_today %}
+      <form hx-post="/api/journal/close" hx-swap="none">
+        <button type="submit" title="finish today and open tomorrow">finish the day →</button>
+      </form>
+    {% endif %}
+  </header>
+
+  <div class="journal-grid">
+    {% if prev_day %}
+      <details class="prev-day" open>
+        <summary>yesterday ({{ prev_day.isoformat() }})</summary>
+        <pre>{{ prev_body or "(empty)" }}</pre>
+      </details>
+    {% else %}
+      <div class="prev-day muted">(no prior journal)</div>
+    {% endif %}
+
+    <form class="today-editor"
+          hx-put="/api/journal/{{ day.isoformat() }}"
+          hx-trigger="input changed delay:600ms from:textarea, blur from:textarea"
+          hx-swap="none">
+      <textarea name="body" rows="24" autofocus placeholder="write anything…">{{ body }}</textarea>
+      <div class="autosave-hint muted">autosaves</div>
+    </form>
+  </div>
+</div>
+{% endblock %}

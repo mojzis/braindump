@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}tags{% endblock %}
+{% block body %}
+<h2>tags</h2>
+{% if tag_counts %}
+  <ul class="tag-freq">
+    {% for tag, n in tag_counts %}
+      <li><a href="/entries?tag={{ tag }}">{{ tag }}</a> <span class="muted">{{ n }}</span></li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p class="muted">no tags yet.</p>
+{% endif %}
+{% endblock %}

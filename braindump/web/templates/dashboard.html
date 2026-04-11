@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}braindump — dashboard{% endblock %}
+{% block body %}
+<div class="grid">
+  <section class="card">
+    <h2>today — {{ today.isoformat() }}</h2>
+    {% if journal_preview %}
+      <pre class="journal-preview">{{ journal_preview }}</pre>
+    {% else %}
+      <p class="muted">nothing yet today.</p>
+    {% endif %}
+    <p><a href="/journal/{{ today.isoformat() }}">open journal →</a></p>
+  </section>
+
+  <section class="card">
+    <h2>open todos{% if active_project %} — {{ active_project }}{% endif %}</h2>
+    {% if open_todos %}
+      <ul class="todo-list">
+        {% for h in open_todos %}
+          <li>
+            <form hx-post="/api/entries/{{ h.entry.id }}/done" hx-swap="none" style="display:inline">
+              <button class="done-btn" title="mark done">✓</button>
+            </form>
+            <a href="/entries/{{ h.entry.id }}">#{{ h.entry.id }} {{ h.entry.title }}</a>
+            {% if h.entry.project %}<span class="muted">({{ h.entry.project }})</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">no open todos.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>recent activity</h2>
+    {% if recent %}
+      <ul class="recent-list">
+        {% for h in recent %}
+          <li>
+            <span class="date">{{ (h.entry.created_at or '')[:10] }}</span>
+            <span class="type-chip">{{ h.entry.type }}</span>
+            <a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a>
+            {% if h.entry.project %}<span class="muted">({{ h.entry.project }})</span>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">no entries yet. try <a href="/capture">capture</a>.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>top tags</h2>
+    {% if top_tags %}
+      <ul class="tag-list">
+        {% for tag, n in top_tags %}
+          <li><a href="/entries?tag={{ tag }}">{{ tag }}</a> <span class="muted">{{ n }}</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">no tags yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>projects</h2>
+    {% if project_stats %}
+      <ul class="project-list">
+        {% for p in project_stats[:8] %}
+          <li>
+            <a href="/projects/{{ p.name }}">{{ p.name }}</a>
+            <span class="muted">
+              {{ p.entry_count }} entries
+              {% if p.open_todos %}— {{ p.open_todos }} open{% endif %}
+            </span>
+          </li>
+        {% endfor %}
+      </ul>
+      <p><a href="/projects">all projects →</a></p>
+    {% else %}
+      <p class="muted">no projects yet.</p>
+    {% endif %}
+  </section>
+</div>
+
+<datalist id="project-datalist">
+  {% for p in project_stats %}
+    {% if p.name != "(none)" %}<option value="{{ p.name }}">{% endif %}
+  {% endfor %}
+</datalist>
+{% endblock %}

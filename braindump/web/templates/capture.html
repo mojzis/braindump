@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}capture{% endblock %}
+{% block body %}
+<div class="capture-page">
+  <h2>capture</h2>
+  <form method="post" action="/capture" class="capture-form">
+    <label>type
+      <select name="entry_type">
+        <option value="thought" selected>thought</option>
+        <option value="todo">todo</option>
+        <option value="til">til</option>
+        <option value="prompt">prompt</option>
+      </select>
+    </label>
+
+    <label>title
+      <input type="text" name="title" autofocus required />
+    </label>
+
+    <label>summary (optional)
+      <input type="text" name="summary" />
+    </label>
+
+    <label>body
+      <textarea name="body" rows="12" placeholder="write it out…"></textarea>
+    </label>
+
+    <label>tags (comma-separated)
+      <input type="text" name="tags" list="tag-datalist" />
+    </label>
+
+    <label>project
+      <input type="text" name="project" value="{{ active_project or '' }}" list="project-datalist" />
+    </label>
+
+    <button type="submit">save</button>
+  </form>
+
+  <datalist id="tag-datalist">
+    {% for t in top_tags %}<option value="{{ t }}">{% endfor %}
+  </datalist>
+  <datalist id="project-datalist">
+    {% for p in all_projects %}<option value="{{ p }}">{% endfor %}
+  </datalist>
+</div>
+{% endblock %}

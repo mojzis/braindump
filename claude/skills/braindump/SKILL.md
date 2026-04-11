@@ -8,15 +8,16 @@ You have access to the Braindump personal knowledge management system.
 
 ## Overview
 
-Braindump is a system for capturing todos, TILs (Today I Learned), thoughts, and prompts. All data is stored in `~/braindump/` with JSONL indexes for fast search.
+Braindump captures todos, TILs (Today I Learned), thoughts, prompts, and a daily journal. All data lives under `~/braindump/` with per-type JSONL indexes. Every data operation — from skills, the CLI, and the local web UI — goes through one shared Python core via the `bd` command.
 
 ## Data Location
 
-- **Base directory:** `~/braindump/`
-- **Types:** `todos/`, `til/`, `thoughts/`, `prompts/`
+- **Base directory:** `~/braindump/` (override with `BRAINDUMP_DIR`)
+- **Types:** `todos/`, `til/`, `thoughts/`, `prompts/`, `journal/`
 - **Each type has:** `index.jsonl` + `YYYY/MM/` folders with markdown files
-- **Scripts:** `~/braindump/scripts/` (create-entry.sh, search.sh, list.sh, tags.sh, done.sh)
-- **ID counter:** `~/braindump/.next_id` (auto-incremented on entry creation)
+- **CLI:** `bd` (installed via `uv tool install` or editable install; source lives in `claude/skills/../braindump` package)
+- **ID counter:** `~/braindump/.next_id` (flock-guarded, auto-incremented)
+- **Active project state:** `~/braindump/.state.json` (`{"active_project": "..."}`)
 
 ## Commands Available
 
@@ -31,6 +32,9 @@ Braindump is a system for capturing todos, TILs (Today I Learned), thoughts, and
 | `/bd-list [type] [n]` | List recent entries |
 | `/bd-tags [command]` | Tag management and analytics |
 | `/bd-done <id or query>` | Mark a todo as done |
+| `/bd-digest [date]` | Digest a journal day into structured per-project entries |
+
+All of these invoke the `bd` CLI under the hood.
 
 ## Content Processing Levels
 
@@ -57,6 +61,7 @@ Every entry captures the project context it was created in:
 - **Detection:** From current git repo name, or working directory name if not a git repo
 - **Value:** lowercase project name (e.g., `braindump`, `my-app`)
 - **Override:** User can specify explicitly if needed
+- **Active project filter:** `bd project focus <name>` sets a persistent filter; subsequent `bd list` / `bd search` calls scope to that project until `bd project focus --clear`
 
 This allows filtering/searching entries by the project they were created in.
 
@@ -70,8 +75,14 @@ This allows filtering/searching entries by the project they were created in.
 **Available tags:**
 
 <existing-tags>
-!`~/braindump/scripts/tags.sh stats`
+!`bd tags stats 2>/dev/null || echo "(no tags yet)"`
 </existing-tags>
+
+**Available projects:**
+
+<existing-projects>
+!`bd project list 2>/dev/null || echo "(no projects yet)"`
+</existing-projects>
 
 ## JSONL Index Schema
 
@@ -87,11 +98,12 @@ Each line in `index.jsonl` is a JSON object:
   "project": "braindump",
   "input": "original user input verbatim",
   "created_at": "2026-01-21T14:30:00Z",
-  "file_path": "2026/01/slug--2026-01-21-1430.md"  // always relative to type dir
+  "updated_at": "2026-01-22T09:10:00Z",
+  "file_path": "2026/01/slug--2026-01-21-1430.md"
 }
 ```
 
-The `input` field always contains the original user input exactly as provided.
+The `input` field always contains the original user input exactly as provided. `updated_at` is set whenever the entry is mutated via `bd update` / `bd done`.
 
 ### Type-specific fields:
 
@@ -99,6 +111,7 @@ The `input` field always contains the original user input exactly as provided.
 - **til**: `category` (programming/tools/concepts/debugging/general), `source`
 - **thought**: `mood`, `related_to`
 - **prompt**: `prompt_type` (system/user/template/example), `model_target`
+- **journal**: `date` (YYYY-MM-DD), `word_count` — one entry per day, file is `journal/YYYY/MM/YYYY-MM-DD.md`
 
 ## File Naming Convention
 
@@ -110,7 +123,9 @@ Files are named: `slugified-title--YYYY-MM-DD-HHmm.md`
 
 Example: `fix-auth-bug--2026-01-21-1430.md`
 
-**Important:** `file_path` in JSONL is always relative to the type directory, e.g., `2026/01/slug.md`. Never store absolute paths or include the type dir prefix (e.g., NOT `todos/2026/...` or `/Users/.../todos/2026/...`).
+Journal files are an exception: `journal/YYYY/MM/YYYY-MM-DD.md`, one per day.
+
+**Important:** `file_path` in JSONL is always relative to the type directory, e.g., `2026/01/slug.md`.
 
 ## Markdown File Format
 
@@ -118,8 +133,9 @@ Example: `fix-auth-bug--2026-01-21-1430.md`
 ---
 type: todo
 title: Fix auth bug
-tags: [auth, bug]
+tags: ["auth", "bug"]
 project: braindump
+status: pending
 created_at: 2026-01-21T14:30:00Z
 ---
 
@@ -141,34 +157,37 @@ For raw mode: body IS the original input (no authoring), still include original 
 
 ## Working with Braindump
 
-When you need to:
+All commands go through the `bd` CLI.
 
-1. **Create an entry**: Use the appropriate `/bd-*` command or use the script:
-   ```bash
-   # Pipe content directly to create-entry.sh (body only, no frontmatter)
-   cat << 'EOF' | ~/braindump/scripts/create-entry.sh <type> "Title" '{"type":"...","title":"...","tags":[...],...}'
-   Content here...
-   EOF
-   ```
-   Types: `todos`, `til`, `thoughts`, `prompts`
+1. **Create an entry.** Body comes from stdin (piped) or a file. Original input can be passed inline or via a file:
 
-2. **Search**: Use `/bd-search` or:
    ```bash
-   ~/braindump/scripts/search.sh "query"
-   ```
-
-3. **List recent**: Use `/bd-list` or:
-   ```bash
-   ~/braindump/scripts/list.sh [type] [limit]
+   cat << 'BODY_EOF' | bd create todo "Fix auth bug" \
+     --tag auth --tag bug \
+     --project braindump \
+     --summary "Session tokens are corrupted on refresh" \
+     --status pending \
+     --subtype code \
+     --original-input "the raw user text verbatim"
+   Authored body content here.
+   BODY_EOF
    ```
 
-4. **Read an entry**: Read the markdown file directly from the path in the index
+   Types: `todo`, `til`, `thought`, `prompt`. For long multi-line original input, use `--original-input-file <path>` with a temp file.
 
-5. **Mark a todo done**: Use `/bd-done` or:
-   ```bash
-   ~/braindump/scripts/done.sh 42        # by ID
-   ~/braindump/scripts/done.sh "query"   # by search
-   ```
+2. **Search:** `bd search <words> [--type todo] [--project name] [--status open|done|all] [--tag foo]`. Defaults to JSONL output; pass `--human` for a readable list.
+
+3. **List recent:** `bd list [type] --limit 10`. Human-readable by default.
+
+4. **Read an entry:** Read the markdown file directly at `~/braindump/<type_dir>/<file_path>`.
+
+5. **Mark a todo done:** `bd done <id|query|file_path>`.
+
+6. **Edit an entry:** `bd update <id> [--title ...] [--tags a,b] [--project p] [--status s] [--body]` (use `--body` with stdin to replace the authored body).
+
+7. **Projects:** `bd project list`, `bd project show <name>`, `bd project focus <name>` / `--clear`.
+
+8. **Journal:** `bd journal today`, `bd journal append "some text"`, `bd journal close` (open tomorrow's file now), `bd journal show YYYY-MM-DD`.
 
 ## Output Style
 
@@ -186,6 +205,7 @@ No extra text, summaries, or commentary unless:
 - All timestamps are UTC ISO 8601 format
 - Tags are lowercase, no spaces (use hyphens)
 - Summaries should be one line, under 100 chars
-- Every entry has a numeric `id` field, auto-assigned on creation from `~/braindump/.next_id`
-- Use IDs to reference entries (e.g., `done.sh 42`)
-- Search supports status filtering: `search.sh "query" --open` or `--done`
+- Every entry has a numeric `id` field, auto-assigned on creation
+- Use IDs to reference entries (e.g., `bd done 42`)
+- Search supports `--status open` / `--done` / `--all`
+- Honor active project: if `bd project focus` is set, `bd list` and `bd search` scope to it unless you pass `--all`

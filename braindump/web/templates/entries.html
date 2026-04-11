@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}entries{% endblock %}
+{% block body %}
+<div class="entries-page">
+  <form method="get" action="/entries" class="filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search…" />
+    <select name="type">
+      <option value="">all types</option>
+      {% for t in all_types %}
+        <option value="{{ t }}" {% if type == t %}selected{% endif %}>{{ t }}</option>
+      {% endfor %}
+    </select>
+    <select name="status">
+      <option value="all" {% if status == "all" %}selected{% endif %}>all</option>
+      <option value="open" {% if status == "open" %}selected{% endif %}>open</option>
+      <option value="done" {% if status == "done" %}selected{% endif %}>done</option>
+    </select>
+    <input type="text" name="project" value="{{ project }}" list="project-datalist" placeholder="project" />
+    <input type="text" name="tag" value="{{ tag }}" placeholder="tag" />
+    <label><input type="checkbox" name="all" value="1" {% if all_projects_flag %}checked{% endif %} /> all projects</label>
+    <button type="submit">filter</button>
+  </form>
+
+  {% if hits %}
+    <table class="entries-table">
+      <thead>
+        <tr><th>id</th><th>date</th><th>type</th><th>status</th><th>title</th><th>project</th><th>tags</th></tr>
+      </thead>
+      <tbody>
+      {% for h in hits %}
+        <tr>
+          <td>#{{ h.entry.id }}</td>
+          <td>{{ (h.entry.created_at or "")[:10] }}</td>
+          <td>{{ h.entry.type }}</td>
+          <td>{{ h.entry.status or "" }}</td>
+          <td><a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a></td>
+          <td>{{ h.entry.project or "" }}</td>
+          <td class="muted">{{ h.entry.tags | join(", ") }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">no entries match.</p>
+  {% endif %}
+
+  <datalist id="project-datalist">
+    {% for p in all_projects_list %}<option value="{{ p }}">{% endfor %}
+  </datalist>
+</div>
+{% endblock %}

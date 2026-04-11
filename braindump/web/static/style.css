@@ -1,0 +1,98 @@
+:root {
+  --bg: #faf9f6;
+  --fg: #1e1e1e;
+  --muted: #888;
+  --accent: #8c5a2b;
+  --card: #fff;
+  --border: #e4e2dc;
+  --banner: #fff7e0;
+  --danger: #c33;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15161a;
+    --fg: #e7e6e0;
+    --muted: #9a9890;
+    --accent: #d49a5a;
+    --card: #1c1d22;
+    --border: #2c2e34;
+    --banner: #2a230e;
+    --danger: #e66;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.topbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--border); gap: 16px; flex-wrap: wrap; }
+.nav { display: flex; gap: 16px; align-items: center; }
+.logo { font-weight: 700; font-size: 16px; }
+.project-focus { display: flex; gap: 6px; align-items: center; }
+.project-focus input { padding: 4px 8px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+.project-focus button { padding: 4px 10px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+
+.active-banner { background: var(--banner); padding: 6px 20px; border-bottom: 1px solid var(--border); text-align: center; }
+main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+footer { max-width: 1100px; margin: 40px auto 20px; padding: 0 20px; color: var(--muted); text-align: center; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+.card h2, .card h3 { margin-top: 0; }
+
+.muted { color: var(--muted); }
+.date { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.type-chip { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-size: 11px; font-family: var(--mono); margin-right: 4px; }
+
+ul { padding-left: 0; list-style: none; }
+ul li { margin: 6px 0; }
+.todo-list li, .recent-list li { display: flex; gap: 8px; align-items: center; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-list li { margin: 0; }
+
+.done-btn { border: 1px solid var(--border); background: var(--card); color: var(--fg); width: 24px; height: 24px; padding: 0; cursor: pointer; border-radius: 4px; }
+.done-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.journal-page { max-width: 960px; margin: 0 auto; }
+.journal-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+.nav-dates { display: flex; gap: 16px; align-items: baseline; }
+.today-tag { background: var(--banner); padding: 2px 8px; border-radius: 3px; font-size: 11px; vertical-align: middle; }
+.journal-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+@media (max-width: 700px) { .journal-grid { grid-template-columns: 1fr; } }
+.prev-day { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; max-height: 600px; overflow: auto; }
+.prev-day pre { white-space: pre-wrap; word-break: break-word; font: inherit; margin: 8px 0 0; }
+.today-editor textarea { width: 100%; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font: inherit; resize: vertical; }
+.autosave-hint { text-align: right; font-size: 11px; margin-top: 4px; }
+
+.journal-preview { white-space: pre-wrap; word-break: break-word; font: inherit; color: var(--fg); margin: 0; max-height: 240px; overflow: auto; }
+
+.capture-form { display: grid; gap: 12px; max-width: 720px; }
+.capture-form label { display: flex; flex-direction: column; gap: 4px; }
+.capture-form input, .capture-form select, .capture-form textarea {
+  padding: 8px 10px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; font: inherit;
+}
+.capture-form button { padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
+.filters input, .filters select { padding: 6px 10px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; }
+.filters button { padding: 6px 14px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; }
+
+.entries-table, .projects-table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.entries-table th, .entries-table td, .projects-table th, .projects-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+.entries-table tr:last-child td, .projects-table tr:last-child td { border-bottom: none; }
+
+.edit-form { display: grid; gap: 10px; max-width: 900px; }
+.edit-form label { display: flex; flex-direction: column; gap: 4px; }
+.edit-form input, .edit-form select, .edit-form textarea {
+  padding: 8px 10px; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; font: inherit;
+}
+.edit-form .actions { display: flex; gap: 8px; }
+.edit-form .actions button { padding: 6px 14px; border-radius: 4px; border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer; }
+.edit-form .actions button[type="submit"] { background: var(--accent); border-color: var(--accent); color: white; }
+.edit-form .actions .danger { border-color: var(--danger); color: var(--danger); }
+
+kbd { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-family: var(--mono); font-size: 12px; }
+
+dialog { background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 20px; max-width: 420px; }
+dialog::backdrop { background: rgba(0,0,0,0.4); }

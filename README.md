@@ -1,157 +1,136 @@
 # Braindump
 
-A portable Claude Code-integrated system for capturing todos, TILs, thoughts, and prompts with JSONL indexing for fast search.
+A portable Claude Code-integrated personal knowledge management system. Capture todos, TILs, thoughts, prompts, and a daily journal. Everything is plain markdown on disk with JSONL indexes for fast structured search, a `bd` CLI, a local web UI, and a set of `/bd-*` Claude slash-skills — all driven by a single shared Python core.
 
 ## Prerequisites
 
-- [ag (The Silver Searcher)](https://github.com/ggreer/the_silver_searcher) - used for fast full-text search across entries
-- `jq` - used for JSONL index queries
+- [uv](https://docs.astral.sh/uv/) — used to install the `bd` CLI
+- [ripgrep](https://github.com/BurntSushi/ripgrep) — optional, enables full-text fallback in `bd search`
 
 ## Installation
 
 ```bash
-# Clone/download the repo, then run:
 ./install.sh
 ```
 
 This will:
-1. Copy commands to `~/.claude/commands/`
-2. Copy skills to `~/.claude/skills/`
-3. Initialize `~/braindump/` with empty indexes and scripts
-
-### Manual Installation
-
-```bash
-# Copy commands and skills to ~/.claude/
-cp -r claude/* ~/.claude/
-
-# Initialize data directory
-cp -r data-template ~/braindump
-chmod +x ~/braindump/scripts/*.sh
-```
+1. `uv tool install` the `bd` CLI (with the `web` extra for the local UI)
+2. Copy Claude skills to `~/.claude/skills/`
+3. Seed the data directory at `~/braindump/` with empty indexes for each type
+4. Drop optional session-tracking scripts into `~/braindump/scripts/`
 
 ## Usage
 
-Start a new Claude Code session after installation. The following commands will be available:
+### CLI
+
+```bash
+bd --help                             # overview
+bd list                               # recent entries
+bd search auth login --status open    # multi-word AND search
+bd create todo "Fix auth" --tag auth  # create (body from stdin)
+bd done 42                            # mark todo done
+bd update 42 --tags a,b --project foo # patch metadata
+bd project focus braindump            # scope all queries to a project
+bd journal today                      # today's journal state
+bd serve                              # local web UI at http://127.0.0.1:8765/
+```
+
+### Web UI
+
+`bd serve` opens a local FastAPI + htmx server with:
+
+- Dashboard (today's journal preview, open todos, recent activity, top tags, projects)
+- Daily journal editor with yesterday's content in a side panel, autosave, and a "finish the day" button (honors a configurable day cutoff, default `04:00`)
+- Quick-capture form
+- Searchable entry list with type/project/status/tag/date filters
+- Inline-edit for title, tags, project, status, and body
+- Per-project dashboards with open todos, recent activity, and tag counts
+- Active-project focus mode applied across every view
+
+Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` for help.
+
+### Claude skills
+
+Start a new Claude Code session after installation. Available:
 
 | Command | Purpose |
 |---------|---------|
 | `/bd-dump <content>` | Quick capture with auto-categorization |
 | `/bd-todo <task>` | Create a todo |
-| `/bd-til <learning>` | Record a TIL (Today I Learned) |
+| `/bd-til <learning>` | Record a TIL |
 | `/bd-thought <idea>` | Capture a thought |
 | `/bd-prompt <content>` | Store a prompt |
 | `/bd-search <query>` | Search entries |
 | `/bd-list [type] [n]` | List recent entries |
+| `/bd-tags [command]` | Tag analytics |
+| `/bd-done <id or query>` | Mark a todo as done |
+| `/bd-digest [date]` | Digest a journal day into structured per-project entries |
 
-### Examples
+All of them delegate to the same `bd` CLI, so what you see in the web UI is exactly what the skills produce.
 
-```bash
-# Quick dump - Claude auto-categorizes
-/bd-dump "Need to fix the auth bug in login.ts"
-
-# Explicit todo
-/bd-todo "Implement user search --priority=high"
-
-# Record something learned
-/bd-til "jq -c outputs compact JSON, one object per line"
-
-# Capture a thought
-/bd-thought "What if we used SQLite for the cache instead?"
-
-# Store a prompt
-/bd-prompt "You are a helpful assistant that..."
-
-# Search
-/bd-search auth
-
-# List recent
-/bd-list           # all types, last 10
-/bd-list todo      # todos only
-/bd-list til 5     # last 5 TILs
-```
-
-## Data Structure
+## Data layout
 
 ```
 ~/braindump/
-├── todos/
-│   ├── index.jsonl
-│   └── 2026/01/fix-auth-bug--2026-01-21-1430.md
-├── til/
-│   ├── index.jsonl
-│   └── 2026/01/jq-compact-output--2026-01-21-1435.md
-├── thoughts/
-│   └── index.jsonl
-├── prompts/
-│   └── index.jsonl
-└── scripts/
-    ├── search.sh
-    ├── slugify.sh
-    └── list.sh
+├── todos/      index.jsonl + YYYY/MM/<slug>--<timestamp>.md
+├── til/        …
+├── thoughts/   …
+├── prompts/    …
+├── journal/    index.jsonl + YYYY/MM/<YYYY-MM-DD>.md  (one file per day)
+├── sessions/   Claude Code session hooks output
+├── scripts/    session hooks only
+├── .next_id    shared ID counter (flock-guarded)
+├── .state.json active project etc.
+└── .trash/     soft-deleted entries
 ```
 
-### JSONL Index Format
-
-Each `index.jsonl` contains one JSON object per line:
+### JSONL index
 
 ```json
-{"type":"todo","title":"Fix auth bug","summary":"Fix login authentication","tags":["auth","bug"],"input":"Need to fix the authentication bug in login.ts","status":"pending","created_at":"2026-01-21T14:30:00Z","file_path":"2026/01/fix-auth-bug--2026-01-21-1430.md"}
+{"id":42,"type":"todo","title":"Fix auth bug","summary":"...","tags":["auth"],"project":"braindump","status":"pending","input":"...","created_at":"2026-04-11T14:15:02Z","file_path":"2026/04/fix-auth-bug--2026-04-11-1415.md"}
 ```
 
-The `input` field stores the original user input verbatim.
-
-### Markdown File Format
+### Markdown frontmatter
 
 ```markdown
 ---
 type: todo
 title: Fix auth bug
-tags: [auth, bug]
+tags: ["auth", "bug"]
+project: braindump
 status: pending
-priority: high
-created_at: 2026-01-21T14:30:00Z
+created_at: 2026-04-11T14:15:02Z
 ---
 
 # Fix auth bug
 
-Need to fix the authentication bug in login.ts...
+Authored content…
+
+---
+
+<details>
+<summary>Original input</summary>
+
+[verbatim user input]
+
+</details>
 ```
 
-## File Naming
-
-Files use the format: `slugified-title--YYYY-MM-DD-HHmm.md`
-
-- Title comes first for easy scanning
-- `--` separator allows double-click to select just the title
-- Timestamp ensures uniqueness
-
-## Shell Scripts
-
-The scripts in `~/braindump/scripts/` can be used directly:
+## Development
 
 ```bash
-# Search
-~/braindump/scripts/search.sh "auth"
-
-# List recent
-~/braindump/scripts/list.sh todo 5
-
-# Slugify a title
-~/braindump/scripts/slugify.sh "My Title Here"  # outputs: my-title-here
+uv venv
+uv pip install -e ".[dev,web]"
+pytest                   # core test suite
+bd serve --reload        # local UI with autoreload
 ```
 
-## Type-specific Fields
+The `braindump.core` package has no I/O except through `store.py`, and every mutation is atomic (`fcntl.flock` + temp-file rename). See `tests/` for the round-trip coverage.
 
-- **todo**: `subtype` (code/think/read/write/call/general), `status`, `priority`, `due_date`
-- **til**: `category` (programming/tools/concepts/debugging/general), `source`
-- **thought**: `mood`, `related_to`
-- **prompt**: `prompt_type` (system/user/template/example), `model_target`
+## Design
 
-## Design Decisions
-
-- **Portable**: Just copy files to install, no package manager needed
-- **Visible data**: `~/braindump/` is easy to browse and backup
-- **No git tracking**: Keeps it simple, add your own if desired
-- **JSONL indexes**: Fast search with jq, easy to parse
-- **Haiku for categorization**: Fast, cheap auto-categorization
+- **Plain markdown on disk** — browsable and backup-able; the JSONL indexes are a cache, not the source of truth
+- **Single shared core** — CLI, web UI, and Claude skills all call the same Python functions, so behavior stays consistent
+- **Projects are first class** — `project` is indexed, filterable everywhere, and has its own dashboards; the active-project focus is persisted so every query stays scoped
+- **Journal with a sane day cutoff** — late-night writes go to the previous day's file by default; "finish the day" button seals today manually
+- **Soft delete** — removing an entry moves it to `.trash/` so nothing is ever lost accidentally

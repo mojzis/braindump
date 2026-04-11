@@ -17,8 +17,12 @@ argument-hint: <task>
 </current-project>
 
 <existing-tags>
-!`~/braindump/scripts/tags.sh stats`
+!`bd tags stats 2>/dev/null || echo "(no tags yet)"`
 </existing-tags>
+
+<existing-projects>
+!`bd project list 2>/dev/null || echo "(no projects yet)"`
+</existing-projects>
 
 ## Input
 
@@ -31,27 +35,33 @@ $ARGUMENTS
    - `title`: concise title (max 60 chars)
    - `summary`: one-line summary
    - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse)
-   - `project`: use <current-project> value
-   - `subtype`: kind of task (coding, planning, reading, etc.)
+   - `project`: use <current-project> value, or pick an existing project from <existing-projects> if the task clearly belongs to one
+   - `subtype`: kind of task (code, think, read, write, call, general)
    - `status`: "pending"
-   - `priority`: if urgency is implied
+   - `priority`: only if urgency is implied
 
-3. **Create entry using script** (pipe content via stdin):
+3. **Create entry via the bd CLI.** Body goes through stdin; long original input goes through a temp file:
+
    ```bash
-   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh todos "Your Title" '{"type":"todo","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name","status":"pending"}'
-   [Authored content based on doneness level]
-
-   ---
-
-   <details>
-   <summary>Original input</summary>
-
+   OI=$(mktemp) && cat > "$OI" << 'OI_EOF'
    [Original user input verbatim]
+   OI_EOF
 
-   </details>
-   CONTENT_EOF
+   cat << 'BODY_EOF' | bd create todo "Your Title" \
+     --tag tag1 --tag tag2 \
+     --project project-name \
+     --summary "one-line summary" \
+     --status pending \
+     --subtype code \
+     --original-input-file "$OI"
+   [Authored content based on doneness level]
+   BODY_EOF
+
+   rm -f "$OI"
    ```
+
+   Repeat `--tag` per tag. Add `--priority` only if relevant.
 
 ## Output
 
-`done: <file_path>` (the path returned by create-entry.sh)
+`done: <file_path>` (the path printed by `bd create`)

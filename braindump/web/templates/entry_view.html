@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}#{{ entry.id }} {{ entry.title }}{% endblock %}
+{% block body %}
+<div class="entry-view">
+  <h2>#{{ entry.id }} {{ entry.title }}</h2>
+  <p class="muted">{{ entry.type }} · {{ (entry.created_at or '')[:19] }}{% if entry.updated_at %} · updated {{ entry.updated_at[:19] }}{% endif %}</p>
+
+  <form hx-post="/api/entries/{{ entry.id }}" hx-swap="none" class="edit-form">
+    <label>title <input type="text" name="title" value="{{ entry.title }}" /></label>
+    <label>summary <input type="text" name="summary" value="{{ entry.summary or '' }}" /></label>
+    <label>tags (csv) <input type="text" name="tags" value="{{ entry.tags | join(', ') }}" /></label>
+    <label>project <input type="text" name="project" value="{{ entry.project or '' }}" /></label>
+    {% if entry.type == "todo" %}
+      <label>status
+        <select name="status">
+          {% for s in ("pending", "in-progress", "done") %}
+            <option value="{{ s }}" {% if entry.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% endif %}
+    <label>body
+      <textarea name="body" rows="16">{{ body }}</textarea>
+    </label>
+    <div class="actions">
+      <button type="submit">save</button>
+      {% if entry.type == "todo" and entry.status != "done" %}
+        <button formmethod="post" formaction="/api/entries/{{ entry.id }}/done" hx-post="/api/entries/{{ entry.id }}/done" hx-swap="none">mark done</button>
+      {% endif %}
+      <button type="button"
+              hx-delete="/api/entries/{{ entry.id }}"
+              hx-confirm="move this entry to trash?"
+              hx-swap="none"
+              class="danger">delete</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

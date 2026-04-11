@@ -1,0 +1,65 @@
+[tool.poe.tasks.uvsync]
+help = "Sync the project with all optional dependency groups"
+cmd = "uv sync --all-extras --all-groups"
+
+[tool.poe.tasks.fix]
+sequence = [
+    { cmd = "ruff format --quiet ." },
+    { cmd = "ruff check --fix --quiet ." },
+]
+help = "Auto-fix: format and lint"
+
+[tool.poe.tasks.lint]
+cmd = "ruff check ."
+help = "Run linter (no fix)"
+
+[tool.poe.tasks.typecheck]
+cmd = "ty check"
+help = "Run type checker"
+
+[tool.poe.tasks.test]
+cmd = "pytest -q --tb=short"
+help = "Run tests"
+
+[tool.poe.tasks.vulns]
+shell = "uvx pysentry-rs . || true"
+interpreter = "bash"
+help = "Dependency vulnerability scan"
+
+[tool.poe.tasks.dead-code]
+cmd = "vulture braindump"
+help = "Dead code detection"
+
+[tool.poe.tasks.unused-deps]
+cmd = "deptry ."
+help = "Unused dependency check"
+
+[tool.poe.tasks._check-parallel]
+shell = """
+  ruff check . &
+  ty check &
+  vulture braindump &
+  deptry . &
+  (uvx pysentry-rs . || true) &
+  wait
+"""
+interpreter = "bash"
+
+[tool.poe.tasks.check]
+sequence = [
+    { ref = "_check-parallel" },
+    { ref = "test" },
+]
+help = "Run all checks (parallel where possible)"
+
+[tool.poe.tasks.check-all]
+sequence = [
+    { ref = "lint" },
+    { ref = "typecheck" },
+    { ref = "vulns" },
+    { ref = "dead-code" },
+    { ref = "unused-deps" },
+    { ref = "test" },
+]
+ignore_fail = true
+help = "Run all checks (report all failures)"

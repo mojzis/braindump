@@ -17,8 +17,12 @@ argument-hint: <what you learned>
 </current-project>
 
 <existing-tags>
-!`~/braindump/scripts/tags.sh stats`
+!`bd tags stats 2>/dev/null || echo "(no tags yet)"`
 </existing-tags>
+
+<existing-projects>
+!`bd project list 2>/dev/null || echo "(no projects yet)"`
+</existing-projects>
 
 ## Input
 
@@ -31,26 +35,29 @@ $ARGUMENTS
    - `title`: concise title (max 60 chars)
    - `summary`: one-line summary
    - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse)
-   - `project`: use <current-project> value
+   - `project`: use <current-project> value (or an existing project if more relevant)
    - `category`: topic area (programming, tools, concepts, debugging, etc.)
    - `source`: if a source is mentioned
 
-3. **Create entry using script** (pipe content via stdin):
+3. **Create entry via the bd CLI:**
+
    ```bash
-   cat << 'CONTENT_EOF' | ~/braindump/scripts/create-entry.sh til "Your Title" '{"type":"til","title":"Your Title","summary":"...","tags":["tag1"],"project":"project-name"}'
-   [Authored content based on doneness level]
-
-   ---
-
-   <details>
-   <summary>Original input</summary>
-
+   OI=$(mktemp) && cat > "$OI" << 'OI_EOF'
    [Original user input verbatim]
+   OI_EOF
 
-   </details>
-   CONTENT_EOF
+   cat << 'BODY_EOF' | bd create til "Your Title" \
+     --tag tag1 --tag tag2 \
+     --project project-name \
+     --summary "one-line summary" \
+     --category debugging \
+     --original-input-file "$OI"
+   [Authored content based on doneness level]
+   BODY_EOF
+
+   rm -f "$OI"
    ```
 
 ## Output
 
-`done: <file_path>` (the path returned by create-entry.sh)
+`done: <file_path>`
