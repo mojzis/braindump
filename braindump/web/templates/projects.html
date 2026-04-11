@@ -2,12 +2,76 @@
 {% block title %}projects{% endblock %}
 {% block body %}
 <h2>projects</h2>
-{% if project_stats %}
+
+{% set registered = project_stats | selectattr("registered") | list %}
+{% set unregistered = project_stats | rejectattr("registered") | list %}
+
+{% if registered %}
   <table class="projects-table">
-    <thead><tr><th></th><th>project</th><th>entries</th><th>open todos</th><th>done todos</th><th>last activity</th></tr></thead>
-    <tbody>
-    {% for p in project_stats %}
+    <thead>
       <tr>
+        <th></th>
+        <th>project</th>
+        <th>state</th>
+        <th>description</th>
+        <th>tech</th>
+        <th>entries</th>
+        <th>open</th>
+        <th>done</th>
+        <th>last</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in registered %}
+      <tr>
+        <td>
+          {% if p.name != "(none)" %}
+            <form hx-post="/api/project/focus" hx-swap="none" style="display:inline">
+              <input type="hidden" name="name" value="{{ p.name }}" />
+              <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
+            </form>
+          {% endif %}
+        </td>
+        <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
+        <td>
+          {% if p.state %}
+            <span class="state-pill state-{{ p.state }}">{{ p.state }}</span>
+          {% endif %}
+        </td>
+        <td class="muted">{{ p.description or "" }}</td>
+        <td>
+          {% for t in p.tech_stack %}<span class="tech-chip">{{ t }}</span>{% endfor %}
+        </td>
+        <td>{{ p.entry_count }}</td>
+        <td>{{ p.open_todos }}</td>
+        <td>{{ p.done_todos }}</td>
+        <td class="muted">{{ (p.last_activity or "")[:10] }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p class="muted">no registered projects yet. use <a href="/capture?type=project">capture</a> to register one.</p>
+{% endif %}
+
+{% if unregistered %}
+  <h3>unregistered</h3>
+  <p class="muted">these project names are referenced by entries but have no project entry of their own.</p>
+  <table class="projects-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>project</th>
+        <th>entries</th>
+        <th>open</th>
+        <th>done</th>
+        <th>last</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for p in unregistered %}
+      <tr class="unregistered-row">
         <td>
           {% if p.name != "(none)" %}
             <form hx-post="/api/project/focus" hx-swap="none" style="display:inline">
@@ -21,11 +85,14 @@
         <td>{{ p.open_todos }}</td>
         <td>{{ p.done_todos }}</td>
         <td class="muted">{{ (p.last_activity or "")[:10] }}</td>
+        <td>
+          {% if p.name != "(none)" %}
+            <a href="/capture?type=project&title={{ p.name | urlencode }}">register</a>
+          {% endif %}
+        </td>
       </tr>
     {% endfor %}
     </tbody>
   </table>
-{% else %}
-  <p class="muted">no projects yet.</p>
 {% endif %}
 {% endblock %}

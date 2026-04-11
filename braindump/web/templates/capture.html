@@ -5,16 +5,17 @@
   <h2>capture</h2>
   <form method="post" action="/capture" class="capture-form">
     <label>type
-      <select name="entry_type">
-        <option value="thought" selected>thought</option>
-        <option value="todo">todo</option>
-        <option value="til">til</option>
-        <option value="prompt">prompt</option>
+      <select name="entry_type" id="entry-type-select">
+        <option value="thought" {% if preset_type == "thought" or not preset_type %}selected{% endif %}>thought</option>
+        <option value="todo" {% if preset_type == "todo" %}selected{% endif %}>todo</option>
+        <option value="til" {% if preset_type == "til" %}selected{% endif %}>til</option>
+        <option value="prompt" {% if preset_type == "prompt" %}selected{% endif %}>prompt</option>
+        <option value="project" {% if preset_type == "project" %}selected{% endif %}>project</option>
       </select>
     </label>
 
     <label>title
-      <input type="text" name="title" autofocus required />
+      <input type="text" name="title" value="{{ preset_title }}" autofocus required />
     </label>
 
     <label>summary (optional)
@@ -29,9 +30,29 @@
       <input type="text" name="tags" list="tag-datalist" />
     </label>
 
-    <label>project
+    <label id="field-project">project
       <input type="text" name="project" value="{{ active_project or '' }}" list="project-datalist" />
     </label>
+
+    <fieldset id="project-fields" class="project-fields">
+      <legend>project metadata</legend>
+      <label>description
+        <input type="text" name="description" placeholder="one-line description" />
+      </label>
+      <label>state
+        <select name="state">
+          {% for s in project_states %}
+            <option value="{{ s }}" {% if s == "active" %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>local dir
+        <input type="text" name="local_dir" placeholder="e.g. ~/git/myproject" />
+      </label>
+      <label>tech stack (comma-separated)
+        <input type="text" name="tech_stack" placeholder="python, fastapi, htmx" />
+      </label>
+    </fieldset>
 
     <button type="submit">save</button>
   </form>
@@ -43,4 +64,20 @@
     {% for p in all_projects %}<option value="{{ p }}">{% endfor %}
   </datalist>
 </div>
+
+<script>
+(function () {
+  var sel = document.getElementById("entry-type-select");
+  var projFields = document.getElementById("project-fields");
+  var projRef = document.getElementById("field-project");
+  function sync() {
+    var isProject = sel.value === "project";
+    projFields.style.display = isProject ? "" : "none";
+    // A project entry does not belong to itself — hide the "project" reference field.
+    projRef.style.display = isProject ? "none" : "";
+  }
+  sel.addEventListener("change", sync);
+  sync();
+})();
+</script>
 {% endblock %}

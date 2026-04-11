@@ -8,12 +8,12 @@ You have access to the Braindump personal knowledge management system.
 
 ## Overview
 
-Braindump captures todos, TILs (Today I Learned), thoughts, prompts, and a daily journal. All data lives under `~/braindump/` with per-type JSONL indexes. Every data operation — from skills, the CLI, and the local web UI — goes through one shared Python core via the `bd` command.
+Braindump captures todos, TILs (Today I Learned), thoughts, prompts, projects, and a daily journal. All data lives under `~/braindump/` with per-type JSONL indexes. Every data operation — from skills, the CLI, and the local web UI — goes through one shared Python core via the `bd` command.
 
 ## Data Location
 
 - **Base directory:** `~/braindump/` (override with `BRAINDUMP_DIR`)
-- **Types:** `todos/`, `til/`, `thoughts/`, `prompts/`, `journal/`
+- **Types:** `todos/`, `til/`, `thoughts/`, `prompts/`, `projects/`, `journal/`
 - **Each type has:** `index.jsonl` + `YYYY/MM/` folders with markdown files
 - **CLI:** `bd` (installed via `uv tool install` or editable install; source lives in `claude/skills/../braindump` package)
 - **ID counter:** `~/braindump/.next_id` (flock-guarded, auto-incremented)
@@ -28,6 +28,7 @@ Braindump captures todos, TILs (Today I Learned), thoughts, prompts, and a daily
 | `/bd-til <learning>` | Record something learned |
 | `/bd-thought <idea>` | Capture a thought |
 | `/bd-prompt <content>` | Store a prompt |
+| `/bd-project <name>` | Create a project entry |
 | `/bd-search <query>` | Search entries |
 | `/bd-list [type] [n]` | List recent entries |
 | `/bd-tags [command]` | Tag management and analytics |
@@ -55,15 +56,38 @@ Detection order:
 
 ## Project Context
 
-Every entry captures the project context it was created in:
+Every non-project entry captures the project context it was created in:
 
 - **Field:** `project` (separate from tags)
 - **Detection:** From current git repo name, or working directory name if not a git repo
 - **Value:** lowercase project name (e.g., `braindump`, `my-app`)
+- **Reference model:** `project` is a by-name reference to the **title** of a
+  first-class project entry (type `project`). Projects can exist as plain
+  strings that no project entry has been created for — those show up as
+  "unregistered" in `bd project list` and the web UI. Creating a matching
+  project entry promotes the name to a registered project with its own
+  metadata (description, state, local_dir, tech_stack).
 - **Override:** User can specify explicitly if needed
 - **Active project filter:** `bd project focus <name>` sets a persistent filter; subsequent `bd list` / `bd search` calls scope to that project until `bd project focus --clear`
 
 This allows filtering/searching entries by the project they were created in.
+
+### Project entries
+
+- A project entry is an entry of type `project`. Its `title` is the project
+  name that other entries reference via their `project` field.
+- A project entry's own `project` field is **always `null`** — a project
+  cannot belong to itself. `bd create project` enforces this even if
+  `--project` is passed.
+- The title `"(none)"` is reserved — it is the aggregation sentinel for
+  entries whose `project` field is unset. `bd create project "(none)"` is
+  rejected.
+- Project-specific fields:
+  - `description` — one-line summary of the project
+  - `state` — one of `active`, `paused`, `archived`
+  - `local_dir` — absolute path of the local checkout, when applicable
+  - `tech_stack` — list of tech names (`python`, `fastapi`, ...); CLI accepts
+    repeated `--tech <name>`, not CSV
 
 ## Tag Guidelines
 
@@ -111,6 +135,7 @@ The `input` field always contains the original user input exactly as provided. `
 - **til**: `category` (programming/tools/concepts/debugging/general), `source`
 - **thought**: `mood`, `related_to`
 - **prompt**: `prompt_type` (system/user/template/example), `model_target`
+- **project**: `description`, `state` (`active`/`paused`/`archived`), `local_dir`, `tech_stack` (list of strings). A project entry's own `project` field is always `null`.
 - **journal**: `date` (YYYY-MM-DD), `word_count` — one entry per day, file is `journal/YYYY/MM/YYYY-MM-DD.md`
 
 ## File Naming Convention
@@ -173,7 +198,7 @@ All commands go through the `bd` CLI.
    BODY_EOF
    ```
 
-   Types: `todo`, `til`, `thought`, `prompt`. For long multi-line original input, use `--original-input-file <path>` with a temp file.
+   Types: `todo`, `til`, `thought`, `prompt`, `project`. For long multi-line original input, use `--original-input-file <path>` with a temp file. Project-specific flags: `--description`, `--state active|paused|archived`, `--local-dir`, `--tech <name>` (repeatable, not CSV).
 
 2. **Search:** `bd search <words> [--type todo] [--project name] [--status open|done|all] [--tag foo]`. Defaults to JSONL output; pass `--human` for a readable list.
 

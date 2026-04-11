@@ -22,7 +22,7 @@ from watchfiles import Change, awatch
 
 from braindump.core import entries, journal, projects, query, store, tags as tags_mod
 from braindump.core.config import load_config
-from braindump.core.schema import ALL_TYPES, type_to_dir
+from braindump.core.schema import ALL_TYPES, PROJECT_STATES, type_to_dir
 
 
 BASE_DIR = Path(__file__).parent
@@ -236,7 +236,11 @@ def api_journal_close():
 
 
 @app.get("/capture", response_class=HTMLResponse)
-def capture_get(request: Request):
+def capture_get(
+    request: Request,
+    type: Optional[str] = None,
+    title: Optional[str] = None,
+):
     cfg = load_config()
     tag_counter = tags_mod.tag_frequency(cfg)
     all_projects = [p.name for p in projects.list_projects(cfg) if p.name != "(none)"]
@@ -247,6 +251,9 @@ def capture_get(request: Request):
             request,
             top_tags=[t for t, _ in tag_counter.most_common(20)],
             all_projects=all_projects,
+            preset_type=type or "",
+            preset_title=title or "",
+            project_states=list(PROJECT_STATES),
         ),
     )
 
@@ -259,19 +266,43 @@ def capture_post(
     tags: str = Form(""),
     project: str = Form(""),
     summary: str = Form(""),
+    description: str = Form(""),
+    state: str = Form(""),
+    local_dir: str = Form(""),
+    tech_stack: str = Form(""),
 ):
     cfg = load_config()
     active = projects.get_active_project(cfg)
-    effective_project = project.strip() or active or None
-    result = entries.create_entry(
-        cfg,
-        entry_type,
-        title,
-        body,
-        tags=_csv(tags),
-        project=effective_project,
-        summary=summary or None,
-    )
+    type_fields: dict = {}
+    effective_project: Optional[str]
+    if entry_type == "project":
+        # A project entry does not belong to itself; ignore any submitted project value
+        # and let entries.create_entry enforce project=None.
+        effective_project = None
+        if description.strip():
+            type_fields["description"] = description.strip()
+        if state.strip():
+            type_fields["state"] = state.strip()
+        if local_dir.strip():
+            type_fields["local_dir"] = local_dir.strip()
+        tech_list = _csv(tech_stack)
+        if tech_list:
+            type_fields["tech_stack"] = tech_list
+    else:
+        effective_project = project.strip() or active or None
+    try:
+        result = entries.create_entry(
+            cfg,
+            entry_type,
+            title,
+            body,
+            tags=_csv(tags),
+            project=effective_project,
+            summary=summary or None,
+            type_fields=type_fields,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(
         url=f"/entries/{result.entry.id}", status_code=303
     )
@@ -397,17 +428,21 @@ def projects_list(request: Request):
 def project_detail(request: Request, name: str):
     cfg = load_config()
     stats = projects.project_stats(cfg, name)
+    project_entry = projects.find_project_entry(cfg, name)
     open_todos = query.search(
         cfg,
         query.SearchFilters(types=["todos"], project=name, status="open", limit=50),
     )
     recent = query.list_recent(cfg, project=name, limit=20)
+    # list_recent / search already scope to project by title match, and project
+    # entries have project=None so they naturally drop out — no extra filtering.
     return templates.TemplateResponse(
         request,
         "project_detail.html",
         _context(
             request,
             project=stats,
+            project_entry=project_entry,
             open_todos=open_todos,
             recent=recent,
         ),

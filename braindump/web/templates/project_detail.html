@@ -2,7 +2,36 @@
 {% block title %}{{ project.name }}{% endblock %}
 {% block body %}
 <div class="project-detail">
-  <h2>{{ project.name }}</h2>
+  {% if project_entry %}
+    <section class="card project-meta">
+      <h2>
+        {{ project_entry.title }}
+        {% if project_entry.state %}
+          <span class="state-pill state-{{ project_entry.state }}">{{ project_entry.state }}</span>
+        {% endif %}
+      </h2>
+      {% if project_entry.description %}
+        <p>{{ project_entry.description }}</p>
+      {% endif %}
+      {% if project_entry.local_dir %}
+        <p><code>{{ project_entry.local_dir }}</code></p>
+      {% endif %}
+      {% if project_entry.tech_stack %}
+        <p>
+          {% for t in project_entry.tech_stack %}<span class="tech-chip">{{ t }}</span>{% endfor %}
+        </p>
+      {% endif %}
+      <p><a href="/entries/{{ project_entry.id }}">edit metadata</a></p>
+    </section>
+  {% else %}
+    <h2>{{ project.name }}</h2>
+    <div class="active-banner unregistered-row" style="border-radius:6px;padding:10px 16px;margin-bottom:16px;">
+      this project is unregistered.
+      <a href="/capture?type=project&title={{ project.name | urlencode }}">register it</a>
+      to record description, state, local dir, and tech stack.
+    </div>
+  {% endif %}
+
   <p class="muted">
     {{ project.entry_count }} entries · {{ project.open_todos }} open / {{ project.done_todos }} done · last {{ (project.last_activity or '')[:10] }}
   </p>
