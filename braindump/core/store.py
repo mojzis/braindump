@@ -118,6 +118,10 @@ FRONTMATTER_FIELD_ORDER: tuple[str, ...] = (
     "due_date",
     "date",
     "word_count",
+    "description",
+    "state",
+    "local_dir",
+    "tech_stack",
     "created_at",
     "updated_at",
 )

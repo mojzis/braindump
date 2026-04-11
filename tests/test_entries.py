@@ -102,6 +102,63 @@ def test_set_status_and_find_by_id(cfg):
     assert entry.status == "done"
 
 
+def test_create_project_entry_roundtrip(cfg):
+    r = entries.create_entry(
+        cfg,
+        "project",
+        "Alpha",
+        "Alpha is a project for testing.",
+        tags=["infra"],
+        project="should-be-dropped",
+        type_fields={
+            "description": "The alpha project.",
+            "state": "active",
+            "local_dir": "/tmp/alpha",
+            "tech_stack": ["python", "fastapi"],
+        },
+        now=_fake_now(),
+    )
+    assert r.entry.type == "project"
+    # project entries never belong to a project themselves
+    assert r.entry.project is None
+
+    stored = store.read_index(cfg, "projects")
+    assert len(stored) == 1
+    persisted = stored[0]
+    assert persisted.title == "Alpha"
+    assert persisted.description == "The alpha project."
+    assert persisted.state == "active"
+    assert persisted.local_dir == "/tmp/alpha"
+    assert persisted.tech_stack == ["python", "fastapi"]
+    assert isinstance(persisted.tech_stack, list)
+    assert persisted.project is None
+
+    text = r.full_path.read_text()
+    assert "type: project" in text
+    assert "description: The alpha project." in text
+    assert "state: active" in text
+    assert "local_dir: /tmp/alpha" in text
+    assert 'tech_stack: ["python", "fastapi"]' in text
+
+    found = entries.find_by_id(cfg, r.entry.id)
+    assert found is not None
+    _, e = found
+    assert e.description == "The alpha project."
+    assert e.tech_stack == ["python", "fastapi"]
+    assert e.project is None
+
+
+def test_project_title_none_forbidden(cfg):
+    with pytest.raises(ValueError):
+        entries.create_entry(
+            cfg,
+            "project",
+            "(none)",
+            "body",
+            now=_fake_now(),
+        )
+
+
 def test_delete_entry_moves_file_to_trash(cfg):
     r = entries.create_entry(cfg, "todos", "t", "b", project="p", now=_fake_now())
     full = r.full_path

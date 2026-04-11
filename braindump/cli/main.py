@@ -16,7 +16,7 @@ import typer
 
 from braindump.core import entries, journal, projects, query, store, tags as tags_mod
 from braindump.core.config import load_config
-from braindump.core.schema import ALL_TYPE_DIRS, type_to_dir
+from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, type_to_dir
 
 
 app = typer.Typer(
@@ -73,7 +73,7 @@ def _effective_project(explicit: Optional[str], cfg) -> Optional[str]:
 
 @app.command()
 def create(
-    entry_type: str = typer.Argument(..., metavar="TYPE", help="todo, til, thought, prompt"),
+    entry_type: str = typer.Argument(..., metavar="TYPE", help="todo, til, thought, prompt, project"),
     title: str = typer.Argument(..., help="Entry title"),
     tag: list[str] = typer.Option([], "--tag", "-t", help="Tag (repeatable)"),
     project: Optional[str] = typer.Option(None, "--project", "-p"),
@@ -88,6 +88,10 @@ def create(
     prompt_type: Optional[str] = typer.Option(None, "--prompt-type"),
     model_target: Optional[str] = typer.Option(None, "--model-target"),
     due_date: Optional[str] = typer.Option(None, "--due-date"),
+    description: Optional[str] = typer.Option(None, "--description"),
+    state: Optional[str] = typer.Option(None, "--state"),
+    local_dir: Optional[str] = typer.Option(None, "--local-dir"),
+    tech: list[str] = typer.Option([], "--tech", help="Tech stack entry (repeatable)"),
     original_input: Optional[str] = typer.Option(None, "--original-input"),
     original_input_file: Optional[Path] = typer.Option(None, "--original-input-file"),
     body_file: Optional[Path] = typer.Option(None, "--body-file"),
@@ -104,7 +108,12 @@ def create(
     if original_input_file is not None:
         original_input = original_input_file.read_text()
 
-    type_fields = {
+    if entry_type == "project" and state is not None and state not in PROJECT_STATES:
+        raise typer.BadParameter(
+            f"--state must be one of {list(PROJECT_STATES)} (got {state!r})"
+        )
+
+    type_fields: dict[str, object] = {
         k: v
         for k, v in {
             "status": status,
@@ -117,9 +126,14 @@ def create(
             "prompt_type": prompt_type,
             "model_target": model_target,
             "due_date": due_date,
+            "description": description,
+            "state": state,
+            "local_dir": local_dir,
         }.items()
         if v is not None
     }
+    if tech:
+        type_fields["tech_stack"] = list(tech)
 
     result = entries.create_entry(
         cfg,
@@ -346,8 +360,10 @@ def project_list():
         return
     for s in stats:
         marker = "* " if s.name == active else "  "
+        reg = "R" if s.registered else "-"
+        state_str = f" [{s.state}]" if s.state else ""
         typer.echo(
-            f"{marker}{s.name}: {s.entry_count} entries "
+            f"{marker}[{reg}] {s.name}{state_str}: {s.entry_count} entries "
             f"({s.open_todos} open / {s.done_todos} done) "
             f"last: {(s.last_activity or '')[:10]}"
         )
@@ -358,6 +374,18 @@ def project_show(name: str = typer.Argument(...)):
     cfg = load_config()
     s = projects.project_stats(cfg, name)
     typer.echo(f"project: {name}")
+    if s.registered:
+        typer.echo("registered: yes")
+        if s.state:
+            typer.echo(f"state: {s.state}")
+        if s.description:
+            typer.echo(f"description: {s.description}")
+        if s.local_dir:
+            typer.echo(f"local_dir: {s.local_dir}")
+        if s.tech_stack:
+            typer.echo(f"tech_stack: {', '.join(s.tech_stack)}")
+    else:
+        typer.echo("registered: no")
     typer.echo(f"entries: {s.entry_count}")
     typer.echo(f"open todos: {s.open_todos}")
     typer.echo(f"done todos: {s.done_todos}")

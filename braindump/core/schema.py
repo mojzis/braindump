@@ -5,9 +5,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-EntryType = Literal["todo", "til", "thought", "prompt", "journal"]
+EntryType = Literal["todo", "til", "thought", "prompt", "journal", "project"]
 
 TODO_STATUSES = ("pending", "in-progress", "done")
+
+PROJECT_STATES = ("active", "paused", "archived")
 
 TYPE_TO_DIR: dict[str, str] = {
     "todo": "todos",
@@ -15,6 +17,7 @@ TYPE_TO_DIR: dict[str, str] = {
     "thought": "thoughts",
     "prompt": "prompts",
     "journal": "journal",
+    "project": "projects",
 }
 
 DIR_TO_TYPE: dict[str, str] = {v: k for k, v in TYPE_TO_DIR.items()}
@@ -77,6 +80,11 @@ class Entry(BaseModel):
     # journal
     date: str | None = None
     word_count: int | None = None
+    # project
+    description: str | None = None
+    state: str | None = None
+    local_dir: str | None = None
+    tech_stack: list[str] | None = None
 
     def type_dir(self) -> str:
         return TYPE_TO_DIR[self.type]

@@ -115,6 +115,13 @@ def create_entry(
     """
     type_dir = type_to_dir(type_name)
     canonical_type = dir_to_type(type_dir)
+    if canonical_type == "project":
+        if title == "(none)":
+            raise ValueError(
+                "project title '(none)' is reserved as the aggregation sentinel"
+            )
+        # a project does not belong to itself
+        project = None
     if now is None:
         now = datetime.now()
         created_at = store.utcnow_iso()
@@ -211,6 +218,10 @@ _MUTABLE_FIELDS = {
     "related_to",
     "prompt_type",
     "model_target",
+    "description",
+    "state",
+    "local_dir",
+    "tech_stack",
 }
 
 
