@@ -225,6 +225,110 @@ def search(
         typer.echo(f"#{h.entry.id} {date_str} [{h.entry.type}] {h.entry.title}{proj_str}")
 
 
+# --- show ------------------------------------------------------------------
+
+_TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
+    "todo": ["status", "subtype", "priority", "due_date"],
+    "til": ["category", "source"],
+    "thought": ["mood", "related_to"],
+    "prompt": ["prompt_type", "model_target"],
+    "journal": ["date", "word_count"],
+    "project": ["description", "state", "local_dir", "tech_stack"],
+}
+
+
+def _format_entry(cfg, entry_id: int) -> str | None:
+    """Return the formatted text for a single entry, or None if not found."""
+    found = entries.find_by_id(cfg, entry_id)
+    if found is None:
+        return None
+    type_dir, entry = found
+
+    lines: list[str] = []
+    # header
+    lines.append(f"#{entry.id} {entry.type} — {entry.title}")
+
+    # metadata line
+    meta_parts: list[str] = []
+    meta_parts.append(f"created: {(entry.created_at or '')[:10]}")
+    if entry.project:
+        meta_parts.append(f"project: {entry.project}")
+    if entry.tags:
+        meta_parts.append(f"tags: {', '.join(entry.tags)}")
+    lines.append("  ".join(meta_parts))
+
+    # type-specific fields
+    for field in _TYPE_SPECIFIC_FIELDS.get(entry.type, []):
+        val = getattr(entry, field, None)
+        if val is not None:
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val)
+            lines.append(f"{field}: {val}")
+
+    # body
+    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
+    if full_path.exists():
+        _, md_body = store.read_markdown(full_path)
+        _, authored, _ = entries.split_body(md_body)
+        if authored.strip():
+            lines.append("")
+            lines.append(authored)
+
+    return "\n".join(lines)
+
+
+def _entry_json(cfg, entry_id: int) -> dict | None:
+    """Return JSON dict for an entry, or None if not found."""
+    found = entries.find_by_id(cfg, entry_id)
+    if found is None:
+        return None
+    type_dir, entry = found
+
+    data = entry.to_index_json()
+    # read body
+    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
+    if full_path.exists():
+        _, md_body = store.read_markdown(full_path)
+        _, authored, _ = entries.split_body(md_body)
+        data["body"] = authored
+    else:
+        data["body"] = ""
+    return data
+
+
+@app.command()
+def show(
+    ids: list[int] = typer.Argument(..., metavar="ID..."),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    """Display one or more entries by ID."""
+    cfg = load_config()
+    success_count = 0
+    outputs: list[str] = []
+
+    for entry_id in ids:
+        if as_json:
+            data = _entry_json(cfg, entry_id)
+            if data is None:
+                typer.echo(f"error: entry {entry_id} not found", err=True)
+                continue
+            success_count += 1
+            typer.echo(json.dumps(data, ensure_ascii=False))
+        else:
+            text = _format_entry(cfg, entry_id)
+            if text is None:
+                typer.echo(f"error: entry {entry_id} not found", err=True)
+                continue
+            success_count += 1
+            outputs.append(text)
+
+    if not as_json and outputs:
+        typer.echo("\n---\n".join(outputs))
+
+    if success_count == 0:
+        raise typer.Exit(code=1)
+
+
 # --- done / update / delete ------------------------------------------------
 
 
