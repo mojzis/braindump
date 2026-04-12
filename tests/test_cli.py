@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 
 from typer.testing import CliRunner
 
@@ -31,7 +31,7 @@ def _create_todo(cfg: Config, title: str = "Fix auth bug", **kwargs):
         tags=kwargs.get("tags", ["auth", "bug"]),
         project=kwargs.get("project", "braindump"),
         type_fields=kwargs.get("type_fields", {"status": "pending"}),
-        now=kwargs.get("now", datetime(2026, 4, 11, 14, 15, 2)),
+        now=kwargs.get("now", datetime(2026, 4, 11, 14, 15, 2, tzinfo=UTC)),
     )
 
 
@@ -43,7 +43,7 @@ def _create_til(cfg: Config, title: str = "Python walrus operator"):
         "You can use := in Python 3.8+.",
         tags=["python"],
         type_fields={"category": "python", "source": "docs"},
-        now=datetime(2026, 4, 11, 10, 0, 0),
+        now=datetime(2026, 4, 11, 10, 0, 0, tzinfo=UTC),
     )
 
 

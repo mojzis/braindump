@@ -15,8 +15,8 @@ from typing import Optional
 import typer
 
 from braindump.core import entries, journal, projects, query, store, tags as tags_mod
-from braindump.core.config import load_config
-from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, type_to_dir
+from braindump.core.config import Config, load_config
+from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, Entry, type_to_dir
 
 
 app = typer.Typer(
@@ -227,6 +227,7 @@ def search(
 
 # --- show ------------------------------------------------------------------
 
+# Keep in sync with type-specific fields in schema.py (Entry model).
 _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
     "todo": ["status", "subtype", "priority", "due_date"],
     "til": ["category", "source"],
@@ -237,18 +238,33 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
 }
 
 
-def _format_entry(cfg, entry_id: int) -> str | None:
-    """Return the formatted text for a single entry, or None if not found."""
-    found = entries.find_by_id(cfg, entry_id)
-    if found is None:
-        return None
-    type_dir, entry = found
+def _read_authored_body(cfg: Config, type_dir: str, entry: Entry) -> str:
+    """Read the authored body from the entry's markdown file."""
+    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
+    if full_path.exists():
+        _, md_body = store.read_markdown(full_path)
+        _, authored, _ = entries.split_body(md_body)
+        return authored
+    return ""
 
+
+def _find_entries_by_ids(
+    cfg: Config, ids: set[int],
+) -> dict[int, tuple[str, Entry]]:
+    """Scan indexes once and return all requested entries."""
+    found: dict[int, tuple[str, Entry]] = {}
+    for type_dir in ALL_TYPE_DIRS:
+        for entry in store.read_index(cfg, type_dir):
+            if entry.id in ids:
+                found[entry.id] = (type_dir, entry)
+    return found
+
+
+def _format_entry(cfg: Config, type_dir: str, entry: Entry) -> str:
+    """Return the formatted text for a single entry."""
     lines: list[str] = []
-    # header
     lines.append(f"#{entry.id} {entry.type} — {entry.title}")
 
-    # metadata line
     meta_parts: list[str] = []
     meta_parts.append(f"created: {(entry.created_at or '')[:10]}")
     if entry.project:
@@ -257,7 +273,6 @@ def _format_entry(cfg, entry_id: int) -> str | None:
         meta_parts.append(f"tags: {', '.join(entry.tags)}")
     lines.append("  ".join(meta_parts))
 
-    # type-specific fields
     for field in _TYPE_SPECIFIC_FIELDS.get(entry.type, []):
         val = getattr(entry, field, None)
         if val is not None:
@@ -265,34 +280,18 @@ def _format_entry(cfg, entry_id: int) -> str | None:
                 val = ", ".join(str(v) for v in val)
             lines.append(f"{field}: {val}")
 
-    # body
-    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
-    if full_path.exists():
-        _, md_body = store.read_markdown(full_path)
-        _, authored, _ = entries.split_body(md_body)
-        if authored.strip():
-            lines.append("")
-            lines.append(authored)
+    authored = _read_authored_body(cfg, type_dir, entry)
+    if authored.strip():
+        lines.append("")
+        lines.append(authored)
 
     return "\n".join(lines)
 
 
-def _entry_json(cfg, entry_id: int) -> dict | None:
-    """Return JSON dict for an entry, or None if not found."""
-    found = entries.find_by_id(cfg, entry_id)
-    if found is None:
-        return None
-    type_dir, entry = found
-
+def _entry_json(cfg: Config, type_dir: str, entry: Entry) -> dict:
+    """Return JSON dict for an entry."""
     data = entry.to_index_json()
-    # read body
-    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
-    if full_path.exists():
-        _, md_body = store.read_markdown(full_path)
-        _, authored, _ = entries.split_body(md_body)
-        data["body"] = authored
-    else:
-        data["body"] = ""
+    data["body"] = _read_authored_body(cfg, type_dir, entry)
     return data
 
 
@@ -303,24 +302,20 @@ def show(
 ):
     """Display one or more entries by ID."""
     cfg = load_config()
+    found = _find_entries_by_ids(cfg, set(ids))
     success_count = 0
     outputs: list[str] = []
 
     for entry_id in ids:
+        if entry_id not in found:
+            typer.echo(f"error: entry {entry_id} not found", err=True)
+            continue
+        type_dir, entry = found[entry_id]
+        success_count += 1
         if as_json:
-            data = _entry_json(cfg, entry_id)
-            if data is None:
-                typer.echo(f"error: entry {entry_id} not found", err=True)
-                continue
-            success_count += 1
-            typer.echo(json.dumps(data, ensure_ascii=False))
+            typer.echo(json.dumps(_entry_json(cfg, type_dir, entry), ensure_ascii=False))
         else:
-            text = _format_entry(cfg, entry_id)
-            if text is None:
-                typer.echo(f"error: entry {entry_id} not found", err=True)
-                continue
-            success_count += 1
-            outputs.append(text)
+            outputs.append(_format_entry(cfg, type_dir, entry))
 
     if not as_json and outputs:
         typer.echo("\n---\n".join(outputs))
