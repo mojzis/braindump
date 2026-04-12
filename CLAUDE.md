@@ -3,7 +3,15 @@
 
 ## Overview
 
-Braindump is a portable Claude Code-integrated personal knowledge management system. It captures todos, TILs (Today I Learned), thoughts, prompts, and a daily journal. Everything is stored as plain markdown with JSONL indexes. A shared Python core powers both the `bd` CLI (used by the Claude skills) and a local FastAPI web UI, so there is one source of truth for every data operation.
+Braindump is a portable personal knowledge management system. It captures todos, TILs (Today I Learned), thoughts, prompts, and a daily journal. Everything is stored as plain markdown with JSONL indexes.
+
+There are **three ways to use it**, all backed by the same Python core in `braindump/core/` so every operation goes through one code path:
+
+1. **`bd` CLI** — direct shell access (`bd create`, `bd search`, `bd journal`, …).
+2. **Claude Code skills** (`/bd-dump`, `/bd-todo`, `/bd-search`, …) — thin wrappers that shell out to `bd` from inside a Claude session.
+3. **Local web UI** (`bd serve`, default `http://127.0.0.1:8765/`) — FastAPI + Jinja2 + htmx app for browsing, editing, and the daily journal.
+
+When changing data behavior, change `braindump/core/` and all three surfaces inherit the fix.
 
 ## Installation
 
@@ -163,3 +171,5 @@ uv pip install -e ".[dev,web]"
 pytest                 # run the core test suite
 bd serve               # local web UI
 ```
+
+When you finish a coding task in this repo, run the `python-review` skill over the changed Python before reporting done.
