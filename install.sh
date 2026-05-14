@@ -23,7 +23,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 echo "Installing bd CLI via uv tool..."
-uv tool install --force "${SCRIPT_DIR}[web]" >/dev/null
+uv tool install --force --reinstall --no-cache "${SCRIPT_DIR}[web]" >/dev/null
 echo "  - bd CLI installed (run 'bd --help' to verify)"
 
 # --- 2. Install Claude skills ---------------------------------------------
