@@ -30,7 +30,7 @@ dev = [
     "ty",
     "vulture",
     "deptry",
-    "poethepoet>=0.29",
+    "poethepoet>=0.46.0",
 ]
 
 [project.scripts]
