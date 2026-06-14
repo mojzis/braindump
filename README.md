@@ -19,6 +19,23 @@ This will:
 3. Seed the data directory at `~/braindump/` with empty indexes for each type
 4. Drop optional session-tracking scripts into `~/braindump/scripts/`
 
+### Reinstalling / upgrading the global `bd`
+
+`bd` is installed as a [uv tool](https://docs.astral.sh/uv/concepts/tools/) — it
+runs from its own isolated environment under `~/.local/share/uv/tools/braindump/`,
+**not** from this repo's checkout. To pick up local changes (or fix a broken
+install), reinstall from the repo directory:
+
+```bash
+cd ~/git/braindump
+uv tool install --force --reinstall --no-cache ".[web]"
+```
+
+The `[web]` extra is required for `bd serve`. If it's omitted you'll get
+`ModuleNotFoundError: No module named 'uvicorn'` when starting the web UI — that's
+the symptom of a `bd` installed without it. Running `./install.sh` does the same
+thing (it always installs with `[web]`).
+
 ## Usage
 
 ### CLI
