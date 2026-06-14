@@ -220,6 +220,7 @@ _MUTABLE_FIELDS = {
     "model_target",
     "description",
     "state",
+    "area",
     "local_dir",
     "tech_stack",
 }

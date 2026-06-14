@@ -90,6 +90,7 @@ def create(
     due_date: Optional[str] = typer.Option(None, "--due-date"),
     description: Optional[str] = typer.Option(None, "--description"),
     state: Optional[str] = typer.Option(None, "--state"),
+    area: Optional[str] = typer.Option(None, "--area", help="Project grouping (project type; free-form, reused like a tag)"),
     local_dir: Optional[str] = typer.Option(None, "--local-dir"),
     tech: list[str] = typer.Option([], "--tech", help="Tech stack entry (repeatable)"),
     original_input: Optional[str] = typer.Option(None, "--original-input"),
@@ -128,6 +129,7 @@ def create(
             "due_date": due_date,
             "description": description,
             "state": state,
+            "area": area,
             "local_dir": local_dir,
         }.items()
         if v is not None
@@ -234,7 +236,7 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
     "thought": ["mood", "related_to"],
     "prompt": ["prompt_type", "model_target"],
     "journal": ["date", "word_count"],
-    "project": ["description", "state", "local_dir", "tech_stack"],
+    "project": ["description", "state", "area", "local_dir", "tech_stack"],
 }
 
 
@@ -345,6 +347,7 @@ def update(
     project: Optional[str] = typer.Option(None, "--project", "-p"),
     status: Optional[str] = typer.Option(None, "--status"),
     priority: Optional[str] = typer.Option(None, "--priority"),
+    area: Optional[str] = typer.Option(None, "--area", help="Project grouping (project type)"),
     body_from_stdin: bool = typer.Option(False, "--body", help="Replace body with stdin"),
 ):
     """Patch an entry's metadata and (optionally) its body."""
@@ -362,6 +365,8 @@ def update(
         patch["status"] = status
     if priority is not None:
         patch["priority"] = priority
+    if area is not None:
+        patch["area"] = area
     body = _read_stdin_if_piped() if body_from_stdin else None
     updated = entries.update_entry(cfg, entry_id, patch, body=body)
     typer.echo(f"updated: {updated.file_path}")
@@ -451,8 +456,25 @@ def journal_show(day: str = typer.Argument(..., help="YYYY-MM-DD")):
 # --- projects --------------------------------------------------------------
 
 
+def _project_counts(s: projects.ProjectStats) -> str:
+    return (
+        f"{s.entry_count} entries "
+        f"({s.open_todos} open / {s.done_todos} done) "
+        f"last: {(s.last_activity or '')[:10]}"
+    )
+
+
+def _project_line(s: projects.ProjectStats, active: str | None) -> str:
+    marker = "* " if s.name == active else "  "
+    reg = "R" if s.registered else "-"
+    state_str = f" [{s.state}]" if s.state else ""
+    return f"{marker}[{reg}] {s.name}{state_str}: {_project_counts(s)}"
+
+
 @project_app.command("list")
-def project_list():
+def project_list(
+    by_area: bool = typer.Option(False, "--by-area", help="Group projects under their area"),
+):
     """List all projects with aggregate stats."""
     cfg = load_config()
     stats = projects.list_projects(cfg)
@@ -460,15 +482,33 @@ def project_list():
     if not stats:
         typer.echo("(no projects yet)")
         return
+    if not by_area:
+        for s in stats:
+            typer.echo(_project_line(s, active))
+        return
+    grouped: dict[str, list] = {}
     for s in stats:
-        marker = "* " if s.name == active else "  "
-        reg = "R" if s.registered else "-"
-        state_str = f" [{s.state}]" if s.state else ""
-        typer.echo(
-            f"{marker}[{reg}] {s.name}{state_str}: {s.entry_count} entries "
-            f"({s.open_todos} open / {s.done_todos} done) "
-            f"last: {(s.last_activity or '')[:10]}"
-        )
+        grouped.setdefault(s.area or "(no area)", []).append(s)
+    for area in sorted(grouped, key=lambda a: (a == "(no area)", a)):
+        typer.echo(f"\n{area}")
+        for s in grouped[area]:
+            typer.echo(_project_line(s, active))
+
+
+@project_app.command("unregistered")
+def project_unregistered():
+    """List projects referenced by entries but never registered with `bd create project`."""
+    cfg = load_config()
+    stats = [
+        s
+        for s in projects.list_projects(cfg)
+        if not s.registered and s.name != "(none)"
+    ]
+    if not stats:
+        typer.echo("(no unregistered projects)")
+        return
+    for s in stats:
+        typer.echo(f"  {s.name}: {_project_counts(s)}")
 
 
 @project_app.command("show")
@@ -480,6 +520,8 @@ def project_show(name: str = typer.Argument(...)):
         typer.echo("registered: yes")
         if s.state:
             typer.echo(f"state: {s.state}")
+        if s.area:
+            typer.echo(f"area: {s.area}")
         if s.description:
             typer.echo(f"description: {s.description}")
         if s.local_dir:

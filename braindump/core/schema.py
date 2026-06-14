@@ -83,6 +83,7 @@ class Entry(BaseModel):
     # project
     description: str | None = None
     state: str | None = None
+    area: str | None = None
     local_dir: str | None = None
     tech_stack: list[str] | None = None
 

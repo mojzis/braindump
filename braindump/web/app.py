@@ -14,10 +14,13 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
+import markdown as md
+import nh3
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from watchfiles import Change, awatch
 
 from braindump.core import entries, journal, projects, query, store, tags as tags_mod
@@ -82,9 +85,19 @@ async def lifespan(app: FastAPI):
             await task
 
 
+def _render_markdown(text: str) -> Markup:
+    """Render entry body markdown to HTML for read-only display."""
+    html = md.markdown(
+        text or "",
+        extensions=["fenced_code", "tables", "sane_lists"],
+    )
+    return Markup(nh3.clean(html))
+
+
 app = FastAPI(title="Braindump", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+templates.env.filters["markdown"] = _render_markdown
 
 
 @app.get("/events")
@@ -243,7 +256,9 @@ def capture_get(
 ):
     cfg = load_config()
     tag_counter = tags_mod.tag_frequency(cfg)
-    all_projects = [p.name for p in projects.list_projects(cfg) if p.name != "(none)"]
+    project_stats = projects.list_projects(cfg)
+    all_projects = [p.name for p in project_stats if p.name != "(none)"]
+    all_areas = sorted({p.area for p in project_stats if p.area})
     return templates.TemplateResponse(
         request,
         "capture.html",
@@ -251,6 +266,7 @@ def capture_get(
             request,
             top_tags=[t for t, _ in tag_counter.most_common(20)],
             all_projects=all_projects,
+            all_areas=all_areas,
             preset_type=type or "",
             preset_title=title or "",
             project_states=list(PROJECT_STATES),
@@ -268,6 +284,7 @@ def capture_post(
     summary: str = Form(""),
     description: str = Form(""),
     state: str = Form(""),
+    area: str = Form(""),
     local_dir: str = Form(""),
     tech_stack: str = Form(""),
 ):
@@ -282,6 +299,7 @@ def capture_post(
         for key, raw in (
             ("description", description),
             ("state", state),
+            ("area", area),
             ("local_dir", local_dir),
         ):
             if raw.strip():
@@ -374,6 +392,23 @@ def entry_view(request: Request, entry_id: int):
     )
 
 
+@app.get("/entries/{entry_id}/edit", response_class=HTMLResponse)
+def entry_edit(request: Request, entry_id: int):
+    cfg = load_config()
+    found = entries.find_by_id(cfg, entry_id)
+    if not found:
+        raise HTTPException(status_code=404)
+    type_dir, entry = found
+    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
+    _, md_body = store.read_markdown(full_path)
+    _, authored, _ = entries.split_body(md_body)
+    return templates.TemplateResponse(
+        request,
+        "entry_edit.html",
+        _context(request, entry=entry, body=authored, type_dir=type_dir),
+    )
+
+
 @app.post("/api/entries/{entry_id}", response_class=HTMLResponse)
 def api_entry_update(
     request: Request,
@@ -383,6 +418,7 @@ def api_entry_update(
     tags: Optional[str] = Form(None),
     project: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
+    area: Optional[str] = Form(None),
     body: Optional[str] = Form(None),
 ):
     cfg = load_config()
@@ -397,8 +433,10 @@ def api_entry_update(
         patch["project"] = project.strip() or None
     if status is not None:
         patch["status"] = status
+    if area is not None:
+        patch["area"] = area.strip() or None
     entries.update_entry(cfg, entry_id, patch, body=body)
-    return HTMLResponse(headers={"HX-Refresh": "true"}, content="")
+    return HTMLResponse(headers={"HX-Redirect": f"/entries/{entry_id}"}, content="")
 
 
 @app.post("/api/entries/{entry_id}/done", response_class=HTMLResponse)

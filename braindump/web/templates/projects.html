@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 {% block title %}projects{% endblock %}
 {% block body %}
-{% macro focus_cell(p) %}
-  <td>
-    {% if p.name != "(none)" %}
-      <form hx-post="/api/project/focus" hx-swap="none" class="inline-form">
-        <input type="hidden" name="name" value="{{ p.name }}" />
-        <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
-      </form>
-    {% endif %}
-  </td>
+{% macro focus_button(p) %}
+  {% if p.name != "(none)" %}
+    <form hx-post="/api/project/focus" hx-swap="none" class="inline-form">
+      <input type="hidden" name="name" value="{{ p.name }}" />
+      <button type="submit">{% if p.name == active_project %}★ focused{% else %}focus{% endif %}</button>
+    </form>
+  {% endif %}
 {% endmacro %}
 
 <h2>projects</h2>
@@ -18,42 +16,46 @@
 {% set unregistered = project_stats | rejectattr("registered") | list %}
 
 {% if registered %}
-  <table class="projects-table">
-    <thead>
-      <tr>
-        <th></th>
-        <th>project</th>
-        <th>state</th>
-        <th>description</th>
-        <th>tech</th>
-        <th>entries</th>
-        <th>open</th>
-        <th>done</th>
-        <th>last</th>
-      </tr>
-    </thead>
-    <tbody>
-    {% for p in registered %}
-      <tr>
-        {{ focus_cell(p) }}
-        <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
-        <td>
-          {% if p.state %}
-            <span class="state-pill state-{{ p.state }}">{{ p.state }}</span>
-          {% endif %}
-        </td>
-        <td class="muted">{{ p.description or "" }}</td>
-        <td>
+  {% set states = registered | map(attribute="state") | select | unique | sort | list %}
+  {% set areas = registered | map(attribute="area") | select | unique | sort | list %}
+  {% set techs = registered | map(attribute="tech_stack") | sum(start=[]) | unique | sort | list %}
+  <div class="filters">
+    <select id="state-filter">
+      <option value="">all states</option>
+      {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+    <select id="area-filter">
+      <option value="">all areas</option>
+      {% for a in areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+    </select>
+    <select id="tech-filter">
+      <option value="">all tech</option>
+      {% for t in techs %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="project-cards">
+  {% for p in registered %}
+    <div class="project-card" data-state="{{ p.state or '' }}" data-area="{{ p.area or '' }}" data-tech="{{ p.tech_stack | join(' ') }}">
+      <div class="project-card-head">
+        <h3><a href="/projects/{{ p.name }}">{{ p.name }}</a></h3>
+        {% if p.state %}<span class="state-pill state-{{ p.state }}">{{ p.state }}</span>{% endif %}
+        {% if p.area %}<span class="area-pill">{{ p.area }}</span>{% endif %}
+        {{ focus_button(p) }}
+      </div>
+      {% if p.description %}<p class="project-desc">{{ p.description }}</p>{% endif %}
+      {% if p.tech_stack %}
+        <div class="project-tech">
           {% for t in p.tech_stack %}<span class="tech-chip">{{ t }}</span>{% endfor %}
-        </td>
-        <td>{{ p.entry_count }}</td>
-        <td>{{ p.open_todos }}</td>
-        <td>{{ p.done_todos }}</td>
-        <td class="muted">{{ (p.last_activity or "")[:10] }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+        </div>
+      {% endif %}
+      <div class="project-meta muted">
+        {{ p.entry_count }} entries · {{ p.open_todos }} open · {{ p.done_todos }} done
+        {% if p.last_activity %}· last {{ p.last_activity[:10] }}{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  </div>
 {% else %}
   <p class="muted">no registered projects yet. use <a href="/capture?type=project">capture</a> to register one.</p>
 {% endif %}
@@ -76,7 +78,7 @@
     <tbody>
     {% for p in unregistered %}
       <tr class="unregistered-row">
-        {{ focus_cell(p) }}
+        <td>{{ focus_button(p) }}</td>
         <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
         <td>{{ p.entry_count }}</td>
         <td>{{ p.open_todos }}</td>
@@ -92,4 +94,26 @@
     </tbody>
   </table>
 {% endif %}
+
+<script>
+(function () {
+  var stateSel = document.getElementById("state-filter");
+  var areaSel = document.getElementById("area-filter");
+  var techSel = document.getElementById("tech-filter");
+  if (!stateSel || !areaSel || !techSel) return;
+  function apply() {
+    var st = stateSel.value, ar = areaSel.value, te = techSel.value;
+    document.querySelectorAll(".project-card").forEach(function (card) {
+      var techs = (card.dataset.tech || "").split(" ");
+      var ok = (!st || card.dataset.state === st)
+        && (!ar || card.dataset.area === ar)
+        && (!te || techs.indexOf(te) !== -1);
+      card.style.display = ok ? "" : "none";
+    });
+  }
+  stateSel.addEventListener("change", apply);
+  areaSel.addEventListener("change", apply);
+  techSel.addEventListener("change", apply);
+})();
+</script>
 {% endblock %}

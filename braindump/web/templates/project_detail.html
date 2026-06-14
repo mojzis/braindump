@@ -9,6 +9,9 @@
         {% if project_entry.state %}
           <span class="state-pill state-{{ project_entry.state }}">{{ project_entry.state }}</span>
         {% endif %}
+        {% if project_entry.area %}
+          <span class="area-pill">{{ project_entry.area }}</span>
+        {% endif %}
       </h2>
       {% if project_entry.description %}
         <p>{{ project_entry.description }}</p>
