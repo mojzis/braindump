@@ -92,6 +92,13 @@ ul li { margin: 6px 0; }
 .filters input:focus, .filters select:focus { outline: none; border-color: var(--accent); }
 .filters button { padding: 7px 15px; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
 .filters button:hover { background: #9a6824; }
+.view-toggle { margin-left: auto; font-size: 13px; }
+.projects-table th.sortable { cursor: pointer; }
+.projects-table th.sortable:hover { color: var(--accent); }
+.projects-table th.sortable.sorted { color: var(--accent); }
+.projects-table td.project-name-cell { white-space: nowrap; width: 1%; }
+.projects-table td.project-name-cell a { font-size: 17px; font-weight: 700; }
+.projects-table td.project-desc-cell { font-size: 15px; color: var(--fg); width: 99%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
 
 .entries-table, .projects-table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); }
 .entries-table th, .projects-table th { background: var(--bg-tint); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
