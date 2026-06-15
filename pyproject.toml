@@ -24,7 +24,7 @@ web = [
 dev = [
     "pytest>=9.1.0",
     "pytest-cov",
-    "freezegun>=1.4",
+    "freezegun>=1.5.5",
     "httpx>=0.28.1",
     "ruff",
     "ty",
