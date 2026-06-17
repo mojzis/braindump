@@ -9,30 +9,30 @@ authors = [{ name = "Matous Mojzis" }]
 dependencies = [
     "markdown>=3.10.2",
     "nh3>=0.3.5",
-    "pydantic>=2.5",
-    "typer>=0.12",
+    "pydantic>=2.13.4",
+    "typer>=0.26.7",
 ]
 
 [project.optional-dependencies]
 web = [
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.29",
-    "jinja2>=3.1",
-    "python-multipart>=0.0.9",
-    "watchfiles>=0.21",
+    "fastapi>=0.137.0",
+    "uvicorn[standard]>=0.49.0",
+    "jinja2>=3.1.6",
+    "python-multipart>=0.0.32",
+    "watchfiles>=1.2.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.1.0",
     "pytest-cov",
     "freezegun>=1.4",
-    "httpx>=0.27",
+    "httpx>=0.28.1",
     "ruff",
     "ty",
     "vulture",
     "deptry",
-    "poethepoet>=0.29",
+    "poethepoet>=0.46.0",
 ]
 
 [project.scripts]
