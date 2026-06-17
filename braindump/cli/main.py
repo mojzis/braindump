@@ -298,6 +298,7 @@ def _entry_json(cfg: Config, type_dir: str, entry: Entry) -> dict:
 
 
 @app.command()
+@app.command(name="view", hidden=True)
 def show(
     ids: list[int] = typer.Argument(..., metavar="ID..."),
     as_json: bool = typer.Option(False, "--json"),
