@@ -26,6 +26,7 @@ class ProjectStats:
     registered: bool = False
     description: str | None = None
     state: str | None = None
+    area: str | None = None
     local_dir: str | None = None
     tech_stack: list[str] = field(default_factory=list)
 
@@ -39,6 +40,7 @@ def _hydrate_from_project_entry(bucket: ProjectStats, entry: Entry) -> None:
     bucket.entry = entry
     bucket.description = entry.description
     bucket.state = entry.state
+    bucket.area = entry.area
     bucket.local_dir = entry.local_dir
     bucket.tech_stack = list(entry.tech_stack or [])
 

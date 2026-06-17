@@ -64,7 +64,7 @@ bd search <words...> [--type] [--project] [--status open|done|all] [--tag] [--si
 bd done <id|query|file_path>
 bd update <id> [--title ...] [--tags a,b] [--project p] [--status s] [--body]
 bd delete <id>
-bd project list|show <name>|focus <name>|focus --clear
+bd project list|unregistered|show <name>|focus <name>|focus --clear
 bd journal today|append|close|show <YYYY-MM-DD>
 bd tags stats|show <tag>
 bd doctor                                # validate indexes
@@ -143,6 +143,7 @@ Authored content…
 - **thought**: `mood`, `related_to`
 - **prompt**: `prompt_type`, `model_target`
 - **journal**: `date` (YYYY-MM-DD), `word_count`
+- **project**: `description`, `state` (active/paused/archived), `area` (free-form grouping, reused like a tag — e.g. `dev-tools`, `cad-3d`), `local_dir`, `tech_stack`
 
 ## Key Conventions
 

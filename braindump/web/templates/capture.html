@@ -46,6 +46,12 @@
           {% endfor %}
         </select>
       </label>
+      <label>area
+        <input type="text" name="area" list="area-options" placeholder="e.g. dev-tools, cad-3d" />
+        <datalist id="area-options">
+          {% for a in all_areas %}<option value="{{ a }}"></option>{% endfor %}
+        </datalist>
+      </label>
       <label>local dir
         <input type="text" name="local_dir" placeholder="e.g. ~/git/myproject" />
       </label>

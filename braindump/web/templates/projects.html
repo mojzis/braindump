@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 {% block title %}projects{% endblock %}
 {% block body %}
-{% macro focus_cell(p) %}
-  <td>
-    {% if p.name != "(none)" %}
-      <form hx-post="/api/project/focus" hx-swap="none" class="inline-form">
-        <input type="hidden" name="name" value="{{ p.name }}" />
-        <button type="submit">{% if p.name == active_project %}★{% else %}focus{% endif %}</button>
-      </form>
-    {% endif %}
-  </td>
+{% macro focus_button(p) %}
+  {% if p.name != "(none)" %}
+    <form hx-post="/api/project/focus" hx-swap="none" class="inline-form">
+      <input type="hidden" name="name" value="{{ p.name }}" />
+      <button type="submit">{% if p.name == active_project %}★ focused{% else %}focus{% endif %}</button>
+    </form>
+  {% endif %}
 {% endmacro %}
 
 <h2>projects</h2>
@@ -18,38 +16,65 @@
 {% set unregistered = project_stats | rejectattr("registered") | list %}
 
 {% if registered %}
-  <table class="projects-table">
+  {% set states = registered | map(attribute="state") | select | unique | sort | list %}
+  {% set areas = registered | map(attribute="area") | select | unique | sort | list %}
+  {% set techs = registered | map(attribute="tech_stack") | sum(start=[]) | unique | sort | list %}
+  <div class="filters">
+    <select id="state-filter">
+      <option value="">all states</option>
+      {% for s in states %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+    <select id="area-filter">
+      <option value="">all areas</option>
+      {% for a in areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+    </select>
+    <select id="tech-filter">
+      <option value="">all tech</option>
+      {% for t in techs %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+    <a href="#" id="view-toggle" class="view-toggle">table view</a>
+  </div>
+
+  <div class="project-cards" id="cards-view">
+  {% for p in registered %}
+    <div class="project-card project-item" data-state="{{ p.state or '' }}" data-area="{{ p.area or '' }}" data-tech="{{ p.tech_stack | join(' ') }}">
+      <div class="project-card-head">
+        <h3><a href="/projects/{{ p.name }}">{{ p.name }}</a></h3>
+        {% if p.state %}<span class="state-pill state-{{ p.state }}">{{ p.state }}</span>{% endif %}
+        {% if p.area %}<span class="area-pill">{{ p.area }}</span>{% endif %}
+        {{ focus_button(p) }}
+      </div>
+      {% if p.description %}<p class="project-desc">{{ p.description }}</p>{% endif %}
+      {% if p.tech_stack %}
+        <div class="project-tech">
+          {% for t in p.tech_stack %}<span class="tech-chip">{{ t }}</span>{% endfor %}
+        </div>
+      {% endif %}
+      <div class="project-meta muted">
+        {{ p.entry_count }} entries · {{ p.open_todos }} open · {{ p.done_todos }} done
+        {% if p.last_activity %}· last {{ p.last_activity[:10] }}{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+
+  <table class="projects-table" id="table-view" style="display: none;">
     <thead>
       <tr>
-        <th></th>
-        <th>project</th>
-        <th>state</th>
+        <th class="sortable" data-key="name">project</th>
+        <th class="sortable" data-key="area">area</th>
         <th>description</th>
-        <th>tech</th>
-        <th>entries</th>
-        <th>open</th>
-        <th>done</th>
-        <th>last</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
     {% for p in registered %}
-      <tr>
-        {{ focus_cell(p) }}
-        <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
-        <td>
-          {% if p.state %}
-            <span class="state-pill state-{{ p.state }}">{{ p.state }}</span>
-          {% endif %}
-        </td>
-        <td class="muted">{{ p.description or "" }}</td>
-        <td>
-          {% for t in p.tech_stack %}<span class="tech-chip">{{ t }}</span>{% endfor %}
-        </td>
-        <td>{{ p.entry_count }}</td>
-        <td>{{ p.open_todos }}</td>
-        <td>{{ p.done_todos }}</td>
-        <td class="muted">{{ (p.last_activity or "")[:10] }}</td>
+      <tr class="project-item" data-state="{{ p.state or '' }}" data-area="{{ p.area or '' }}" data-tech="{{ p.tech_stack | join(' ') }}"
+          data-name="{{ p.name }}">
+        <td class="project-name-cell"><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
+        <td>{% if p.area %}<span class="area-pill">{{ p.area }}</span>{% endif %}</td>
+        <td class="project-desc-cell">{{ p.description.split(" ")[:40] | join(" ") if p.description else "" }}{{ "…" if p.description and p.description.split(" ") | length > 40 else "" }}</td>
+        <td>{{ focus_button(p) }}</td>
       </tr>
     {% endfor %}
     </tbody>
@@ -76,7 +101,7 @@
     <tbody>
     {% for p in unregistered %}
       <tr class="unregistered-row">
-        {{ focus_cell(p) }}
+        <td>{{ focus_button(p) }}</td>
         <td><a href="/projects/{{ p.name }}">{{ p.name }}</a></td>
         <td>{{ p.entry_count }}</td>
         <td>{{ p.open_todos }}</td>
@@ -92,4 +117,105 @@
     </tbody>
   </table>
 {% endif %}
+
+<script>
+(function () {
+  var stateSel = document.getElementById("state-filter");
+  var areaSel = document.getElementById("area-filter");
+  var techSel = document.getElementById("tech-filter");
+  if (!stateSel || !areaSel || !techSel) return;
+
+  var toggle = document.getElementById("view-toggle");
+  var cards = document.getElementById("cards-view");
+  var table = document.getElementById("table-view");
+  var tbody = table ? table.querySelector("tbody") : null;
+
+  var params = new URLSearchParams(window.location.search);
+
+  function writeUrl() {
+    var p = new URLSearchParams();
+    if (stateSel.value) p.set("state", stateSel.value);
+    if (areaSel.value) p.set("area", areaSel.value);
+    if (techSel.value) p.set("tech", techSel.value);
+    if (table && table.style.display !== "none") p.set("view", "table");
+    if (params.get("sort")) p.set("sort", params.get("sort"));
+    var qs = p.toString();
+    history.replaceState(null, "", qs ? "?" + qs : window.location.pathname);
+  }
+
+  function apply() {
+    var st = stateSel.value, ar = areaSel.value, te = techSel.value;
+    document.querySelectorAll(".project-item").forEach(function (el) {
+      var techs = (el.dataset.tech || "").split(" ");
+      var ok = (!st || el.dataset.state === st)
+        && (!ar || el.dataset.area === ar)
+        && (!te || techs.indexOf(te) !== -1);
+      el.style.display = ok ? "" : "none";
+    });
+  }
+
+  function showTableView(on) {
+    if (!toggle || !cards || !table) return;
+    table.style.display = on ? "" : "none";
+    cards.style.display = on ? "none" : "";
+    toggle.textContent = on ? "card view" : "table view";
+  }
+
+  function sortBy(key, asc) {
+    if (!tbody) return;
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+    rows.sort(function (a, b) {
+      var av = (a.dataset[key] || "").toLowerCase();
+      var bv = (b.dataset[key] || "").toLowerCase();
+      if (av === bv) return 0;
+      return (av < bv ? -1 : 1) * (asc ? 1 : -1);
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    table.querySelectorAll("th.sortable").forEach(function (h) {
+      h.classList.toggle("sorted", h.dataset.key === key);
+    });
+  }
+
+  // restore from URL
+  stateSel.value = params.get("state") || "";
+  areaSel.value = params.get("area") || "";
+  techSel.value = params.get("tech") || "";
+  apply();
+  showTableView(params.get("view") === "table");
+  var initialSort = params.get("sort");
+  if (initialSort) {
+    var parts = initialSort.split(":");
+    var asc0 = parts[1] !== "desc";
+    sortBy(parts[0], asc0);
+    var th0 = table && table.querySelector('th.sortable[data-key="' + parts[0] + '"]');
+    if (th0) th0.dataset.dir = asc0 ? "asc" : "desc";
+  }
+
+  [stateSel, areaSel, techSel].forEach(function (sel) {
+    sel.addEventListener("change", function () { apply(); writeUrl(); });
+  });
+
+  if (toggle && cards && table) {
+    toggle.addEventListener("click", function (e) {
+      e.preventDefault();
+      showTableView(table.style.display === "none");
+      writeUrl();
+    });
+  }
+
+  if (tbody) {
+    table.querySelectorAll("th.sortable").forEach(function (th) {
+      th.style.cursor = "pointer";
+      th.addEventListener("click", function () {
+        var key = th.dataset.key;
+        var asc = !(th.classList.contains("sorted") && th.dataset.dir !== "desc");
+        th.dataset.dir = asc ? "asc" : "desc";
+        sortBy(key, asc);
+        params.set("sort", key + ":" + (asc ? "asc" : "desc"));
+        writeUrl();
+      });
+    });
+  }
+})();
+</script>
 {% endblock %}
