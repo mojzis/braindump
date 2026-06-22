@@ -8,7 +8,7 @@ license = { text = "MIT" }
 authors = [{ name = "Matous Mojzis" }]
 dependencies = [
     "markdown>=3.10.2",
-    "nh3>=0.3.5",
+    "nh3>=0.3.6",
     "pydantic>=2.13.4",
     "typer>=0.26.7",
 ]
