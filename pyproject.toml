@@ -24,7 +24,7 @@ web = [
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.0",
+    "pytest>=9.1.1",
     "pytest-cov",
     "freezegun>=1.4",
     "httpx>=0.28.1",
