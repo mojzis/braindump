@@ -16,7 +16,6 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
 
 import markdown as md
 import nh3
@@ -87,10 +86,8 @@ async def lifespan(app: FastAPI):
                     cfg.home, watch_filter=_watch_filter, stop_event=stop
                 ):
                     for q in list(app.state.subscribers):
-                        try:
+                        with contextlib.suppress(asyncio.QueueFull):
                             q.put_nowait("reload")
-                        except asyncio.QueueFull:
-                            pass
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -116,7 +113,8 @@ def _render_markdown(text: str) -> Markup:
         text or "",
         extensions=["fenced_code", "tables", "sane_lists"],
     )
-    return Markup(nh3.clean(html))
+    # nh3.clean sanitizes the HTML above before it is wrapped as safe Markup.
+    return Markup(nh3.clean(html))  # noqa: S704
 
 
 _REF_CHIP_RE = re.compile(r"\[→(todo|til|thought|prompt)#(\d+)\]")
@@ -135,7 +133,9 @@ def _journal_markdown(text: str) -> Markup:
     before sanitizing would come out unstyled.
     """
     html = _render_markdown(text)
-    return Markup(_REF_CHIP_RE.sub(_ref_chip_sub, str(html)))
+    # `html` is already nh3-sanitized by `_render_markdown`; the regex only
+    # rewrites `[→type#id]` marks into anchors, so re-wrapping is safe.
+    return Markup(_REF_CHIP_RE.sub(_ref_chip_sub, str(html)))  # noqa: S704
 
 
 app = FastAPI(title="Braindump", docs_url=None, redoc_url=None, lifespan=lifespan)
@@ -156,7 +156,7 @@ async def events(request: Request):
             while True:
                 try:
                     msg = await asyncio.wait_for(q.get(), timeout=15.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield ": keepalive\n\n"
                     continue
                 if msg == "__shutdown__":
@@ -174,7 +174,7 @@ async def events(request: Request):
     )
 
 
-def _csv(value: Optional[str]) -> list[str]:
+def _csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [v.strip() for v in value.split(",") if v.strip()]
@@ -429,8 +429,8 @@ def api_journal_close():
 @app.get("/capture", response_class=HTMLResponse)
 def capture_get(
     request: Request,
-    type: Optional[str] = None,
-    title: Optional[str] = None,
+    type: str | None = None,
+    title: str | None = None,
 ):
     cfg = load_config()
     tag_counter = tags_mod.tag_frequency(cfg)
@@ -453,7 +453,7 @@ def capture_get(
 
 
 @app.post("/capture")
-def capture_post(
+def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -469,7 +469,7 @@ def capture_post(
     cfg = load_config()
     active = projects.get_active_project(cfg)
     type_fields: dict = {}
-    effective_project: Optional[str]
+    effective_project: str | None
     if entry_type == "project":
         # A project entry does not belong to itself; ignore any submitted project value
         # and let entries.create_entry enforce project=None.
@@ -507,13 +507,13 @@ def capture_post(
 
 
 @app.get("/entries", response_class=HTMLResponse)
-def entries_list(
+def entries_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
     request: Request,
-    q: Optional[str] = None,
-    type: Optional[str] = None,
-    project: Optional[str] = None,
+    q: str | None = None,
+    type: str | None = None,
+    project: str | None = None,
     status: str = "all",
-    tag: Optional[str] = None,
+    tag: str | None = None,
     all_projects: bool = Query(False, alias="all"),
 ):
     cfg = load_config()
@@ -557,7 +557,7 @@ def entry_view(request: Request, entry_id: int):
     type_dir, entry = found
     full_path = store.full_path_for(cfg, type_dir, entry.file_path)
     _, md_body = store.read_markdown(full_path)
-    heading, authored, _ = entries.split_body(md_body)
+    _heading, authored, _ = entries.split_body(md_body)
     return templates.TemplateResponse(
         request,
         "entry_view.html",
@@ -588,16 +588,16 @@ def entry_edit(request: Request, entry_id: int):
 
 
 @app.post("/api/entries/{entry_id}", response_class=HTMLResponse)
-def api_entry_update(
+def api_entry_update(  # noqa: PLR0913 -- one Form field per editable attribute; splitting adds indirection
     request: Request,
     entry_id: int,
-    title: Optional[str] = Form(None),
-    summary: Optional[str] = Form(None),
-    tags: Optional[str] = Form(None),
-    project: Optional[str] = Form(None),
-    status: Optional[str] = Form(None),
-    area: Optional[str] = Form(None),
-    body: Optional[str] = Form(None),
+    title: str | None = Form(None),
+    summary: str | None = Form(None),
+    tags: str | None = Form(None),
+    project: str | None = Form(None),
+    status: str | None = Form(None),
+    area: str | None = Form(None),
+    body: str | None = Form(None),
 ):
     cfg = load_config()
     patch: dict = {}
