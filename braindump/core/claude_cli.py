@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_TIMEOUT = 180
+DEFAULT_BIN_NAME = "claude"
 
 
 class ClaudeError(RuntimeError):
@@ -70,10 +71,14 @@ class ClaudeCallError(ClaudeError):
         return cls(f"claude payload was not a JSON object: {payload!r}"[:2000])
 
 
+def configured_bin_name() -> str:
+    """The configured binary name (before PATH resolution)."""
+    return os.environ.get("BRAINDUMP_CLAUDE_BIN", DEFAULT_BIN_NAME)
+
+
 def resolve_binary() -> str | None:
     """Resolve the configured `claude` binary on PATH, or `None` if missing."""
-    bin_name = os.environ.get("BRAINDUMP_CLAUDE_BIN", "claude")
-    return shutil.which(bin_name)
+    return shutil.which(configured_bin_name())
 
 
 def is_available() -> bool:
@@ -107,12 +112,11 @@ async def run_claude(
     `ClaudeCallError` on a non-zero exit, `is_error` result, timeout, or
     unparseable output. Never uses `--bare` (breaks OAuth auth).
     """
-    bin_name = os.environ.get("BRAINDUMP_CLAUDE_BIN", "claude")
     model = os.environ.get("BRAINDUMP_CLAUDE_MODEL", "sonnet")
 
-    resolved = shutil.which(bin_name)
+    resolved = resolve_binary()
     if resolved is None:
-        raise ClaudeUnavailableError(bin_name)
+        raise ClaudeUnavailableError(configured_bin_name())
 
     args = [
         resolved,

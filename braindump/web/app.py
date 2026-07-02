@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -75,6 +74,7 @@ async def lifespan(app: FastAPI):
     cfg = load_config()
     app.state.subscribers: set[asyncio.Queue[str]] = set()
     app.state.parse_job: ParseJob | None = None
+    app.state.parse_task: asyncio.Task | None = None
     stop = asyncio.Event()
     app.state.watch_stop = stop
     log = logging.getLogger("braindump.web")
@@ -105,6 +105,11 @@ async def lifespan(app: FastAPI):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        parse_task = app.state.parse_task
+        if parse_task is not None and not parse_task.done():
+            parse_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await parse_task
 
 
 def _render_markdown(text: str) -> Markup:
@@ -270,6 +275,8 @@ def journal_root(request: Request):
     )
     next_before = past_days[-1]["day"].isoformat() if past_days else today.isoformat()
     job = request.app.state.parse_job
+    job_is_live = job is not None and job.day == today and job.status == "running"
+    active_job = job if job_is_live else None
     return templates.TemplateResponse(
         request,
         "journal.html",
@@ -282,7 +289,7 @@ def journal_root(request: Request):
             has_more=has_more,
             next_before=next_before,
             limit=PAST_DAYS_PAGE,
-            job=job if job is not None and job.day == today else None,
+            job=active_job,
         ),
     )
 
@@ -350,16 +357,17 @@ async def api_journal_parse(request: Request, day: str, body: str = Form("")):
     cfg = load_config()
     d = _parse_day(day)
 
-    # Flush the editor buffer (EasyMDE swallows some autosave triggers) before
-    # snapshotting the day for parsing.
-    journal.replace_body(cfg, d, body, project=projects.get_active_project(cfg))
-
     existing: ParseJob | None = request.app.state.parse_job
     if existing is not None and existing.status == "running":
         raise HTTPException(status_code=409, detail="a parse job is already running")
 
+    # Flush the editor buffer (EasyMDE swallows some autosave triggers) before
+    # snapshotting the day for parsing. Only reached once we know a rejected
+    # (409) request will not have mutated the day file.
+    journal.replace_body(cfg, d, body, project=projects.get_active_project(cfg))
+
     if not claude_cli.is_available():
-        bin_name = os.environ.get("BRAINDUMP_CLAUDE_BIN", "claude")
+        bin_name = claude_cli.configured_bin_name()
         job = ParseJob(
             day=d,
             status="error",
