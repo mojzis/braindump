@@ -26,10 +26,6 @@
         <textarea id="journal-editor" name="body" placeholder="write anything…">{{ today_body }}</textarea>
       </form>
 
-      <div id="past-days">
-        {% include "_journal_day_section.html" %}
-      </div>
-
       <div class="journal-toolbar">
         <form id="parse-form"
               hx-post="/api/journal/{{ today.isoformat() }}/parse"
@@ -38,15 +34,24 @@
               hx-swap="innerHTML">
           <button type="submit" title="parse today's journal into entries (⌘/ctrl+enter)">✳ parse</button>
         </form>
-        <span id="autosave-dot" class="autosave-dot" data-status="idle" title="autosave status"></span>
         <form hx-post="/api/journal/close" hx-swap="none">
           <button type="submit" title="finish today and open tomorrow">finish the day →</button>
         </form>
+        <span id="autosave-dot" class="autosave-dot" data-status="idle" title="autosave status">
+          <span class="autosave-mark"></span><span class="autosave-text">saved</span>
+        </span>
       </div>
 
       <div id="parse-status">
         {% if job %}{% include "_parse_status.html" %}{% endif %}
       </div>
+
+      <details id="past-days-toggle" class="past-days-toggle">
+        <summary>earlier days</summary>
+        <div id="past-days">
+          {% include "_journal_day_section.html" %}
+        </div>
+      </details>
     {% endif %}
   </div>
 </div>

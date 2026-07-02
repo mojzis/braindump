@@ -70,10 +70,16 @@
   });
 
   if (todayForm && dot) {
-    todayForm.addEventListener("htmx:beforeRequest", function () { dot.dataset.status = "saving"; });
+    var dotText = dot.querySelector(".autosave-text");
+    var setDot = function (status, text) {
+      dot.dataset.status = status;
+      if (dotText) dotText.textContent = text;
+    };
+    setDot("idle", "");
+    todayForm.addEventListener("htmx:beforeRequest", function () { setDot("saving", "saving…"); });
     todayForm.addEventListener("htmx:afterRequest", function () {
-      dot.dataset.status = "saved";
-      setTimeout(function () { dot.dataset.status = "idle"; }, 1200);
+      setDot("saved", "saved");
+      setTimeout(function () { setDot("idle", ""); }, 1600);
     });
   }
 })();
