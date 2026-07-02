@@ -189,6 +189,17 @@ def test_validate_pass1_typo_folds_onto_existing_project():
     assert result[0].project == "introspect"
 
 
+def test_validate_pass1_does_not_fold_short_names_within_distance_two():
+    # "api" is only distance 2 from "cli", but both are short, genuinely
+    # distinct project names -- must not fold just because they're close
+    # in edit distance.
+    snapshot = ["line zero"]
+    data = {"sections": [_section("api", line=0, line_text="line zero")]}
+    result = digest.validate_pass1(snapshot, data, ["cli"])
+    assert len(result) == 1
+    assert result[0].project == "api"
+
+
 def test_validate_pass1_does_not_fold_beyond_distance_two():
     snapshot = ["line zero"]
     data = {

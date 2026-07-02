@@ -123,16 +123,27 @@ def _levenshtein(a: str, b: str) -> int:
 
 
 TYPO_FOLD_MAX_DISTANCE = 2
+TYPO_FOLD_MIN_LENGTH = 5
 
 
 def _resolve_project_slug(raw_project: str, existing_projects: Sequence[str]) -> str:
-    """Slugify `raw_project`; typo-fold onto an existing project at distance <= 2."""
+    """Slugify `raw_project`; typo-fold onto an existing project at distance <= 2.
+
+    Short slugs (e.g. "api" vs "cli") are only 2 edits apart despite being
+    genuinely distinct projects, so folding is restricted to slugs of at
+    least `TYPO_FOLD_MIN_LENGTH` characters (on either side of the
+    comparison) to keep the <=2 rule from mis-folding short names.
+    """
     slug = store.slugify(raw_project or "")
     if slug in existing_projects:
+        return slug
+    if len(slug) < TYPO_FOLD_MIN_LENGTH:
         return slug
     best: str | None = None
     best_dist = TYPO_FOLD_MAX_DISTANCE + 1
     for candidate in existing_projects:
+        if len(candidate) < TYPO_FOLD_MIN_LENGTH:
+            continue
         dist = _levenshtein(slug, candidate)
         if dist <= TYPO_FOLD_MAX_DISTANCE and dist < best_dist:
             best = candidate

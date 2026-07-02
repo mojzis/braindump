@@ -93,6 +93,45 @@ async def test_nonzero_exit_raises(tmp_path, monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_structured_output_top_level_array_raises(tmp_path, monkeypatch):
+    stub = _write_stub(
+        tmp_path,
+        """
+        import json
+        print(json.dumps({
+            "type": "result",
+            "is_error": False,
+            "result": "[1, 2, 3]",
+            "structured_output": [1, 2, 3],
+        }))
+        """,
+    )
+    monkeypatch.setenv("BRAINDUMP_CLAUDE_BIN", str(stub))
+
+    with pytest.raises(claude_cli.ClaudeCallError, match="not a JSON object"):
+        await claude_cli.run_claude("hello")
+
+
+@pytest.mark.anyio
+async def test_result_top_level_array_raises(tmp_path, monkeypatch):
+    stub = _write_stub(
+        tmp_path,
+        """
+        import json
+        print(json.dumps({
+            "type": "result",
+            "is_error": False,
+            "result": "[1, 2, 3]",
+        }))
+        """,
+    )
+    monkeypatch.setenv("BRAINDUMP_CLAUDE_BIN", str(stub))
+
+    with pytest.raises(claude_cli.ClaudeCallError, match="not a JSON object"):
+        await claude_cli.run_claude("hello")
+
+
+@pytest.mark.anyio
 async def test_garbage_stdout_raises(tmp_path, monkeypatch):
     stub = _write_stub(tmp_path, 'print("not json at all")')
     monkeypatch.setenv("BRAINDUMP_CLAUDE_BIN", str(stub))

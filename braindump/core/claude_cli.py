@@ -11,10 +11,12 @@ and `BRAINDUMP_CLAUDE_MODEL` (default `"sonnet"`).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import re
 import shutil
+import signal
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +64,10 @@ class ClaudeCallError(ClaudeError):
     @classmethod
     def invalid_result_json(cls, result: str) -> ClaudeCallError:
         return cls(f"claude result was not valid JSON: {result[:2000]!r}")
+
+    @classmethod
+    def invalid_payload_shape(cls, payload: Any) -> ClaudeCallError:
+        return cls(f"claude payload was not a JSON object: {payload!r}"[:2000])
 
 
 _FENCE_RE = re.compile(r"^```[a-zA-Z0-9]*\n(.*?)\n?```$", re.DOTALL)
@@ -117,11 +123,13 @@ async def run_claude(
         cwd=str(cwd) if cwd is not None else None,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        start_new_session=True,
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
     except TimeoutError:
-        proc.kill()
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         await proc.wait()
         raise ClaudeCallError.timed_out(timeout) from None
 
@@ -129,7 +137,7 @@ async def run_claude(
         raise ClaudeCallError.nonzero_exit(proc.returncode, stderr)
 
     try:
-        envelope = json.loads(stdout.decode())
+        envelope = json.loads(stdout.decode(errors="replace"))
     except json.JSONDecodeError as e:
         raise ClaudeCallError.invalid_stdout(stdout) from e
 
@@ -139,12 +147,17 @@ async def run_claude(
 
     structured = envelope.get("structured_output")
     if structured is not None:
+        if not isinstance(structured, dict):
+            raise ClaudeCallError.invalid_payload_shape(structured)
         return structured
 
     result = envelope.get("result")
     if not isinstance(result, str):
         raise ClaudeCallError.no_payload(envelope)
     try:
-        return json.loads(strip_fences(result))
+        payload = json.loads(strip_fences(result))
     except json.JSONDecodeError as e:
         raise ClaudeCallError.invalid_result_json(result) from e
+    if not isinstance(payload, dict):
+        raise ClaudeCallError.invalid_payload_shape(payload)
+    return payload
