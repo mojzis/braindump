@@ -28,9 +28,40 @@ class ClaudeError(RuntimeError):
 class ClaudeUnavailableError(ClaudeError):
     """Raised when the `claude` binary cannot be located on PATH."""
 
+    def __init__(self, bin_name: str) -> None:
+        super().__init__(
+            f"claude CLI not found (looked for {bin_name!r} on PATH). "
+            "Install the Claude Code CLI or set BRAINDUMP_CLAUDE_BIN."
+        )
+
 
 class ClaudeCallError(ClaudeError):
     """Raised when a claude invocation fails, times out, or returns unusable output."""
+
+    @classmethod
+    def timed_out(cls, timeout: float) -> ClaudeCallError:
+        return cls(f"claude call timed out after {timeout}s")
+
+    @classmethod
+    def nonzero_exit(cls, returncode: int | None, stderr: bytes) -> ClaudeCallError:
+        detail = stderr.decode(errors="replace")[:2000]
+        return cls(f"claude exited {returncode}: {detail}")
+
+    @classmethod
+    def invalid_stdout(cls, stdout: bytes) -> ClaudeCallError:
+        return cls(f"claude returned non-JSON stdout: {stdout[:2000]!r}")
+
+    @classmethod
+    def reported_error(cls, detail: object) -> ClaudeCallError:
+        return cls(f"claude reported an error: {detail}")
+
+    @classmethod
+    def no_payload(cls, envelope: dict[str, Any]) -> ClaudeCallError:
+        return cls(f"claude envelope had no usable payload: {envelope}")
+
+    @classmethod
+    def invalid_result_json(cls, result: str) -> ClaudeCallError:
+        return cls(f"claude result was not valid JSON: {result[:2000]!r}")
 
 
 _FENCE_RE = re.compile(r"^```[a-zA-Z0-9]*\n(.*?)\n?```$", re.DOTALL)
@@ -64,10 +95,7 @@ async def run_claude(
 
     resolved = shutil.which(bin_name)
     if resolved is None:
-        raise ClaudeUnavailableError(
-            f"claude CLI not found (looked for {bin_name!r} on PATH). "
-            "Install the Claude Code CLI or set BRAINDUMP_CLAUDE_BIN."
-        )
+        raise ClaudeUnavailableError(bin_name)
 
     args = [
         resolved,
@@ -95,23 +123,19 @@ async def run_claude(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        raise ClaudeCallError(f"claude call timed out after {timeout}s") from None
+        raise ClaudeCallError.timed_out(timeout) from None
 
     if proc.returncode != 0:
-        raise ClaudeCallError(
-            f"claude exited {proc.returncode}: {stderr.decode(errors='replace')[:2000]}"
-        )
+        raise ClaudeCallError.nonzero_exit(proc.returncode, stderr)
 
     try:
         envelope = json.loads(stdout.decode())
     except json.JSONDecodeError as e:
-        raise ClaudeCallError(
-            f"claude returned non-JSON stdout: {stdout[:2000]!r}"
-        ) from e
+        raise ClaudeCallError.invalid_stdout(stdout) from e
 
     if envelope.get("is_error"):
         detail = envelope.get("result") or envelope
-        raise ClaudeCallError(f"claude reported an error: {detail}")
+        raise ClaudeCallError.reported_error(detail)
 
     structured = envelope.get("structured_output")
     if structured is not None:
@@ -119,10 +143,8 @@ async def run_claude(
 
     result = envelope.get("result")
     if not isinstance(result, str):
-        raise ClaudeCallError(f"claude envelope had no usable payload: {envelope}")
+        raise ClaudeCallError.no_payload(envelope)
     try:
         return json.loads(strip_fences(result))
     except json.JSONDecodeError as e:
-        raise ClaudeCallError(
-            f"claude result was not valid JSON: {result[:2000]!r}"
-        ) from e
+        raise ClaudeCallError.invalid_result_json(result) from e
