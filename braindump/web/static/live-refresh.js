@@ -9,6 +9,9 @@
   function scheduleReload() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(function () {
+      // Parsing writes entry files under cfg.home, which would otherwise
+      // trigger a reload mid-parse and blow away the locked editor state.
+      if (document.body.dataset.parseRunning) return;
       const a = document.activeElement;
       if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) {
         return;

@@ -1,0 +1,20 @@
+{% for entry in past_days %}
+<div class="day-block">
+  <div class="day-sep"><span>{{ entry.day.strftime("%A, %B %d, %Y") }}</span></div>
+  <div class="day-body">
+    <a class="day-permalink muted" href="/journal/{{ entry.day.isoformat() }}">#</a>
+    {{ entry.body | journal_markdown }}
+  </div>
+</div>
+{% endfor %}
+{% if has_more %}
+<div class="day-sentinel"
+     hx-get="/journal/days?before={{ next_before }}&limit={{ limit | default(7) }}"
+     hx-trigger="revealed"
+     hx-target="this"
+     hx-swap="outerHTML">
+  <span class="muted">loading earlier days…</span>
+</div>
+{% elif past_days %}
+<div class="day-sentinel day-sentinel-end"><span class="muted">— beginning of the journal —</span></div>
+{% endif %}

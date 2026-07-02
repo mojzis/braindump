@@ -76,14 +76,50 @@ bd serve [--host 127.0.0.1] [--port 8765]
 `bd serve` starts a local FastAPI server (default `http://127.0.0.1:8765/`). Pages:
 
 - `/` — dashboard (today's journal preview, open todos, recent activity, top tags, projects)
-- `/journal/<YYYY-MM-DD>` — day editor with yesterday's content in a side panel, autosave, and a "finish the day" button
+- `/journal` — the running doc: today's editor on top, the last ~7 days rendered below with lazy-load-on-scroll for older days, autosave, `✳ parse`, and a "finish the day" button
+- `/journal/<YYYY-MM-DD>` — read-only permalink for a single past day (redirects to `/journal` for today)
 - `/capture` — quick-capture form (type, title, body, tags, project)
 - `/entries` — searchable/filterable list
 - `/entries/<id>` — view + edit-in-place (title, tags, project, status, body)
 - `/projects`, `/projects/<name>` — project inventory and per-project dashboards
 - `/tags` — tag analytics
 
-Keyboard shortcuts: `g d` dashboard, `g j` journal, `g c` capture, `g e` entries, `g p` projects, `/` focus search, `?` help.
+Keyboard shortcuts: `g d` dashboard, `g j` journal, `g c` capture, `g e` entries, `g p` projects, `/` focus search, `⌘/ctrl+enter` parse (on the journal page), `?` help.
+
+### Journal parse pipeline
+
+`✳ parse` on the running doc turns free-form journal writing into structured
+braindump entries without leaving the page:
+
+1. `POST /api/journal/<day>/parse` flushes the editor's current buffer to disk
+   (`journal.replace_body`), then hands the day off to
+   `braindump.core.digest.run_parse` as a background `asyncio.Task`, tracked
+   in a single in-memory slot (`app.state.parse_job`) — only one parse can run
+   at a time; a second `parse` while one is in flight gets `409`.
+2. `run_parse` is a two-pass Claude pipeline (see `digest.py`'s module
+   docstring for the full contract): pass 1 (no tools) groups journal lines
+   into per-project sections and proposes entries; Python-side validation
+   (`validate_pass1`) never trusts the model with the anchoring line indexes;
+   pass 2 (read-only tools, cwd = the project's local checkout) lightly
+   polishes wording when a local dir exists. Entries are created via the real
+   `entries.create_entry` path, and the journal is annotated with
+   `[→type#id]` marks and rewritten one section at a time, so a crash only
+   risks duplicating whatever section was in flight.
+3. The client polls `GET /journal/<day>/parse-status` every 2s for a status
+   fragment; the editor is locked (read-only) for the duration
+   (`document.body.dataset.parseRunning`, which also tells `live-refresh.js`
+   to ignore the SSE reload that the newly-written entry files would
+   otherwise trigger). The endpoint returns HTTP **286** + `HX-Trigger:
+   parse-done` once the job finishes, which stops htmx's polling and tells
+   the editor to unlock and refetch the (now-annotated) body from
+   `GET /api/journal/<day>/body`.
+4. `[→type#id]` marks render as clickable `.ref-chip` pills in past-day/
+   permalink views via the `journal_markdown` Jinja filter — chip-linking
+   runs as a regex pass *after* nh3 sanitizing, since nh3 strips `class`
+   attributes.
+
+If the `claude` CLI isn't on `PATH` (or `BRAINDUMP_CLAUDE_BIN` points nowhere),
+the parse endpoint reports a friendly inline error instead of queuing a job.
 
 ## Claude Skills
 

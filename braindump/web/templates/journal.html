@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{% if mode == "permalink" %}journal {{ day.isoformat() }}{% else %}journal{% endif %}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/vendor/easymde.min.css" />
+{% endblock %}
+
+{% block body %}
+<div class="journal-doc">
+  <div class="paper">
+    {% if mode == "permalink" %}
+      <header class="journal-permalink-head">
+        <a href="/journal/{{ prior_day.isoformat() }}">← {{ prior_day.isoformat() }}</a>
+        <h2>{{ day.isoformat() }}</h2>
+        <a href="/journal/{{ next_day.isoformat() }}">{{ next_day.isoformat() }} →</a>
+      </header>
+      <p><a class="ghost-btn" href="/journal">← back to the running doc</a></p>
+      <div class="day-body">
+        {% if body and body.strip() %}{{ body | journal_markdown }}{% else %}<p class="muted">(empty)</p>{% endif %}
+      </div>
+    {% else %}
+      <form id="today-editor-form"
+            hx-put="/api/journal/{{ today.isoformat() }}"
+            hx-trigger="input changed delay:600ms from:textarea, blur from:textarea"
+            hx-swap="none">
+        <textarea id="journal-editor" name="body" placeholder="write anything…">{{ today_body }}</textarea>
+      </form>
+
+      <div id="past-days">
+        {% include "_journal_day_section.html" %}
+      </div>
+
+      <div class="journal-toolbar">
+        <form id="parse-form"
+              hx-post="/api/journal/{{ today.isoformat() }}/parse"
+              hx-include="#journal-editor"
+              hx-target="#parse-status"
+              hx-swap="innerHTML">
+          <button type="submit" title="parse today's journal into entries (⌘/ctrl+enter)">✳ parse</button>
+        </form>
+        <span id="autosave-dot" class="autosave-dot" data-status="idle" title="autosave status"></span>
+        <form hx-post="/api/journal/close" hx-swap="none">
+          <button type="submit" title="finish today and open tomorrow">finish the day →</button>
+        </form>
+      </div>
+
+      <div id="parse-status">
+        {% if job %}{% include "_parse_status.html" %}{% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if mode != "permalink" %}
+<script src="/static/vendor/easymde.min.js"></script>
+<script src="/static/journal-editor.js" defer data-day="{{ today.isoformat() }}"></script>
+{% endif %}
+{% endblock %}

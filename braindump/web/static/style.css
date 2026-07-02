@@ -64,19 +64,87 @@ ul li { margin: 6px 0; }
 .done-btn { border: 1px solid var(--border); background: var(--bg); color: var(--muted); width: 24px; height: 24px; padding: 0; cursor: pointer; border-radius: 6px; }
 .done-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
-.journal-page { max-width: 960px; margin: 0 auto; }
-.journal-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
-.nav-dates { display: flex; gap: 16px; align-items: baseline; }
-.today-tag { background: var(--banner); padding: 2px 8px; border-radius: 4px; font-size: 11px; vertical-align: middle; }
-.journal-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
-@media (max-width: 700px) { .journal-grid { grid-template-columns: 1fr; } }
-.prev-day { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; max-height: 600px; overflow: auto; box-shadow: var(--shadow); }
-.prev-day pre { white-space: pre-wrap; word-break: break-word; font: inherit; margin: 8px 0 0; }
-.today-editor textarea { width: 100%; background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font: inherit; resize: vertical; box-shadow: var(--shadow); }
-.today-editor textarea:focus { outline: none; border-color: var(--accent); }
-.autosave-hint { text-align: right; font-size: 11px; margin-top: 4px; }
-
 .journal-preview { white-space: pre-wrap; word-break: break-word; font: inherit; color: var(--fg); margin: 0; max-height: 240px; overflow: auto; }
+
+/* --- journal running doc -------------------------------------------------- */
+
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("/static/fonts/Literata-VariableFont.woff2") format("woff2-variations"), url("/static/fonts/Literata-VariableFont.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Literata";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("/static/fonts/Literata-Italic-VariableFont.woff2") format("woff2-variations"), url("/static/fonts/Literata-Italic-VariableFont.woff2") format("woff2");
+}
+
+.journal-doc { max-width: 46rem; margin: 0 auto; }
+.paper {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 36px 44px 84px; box-shadow: 0 2px 4px rgba(70, 55, 25, 0.06), 0 8px 28px rgba(70, 55, 25, 0.07);
+  font-family: "Literata", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font-size: 17px; line-height: 1.75; color: var(--fg); position: relative;
+}
+.paper em, .paper i { font-style: italic; }
+
+.paper textarea#journal-editor {
+  width: 100%; min-height: 160px; background: transparent; color: var(--fg);
+  border: none; padding: 0; font: inherit; resize: vertical;
+}
+.paper textarea#journal-editor:focus { outline: none; }
+.paper .CodeMirror {
+  background: transparent; border: none; font-family: inherit; font-size: inherit;
+  line-height: inherit; height: auto; color: var(--fg);
+}
+.paper .CodeMirror-cursor { border-left-color: var(--fg); }
+.paper .cm-header { font-weight: 650; }
+.paper .cm-bd-ref { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 2px; }
+body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: none; }
+
+.day-sep { display: flex; align-items: center; gap: 12px; margin: 30px 0 14px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.day-sep::before, .day-sep::after { content: ""; flex: 1; border-top: 1px solid var(--border-soft); }
+.day-body { overflow-wrap: break-word; }
+.day-body .day-permalink { float: right; font-size: 12px; }
+.day-block:first-child .day-sep { margin-top: 22px; }
+.day-sentinel { text-align: center; padding: 16px 0; font-size: 12px; }
+.day-sentinel-end { color: var(--muted); }
+
+.journal-permalink-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+
+.journal-toolbar {
+  position: sticky; bottom: 0; margin: 20px -44px -84px; padding: 14px 44px;
+  background: linear-gradient(to top, var(--card) 65%, transparent);
+  display: flex; align-items: center; gap: 14px; font-family: system-ui, sans-serif; font-size: 14px;
+}
+.journal-toolbar form { margin: 0; }
+.journal-toolbar button {
+  padding: 7px 15px; background: var(--bg-tint); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 8px; cursor: pointer; font: inherit;
+}
+.journal-toolbar button:hover { border-color: var(--accent); color: var(--accent); }
+.journal-toolbar #parse-form button { background: var(--accent); border-color: var(--accent); color: #fff; }
+.journal-toolbar #parse-form button:hover { background: #9a6824; color: #fff; }
+.autosave-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); margin-left: auto; transition: background 0.2s; }
+.autosave-dot[data-status="saving"] { background: var(--accent); }
+.autosave-dot[data-status="saved"] { background: #6a9955; }
+
+.parse-status { margin-top: 12px; font-family: system-ui, sans-serif; font-size: 13px; }
+.parse-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+.parse-rows li { display: flex; justify-content: space-between; gap: 10px; }
+.parse-project { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.parse-error { color: var(--danger); }
+.parse-done { color: var(--muted); }
+
+.ref-chip {
+  display: inline-block; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border-soft);
+  border-radius: 5px; padding: 1px 7px; font-size: 11px; font-family: var(--mono); text-decoration: none;
+}
+.ref-chip:hover { border-color: var(--accent); text-decoration: none; }
 
 .capture-form { display: grid; gap: 14px; max-width: 720px; }
 .capture-form label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12px; }

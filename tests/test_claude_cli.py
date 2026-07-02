@@ -148,6 +148,19 @@ async def test_missing_binary_raises_unavailable(monkeypatch):
         await claude_cli.run_claude("hello")
 
 
+def test_is_available_false_when_binary_missing(monkeypatch):
+    monkeypatch.setenv("BRAINDUMP_CLAUDE_BIN", "definitely-not-a-real-claude-bin")
+    assert claude_cli.resolve_binary() is None
+    assert claude_cli.is_available() is False
+
+
+def test_is_available_true_when_binary_resolves(tmp_path, monkeypatch):
+    stub = _write_stub(tmp_path, "pass\n")
+    monkeypatch.setenv("BRAINDUMP_CLAUDE_BIN", str(stub))
+    assert claude_cli.resolve_binary() == str(stub)
+    assert claude_cli.is_available() is True
+
+
 @pytest.mark.anyio
 async def test_timeout_kills_process_and_raises(tmp_path, monkeypatch):
     stub = _write_stub(

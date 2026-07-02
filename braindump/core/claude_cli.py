@@ -70,6 +70,17 @@ class ClaudeCallError(ClaudeError):
         return cls(f"claude payload was not a JSON object: {payload!r}"[:2000])
 
 
+def resolve_binary() -> str | None:
+    """Resolve the configured `claude` binary on PATH, or `None` if missing."""
+    bin_name = os.environ.get("BRAINDUMP_CLAUDE_BIN", "claude")
+    return shutil.which(bin_name)
+
+
+def is_available() -> bool:
+    """Cheap availability check, so callers can fail fast before queuing work."""
+    return resolve_binary() is not None
+
+
 _FENCE_RE = re.compile(r"^```[a-zA-Z0-9]*\n(.*?)\n?```$", re.DOTALL)
 
 

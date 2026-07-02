@@ -4,12 +4,16 @@ Routes are server-rendered Jinja + htmx. No JS framework, no build step.
 Everything speaks to `braindump.core.*` — the same code the CLI uses — so there
 is one source of truth for the data.
 """
+
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
+import os
+import re
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -17,20 +21,40 @@ from typing import Optional
 import markdown as md
 import nh3
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from watchfiles import Change, awatch
 
-from braindump.core import entries, journal, projects, query, store, tags as tags_mod
-from braindump.core.config import load_config
-from braindump.core.schema import ALL_TYPES, PROJECT_STATES, type_to_dir
-
+from braindump.core import claude_cli, digest, entries, journal, projects, query, store
+from braindump.core import tags as tags_mod
+from braindump.core.config import Config, load_config
+from braindump.core.schema import ALL_TYPES, PROJECT_STATES
 
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+
+PAST_DAYS_PAGE = 7
+
+
+@dataclass
+class ParseJob:
+    """State for the single running/last parse job (in-memory; not persisted)."""
+
+    day: date
+    status: str = "running"  # running | done | error
+    progress: dict[str, str] = field(default_factory=dict)
+    order: list[str] = field(default_factory=list)
+    result: digest.ParseResult | None = None
+    error: str | None = None
 
 
 def _watch_filter(change: Change, path: str) -> bool:
@@ -51,6 +75,7 @@ def _watch_filter(change: Change, path: str) -> bool:
 async def lifespan(app: FastAPI):
     cfg = load_config()
     app.state.subscribers: set[asyncio.Queue[str]] = set()
+    app.state.parse_job: ParseJob | None = None
     stop = asyncio.Event()
     app.state.watch_stop = stop
     log = logging.getLogger("braindump.web")
@@ -94,10 +119,30 @@ def _render_markdown(text: str) -> Markup:
     return Markup(nh3.clean(html))
 
 
+_REF_CHIP_RE = re.compile(r"\[→(todo|til|thought|prompt)#(\d+)\]")
+
+
+def _ref_chip_sub(m: re.Match[str]) -> str:
+    entry_type, entry_id = m.group(1), m.group(2)
+    return f'<a class="ref-chip" href="/entries/{entry_id}">{entry_type}#{entry_id}</a>'
+
+
+def _journal_markdown(text: str) -> Markup:
+    """Render journal body markdown, then re-link `[→todo#87]` marks as ref chips.
+
+    The chip-linking regex runs *after* `_render_markdown`'s nh3 pass because
+    nh3 strips `class` attributes — a `class="ref-chip"` anchor injected
+    before sanitizing would come out unstyled.
+    """
+    html = _render_markdown(text)
+    return Markup(_REF_CHIP_RE.sub(_ref_chip_sub, str(html)))
+
+
 app = FastAPI(title="Braindump", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.filters["markdown"] = _render_markdown
+templates.env.filters["journal_markdown"] = _journal_markdown
 
 
 @app.get("/events")
@@ -188,38 +233,104 @@ def dashboard(request: Request):
     )
 
 
-# --- journal ---------------------------------------------------------------
+# --- journal -----------------------------------------------------------------
+
+
+def _parse_day(day: str) -> date:
+    try:
+        return date.fromisoformat(day)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="bad date") from exc
+
+
+def _load_past_days(cfg: Config, before: date, limit: int) -> list[dict]:
+    """Walk backward from `before` collecting up to `limit` days that have content."""
+    days: list[dict] = []
+    cursor = before
+    for _ in range(limit):
+        prev = journal.previous_day_with_content(cfg, cursor)
+        if prev is None:
+            break
+        days.append({"day": prev, "body": journal.read_body(cfg, prev)})
+        cursor = prev
+    return days
 
 
 @app.get("/journal", response_class=HTMLResponse)
 def journal_root(request: Request):
     cfg = load_config()
-    d = journal.current_day(cfg)
-    return RedirectResponse(url=f"/journal/{d.isoformat()}", status_code=302)
+    active = projects.get_active_project(cfg)
+    today = journal.current_day(cfg)
+    journal.get_or_create_day(cfg, today, project=active)
+    today_body = journal.read_body(cfg, today)
+    past_days = _load_past_days(cfg, today, PAST_DAYS_PAGE)
+    has_more = (
+        bool(past_days)
+        and journal.previous_day_with_content(cfg, past_days[-1]["day"]) is not None
+    )
+    next_before = past_days[-1]["day"].isoformat() if past_days else today.isoformat()
+    job = request.app.state.parse_job
+    return templates.TemplateResponse(
+        request,
+        "journal.html",
+        _context(
+            request,
+            mode="running",
+            today=today,
+            today_body=today_body,
+            past_days=past_days,
+            has_more=has_more,
+            next_before=next_before,
+            limit=PAST_DAYS_PAGE,
+            job=job if job is not None and job.day == today else None,
+        ),
+    )
+
+
+@app.get("/journal/days", response_class=HTMLResponse)
+def journal_days(
+    request: Request,
+    before: str = Query(...),
+    limit: int = Query(PAST_DAYS_PAGE),
+):
+    cfg = load_config()
+    before_day = _parse_day(before)
+    past_days = _load_past_days(cfg, before_day, limit)
+    has_more = (
+        bool(past_days)
+        and journal.previous_day_with_content(cfg, past_days[-1]["day"]) is not None
+    )
+    next_before = past_days[-1]["day"].isoformat() if past_days else before
+    return templates.TemplateResponse(
+        request,
+        "_journal_day_section.html",
+        _context(
+            request,
+            past_days=past_days,
+            has_more=has_more,
+            next_before=next_before,
+            limit=limit,
+        ),
+    )
 
 
 @app.get("/journal/{day}", response_class=HTMLResponse)
 def journal_day(request: Request, day: str):
     cfg = load_config()
-    try:
-        d = date.fromisoformat(day)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="bad date")
+    d = _parse_day(day)
+    today = journal.current_day(cfg)
+    if d == today:
+        return RedirectResponse(url="/journal", status_code=302)
     journal.get_or_create_day(cfg, d, project=projects.get_active_project(cfg))
     body = journal.read_body(cfg, d)
-    prev_day = journal.previous_day_with_content(cfg, d)
-    prev_body = journal.read_body(cfg, prev_day) if prev_day else ""
-    is_today = d == journal.current_day(cfg)
     return templates.TemplateResponse(
         request,
-        "journal_day.html",
+        "journal.html",
         _context(
             request,
+            mode="permalink",
             day=d,
             body=body,
-            prev_day=prev_day,
-            prev_body=prev_body,
-            is_today=is_today,
             next_day=d + timedelta(days=1),
             prior_day=d - timedelta(days=1),
         ),
@@ -229,18 +340,85 @@ def journal_day(request: Request, day: str):
 @app.put("/api/journal/{day}")
 def api_journal_save(day: str, body: str = Form("")):
     cfg = load_config()
-    d = date.fromisoformat(day)
+    d = _parse_day(day)
     journal.replace_body(cfg, d, body, project=projects.get_active_project(cfg))
     return Response(status_code=204)
+
+
+@app.post("/api/journal/{day}/parse", response_class=HTMLResponse)
+async def api_journal_parse(request: Request, day: str, body: str = Form("")):
+    cfg = load_config()
+    d = _parse_day(day)
+
+    # Flush the editor buffer (EasyMDE swallows some autosave triggers) before
+    # snapshotting the day for parsing.
+    journal.replace_body(cfg, d, body, project=projects.get_active_project(cfg))
+
+    existing: ParseJob | None = request.app.state.parse_job
+    if existing is not None and existing.status == "running":
+        raise HTTPException(status_code=409, detail="a parse job is already running")
+
+    if not claude_cli.is_available():
+        bin_name = os.environ.get("BRAINDUMP_CLAUDE_BIN", "claude")
+        job = ParseJob(
+            day=d,
+            status="error",
+            error=str(claude_cli.ClaudeUnavailableError(bin_name)),
+        )
+        request.app.state.parse_job = job
+        return templates.TemplateResponse(
+            request, "_parse_status.html", _context(request, job=job)
+        )
+
+    job = ParseJob(day=d)
+    request.app.state.parse_job = job
+
+    def _progress(project: str, status: str) -> None:
+        if project not in job.progress:
+            job.order.append(project)
+        job.progress[project] = status
+
+    async def _runner() -> None:
+        try:
+            job.result = await digest.run_parse(cfg, d, progress=_progress)
+            job.status = "done"
+        except Exception as exc:  # surfaced to the user via the status fragment
+            job.status = "error"
+            job.error = str(exc)
+
+    request.app.state.parse_task = asyncio.create_task(_runner())
+    return templates.TemplateResponse(
+        request, "_parse_status.html", _context(request, job=job)
+    )
+
+
+@app.get("/journal/{day}/parse-status", response_class=HTMLResponse)
+def journal_parse_status(request: Request, day: str):
+    d = _parse_day(day)
+    job: ParseJob | None = request.app.state.parse_job
+    active = job if job is not None and job.day == d else None
+    response = templates.TemplateResponse(
+        request, "_parse_status.html", _context(request, job=active)
+    )
+    if active is None or active.status != "running":
+        response.status_code = 286
+        response.headers["HX-Trigger"] = "parse-done"
+    return response
+
+
+@app.get("/api/journal/{day}/body", response_class=PlainTextResponse)
+def api_journal_body(day: str):
+    cfg = load_config()
+    d = _parse_day(day)
+    return PlainTextResponse(journal.read_body(cfg, d))
 
 
 @app.post("/api/journal/close", response_class=HTMLResponse)
 def api_journal_close():
     cfg = load_config()
-    entry = journal.close_today(cfg, project=projects.get_active_project(cfg))
-    target = entry.date or journal.current_day(cfg).isoformat()
+    journal.close_today(cfg, project=projects.get_active_project(cfg))
     return HTMLResponse(
-        headers={"HX-Redirect": f"/journal/{target}"},
+        headers={"HX-Redirect": "/journal"},
         content="",
     )
 
@@ -322,9 +500,7 @@ def capture_post(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return RedirectResponse(
-        url=f"/entries/{result.entry.id}", status_code=303
-    )
+    return RedirectResponse(url=f"/entries/{result.entry.id}", status_code=303)
 
 
 # --- entries ---------------------------------------------------------------
@@ -352,7 +528,9 @@ def entries_list(
         limit=100,
     )
     hits = query.search(cfg, filters)
-    all_projects_list = [p.name for p in projects.list_projects(cfg) if p.name != "(none)"]
+    all_projects_list = [
+        p.name for p in projects.list_projects(cfg) if p.name != "(none)"
+    ]
     return templates.TemplateResponse(
         request,
         "entries.html",
@@ -460,7 +638,9 @@ def api_entry_delete(entry_id: int):
 def projects_list(request: Request):
     cfg = load_config()
     stats = projects.list_projects(cfg)
-    return templates.TemplateResponse(request, "projects.html", _context(request, project_stats=stats))
+    return templates.TemplateResponse(
+        request, "projects.html", _context(request, project_stats=stats)
+    )
 
 
 @app.get("/projects/{name}", response_class=HTMLResponse)
@@ -502,7 +682,9 @@ def api_project_focus(name: str = Form("")):
 def tags_view(request: Request):
     cfg = load_config()
     counter = tags_mod.tag_frequency(cfg)
-    return templates.TemplateResponse(request, "tags.html", _context(request, tag_counts=counter.most_common()))
+    return templates.TemplateResponse(
+        request, "tags.html", _context(request, tag_counts=counter.most_common())
+    )
 
 
 # --- helpers ---------------------------------------------------------------
