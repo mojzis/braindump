@@ -1,0 +1,128 @@
+"""Thin async wrapper around the `claude` CLI for one-shot structured calls.
+
+This is the only module that shells out to the `claude` binary. Callers pass
+a prompt (and optionally a JSON schema) and get back a parsed dict; every
+other module in `braindump.core` stays Claude-agnostic and easily testable.
+
+Binary and model are resolved from the environment so the digest engine can
+be pointed at a stub in tests: `BRAINDUMP_CLAUDE_BIN` (default `"claude"`)
+and `BRAINDUMP_CLAUDE_MODEL` (default `"sonnet"`).
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import re
+import shutil
+from pathlib import Path
+from typing import Any
+
+DEFAULT_TIMEOUT = 180
+
+
+class ClaudeError(RuntimeError):
+    """Base class for claude_cli failures."""
+
+
+class ClaudeUnavailableError(ClaudeError):
+    """Raised when the `claude` binary cannot be located on PATH."""
+
+
+class ClaudeCallError(ClaudeError):
+    """Raised when a claude invocation fails, times out, or returns unusable output."""
+
+
+_FENCE_RE = re.compile(r"^```[a-zA-Z0-9]*\n(.*?)\n?```$", re.DOTALL)
+
+
+def strip_fences(text: str) -> str:
+    """Strip a single leading/trailing ```-fence (optionally ```json) from text."""
+    stripped = text.strip()
+    m = _FENCE_RE.match(stripped)
+    if m:
+        return m.group(1).strip()
+    return stripped
+
+
+async def run_claude(
+    prompt: str,
+    *,
+    cwd: str | Path | None = None,
+    tools: str = "",
+    json_schema: dict[str, Any] | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """Run `claude -p <prompt> --output-format json ...` and return the payload.
+
+    Raises `ClaudeUnavailableError` if the binary is missing, or
+    `ClaudeCallError` on a non-zero exit, `is_error` result, timeout, or
+    unparseable output. Never uses `--bare` (breaks OAuth auth).
+    """
+    bin_name = os.environ.get("BRAINDUMP_CLAUDE_BIN", "claude")
+    model = os.environ.get("BRAINDUMP_CLAUDE_MODEL", "sonnet")
+
+    resolved = shutil.which(bin_name)
+    if resolved is None:
+        raise ClaudeUnavailableError(
+            f"claude CLI not found (looked for {bin_name!r} on PATH). "
+            "Install the Claude Code CLI or set BRAINDUMP_CLAUDE_BIN."
+        )
+
+    args = [
+        resolved,
+        "-p",
+        prompt,
+        "--output-format",
+        "json",
+        "--no-session-persistence",
+        "--tools",
+        tools,
+        "--model",
+        model,
+    ]
+    if json_schema is not None:
+        args += ["--json-schema", json.dumps(json_schema)]
+
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        cwd=str(cwd) if cwd is not None else None,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise ClaudeCallError(f"claude call timed out after {timeout}s") from None
+
+    if proc.returncode != 0:
+        raise ClaudeCallError(
+            f"claude exited {proc.returncode}: {stderr.decode(errors='replace')[:2000]}"
+        )
+
+    try:
+        envelope = json.loads(stdout.decode())
+    except json.JSONDecodeError as e:
+        raise ClaudeCallError(
+            f"claude returned non-JSON stdout: {stdout[:2000]!r}"
+        ) from e
+
+    if envelope.get("is_error"):
+        detail = envelope.get("result") or envelope
+        raise ClaudeCallError(f"claude reported an error: {detail}")
+
+    structured = envelope.get("structured_output")
+    if structured is not None:
+        return structured
+
+    result = envelope.get("result")
+    if not isinstance(result, str):
+        raise ClaudeCallError(f"claude envelope had no usable payload: {envelope}")
+    try:
+        return json.loads(strip_fences(result))
+    except json.JSONDecodeError as e:
+        raise ClaudeCallError(
+            f"claude result was not valid JSON: {result[:2000]!r}"
+        ) from e

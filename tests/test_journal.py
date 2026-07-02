@@ -63,6 +63,45 @@ def test_close_today_opens_tomorrow(cfg):
     assert journal.day_full_path(cfg, today + timedelta(days=1)).exists()
 
 
+def test_close_today_carries_scratchpad_into_tomorrow(cfg):
+    today = journal.current_day(cfg)
+    journal.replace_body(
+        cfg, today, "regular notes\n## Scratchpad\nan idea I keep coming back to"
+    )
+    next_entry = journal.close_today(cfg)
+    tomorrow = today + timedelta(days=1)
+    assert next_entry.date == tomorrow.isoformat()
+
+    tomorrow_body = journal.read_body(cfg, tomorrow)
+    assert tomorrow_body == "## Scratchpad\nan idea I keep coming back to"
+
+
+def test_close_today_no_scratchpad_leaves_tomorrow_empty(cfg):
+    today = journal.current_day(cfg)
+    journal.replace_body(cfg, today, "just a regular note, no scratchpad heading")
+    journal.close_today(cfg)
+    tomorrow = today + timedelta(days=1)
+    assert journal.read_body(cfg, tomorrow) == ""
+
+
+def test_close_today_called_twice_does_not_duplicate_scratchpad(cfg):
+    today = journal.current_day(cfg)
+    journal.replace_body(cfg, today, "notes\n## Scratchpad\ncarry this forward")
+    journal.close_today(cfg)
+    journal.close_today(cfg)  # e.g. a retried "finish the day" request
+    tomorrow = today + timedelta(days=1)
+    assert journal.read_body(cfg, tomorrow) == "## Scratchpad\ncarry this forward"
+
+
+def test_close_today_sealed_day_keeps_its_own_scratchpad_copy(cfg):
+    today = journal.current_day(cfg)
+    original_body = "regular notes\n## Scratchpad\ncarry this forward"
+    journal.replace_body(cfg, today, original_body)
+    journal.close_today(cfg)
+    # closing the day never strips today's own copy of the scratchpad
+    assert journal.read_body(cfg, today) == original_body
+
+
 def test_previous_day_with_content(cfg):
     base = date(2026, 4, 11)
     journal.append_text(cfg, base - timedelta(days=2), "yesterday-ish content")

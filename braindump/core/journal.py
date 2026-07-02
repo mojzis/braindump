@@ -15,7 +15,6 @@ Day rollover semantics:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -23,7 +22,6 @@ from typing import Any
 from braindump.core import store
 from braindump.core.config import Config
 from braindump.core.schema import Entry
-
 
 JOURNAL_TYPE_DIR = "journal"
 
@@ -185,12 +183,29 @@ def read_body(cfg: Config, d: date) -> str:
 def close_today(cfg: Config, *, project: str | None = None) -> Entry:
     """Seal today's journal and open tomorrow's immediately, regardless of cutoff.
 
+    Carries today's scratchpad (the `## Scratchpad` block, if any) forward
+    into tomorrow's fresh file so running notes survive the day boundary.
+    Today's own copy is left untouched — closing the day never strips it.
+
     Returns the freshly-opened next-day entry.
     """
+    # Local import: digest imports journal for run_parse, avoiding a module-level cycle.
+    from braindump.core import digest  # noqa: PLC0415
+
     today = current_day(cfg)
     get_or_create_day(cfg, today, project=project)
     next_day = today + timedelta(days=1)
-    return get_or_create_day(cfg, next_day, project=project)
+    next_entry = get_or_create_day(cfg, next_day, project=project)
+
+    scratchpad = digest.carry_forward_scratchpad(read_body(cfg, today))
+    next_body = read_body(cfg, next_day)
+    if scratchpad and scratchpad not in next_body:
+        seeded = (
+            f"{next_body.rstrip()}\n\n{scratchpad}" if next_body.strip() else scratchpad
+        )
+        next_entry = replace_body(cfg, next_day, seeded, project=project)
+
+    return next_entry
 
 
 def previous_day_with_content(cfg: Config, d: date, max_look_back: int = 30) -> date | None:
