@@ -294,6 +294,24 @@ def test_merge_pass2_coerces_non_list_tags_to_empty():
     assert merged[0].tags == []
 
 
+# --- render_body_with_sub_lines ---------------------------------------------
+
+
+def test_render_body_with_sub_lines_appends_bullets():
+    out = digest.render_body_with_sub_lines("Parent context.", ["do a", "do b"])
+    assert out == "Parent context.\n\n- do a\n- do b"
+
+
+def test_render_body_with_sub_lines_normalizes_existing_markers():
+    out = digest.render_body_with_sub_lines("", ["- do a", "* do b", "1. do c", "  do d"])
+    assert out == "- do a\n- do b\n- do c\n- do d"
+
+
+def test_render_body_with_sub_lines_no_sub_lines_returns_body():
+    assert digest.render_body_with_sub_lines("just body", []) == "just body"
+    assert digest.render_body_with_sub_lines("just body", ["   ", ""]) == "just body"
+
+
 # --- run_parse -----------------------------------------------------------------
 
 
@@ -409,6 +427,47 @@ async def test_run_parse_creates_entries_and_annotates_journal(cfg):
     assert statuses == {"bd-web", "introspect"}
     assert ("bd-web", "done") in progress_events
     assert ("introspect", "done") in progress_events
+
+
+@pytest.mark.anyio
+async def test_run_parse_folds_sub_lines_into_entry_body(cfg):
+    day = date(2026, 5, 2)
+    _seed_journal(
+        cfg,
+        day,
+        "bd web\npolish the journal page\n  - make it wider\n  - add a saved indicator",
+    )
+    pass1_data = {
+        "sections": [
+            {
+                "project": "bd-web",
+                "items": [
+                    {
+                        "line": 1,
+                        "line_text": "polish the journal page",
+                        "type": "todo",
+                        "title": "Polish journal page",
+                        "body": "Journal page needs UI polish.",
+                        "summary": "polish",
+                        "tags": ["ui"],
+                        "sub_lines": ["make it wider", "add a saved indicator"],
+                    }
+                ],
+            }
+        ]
+    }
+    result = await digest.run_parse(cfg, day, runner=FakeRunner(pass1_data))
+    assert result.total_entries == 1
+
+    todos = store.read_index(cfg, "todos")
+    entry_body = (cfg.home / "todos" / todos[0].file_path).read_text()
+    # the concrete second-level items survive in the rendered entry body
+    assert "- make it wider" in entry_body
+    assert "- add a saved indicator" in entry_body
+    # and only the parent line is annotated back in the journal
+    body = journal.read_body(cfg, day)
+    assert f"polish the journal page [→todo#{todos[0].id}]" in body
+    assert "make it wider [→" not in body
 
 
 @pytest.mark.anyio

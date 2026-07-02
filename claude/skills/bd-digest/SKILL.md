@@ -68,7 +68,7 @@ When in doubt between "new project" and "fold into existing", **prefer creating 
 For each candidate line:
 - **Skip** if the line already contains `[→` anywhere (it's been digested before — idempotent).
 - **Skip** empty lines, pure section labels with no content of their own, and meta-lines you wouldn't want as a separate entry.
-- For lines with sub-bullets, treat the parent line as the entry and fold the sub-bullets into the body of that entry.
+- For lines with sub-bullets / second-level items, treat the parent line as **one** entry — never split its sub-bullets into separate entries. Keep every sub-bullet in that entry's body as a markdown bullet list (verbatim, only fixing obvious typos); they are the concrete substance of the todo, so don't summarize them away.
 
 ### 5. Classify and create
 
@@ -88,7 +88,7 @@ For each line you decided to digest:
     --project project-name \
     --summary "one-line summary" \
     --original-input-file "$OI"
-  [Lightly cleaned-up body — fix typos, expand context from the line + any sub-bullets, but stay close to what the user actually wrote]
+  [Lightly cleaned-up body — fix typos, stay close to what the user wrote. If the line had sub-bullets, render them here as a markdown bullet list so every second-level item survives.]
   BODY_EOF
 
   rm -f "$OI"

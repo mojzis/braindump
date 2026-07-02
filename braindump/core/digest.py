@@ -188,6 +188,33 @@ def _item_is_valid(snapshot_lines: list[str], raw: dict[str, Any]) -> bool:
     return bool(str(raw.get("title") or "").strip())
 
 
+_BULLET_PREFIX_RE = re.compile(r"^\s*(?:[-*+•]|\d+[.)])\s+")
+
+
+def _normalize_sub_line(text: str) -> str:
+    """Strip any leading bullet/number marker and surrounding whitespace."""
+    return _BULLET_PREFIX_RE.sub("", text.strip()).strip()
+
+
+def render_body_with_sub_lines(body: str, sub_lines: Sequence[str]) -> str:
+    """Append the entry's sub-items to `body` as a markdown bullet list.
+
+    Second-level journal items (sub-bullets under an actionable line) are the
+    concrete substance of the entry, so they're rendered here in Python rather
+    than left to the model — neither pass is trusted to keep them, and pass 2
+    has been seen to overwrite a good body with a vague "no concrete list yet".
+    Each sub-line is normalized (leading marker stripped) and re-prefixed with
+    `- ` so the list renders cleanly regardless of how the model returned it.
+    """
+    items = [_normalize_sub_line(s) for s in sub_lines]
+    items = [s for s in items if s]
+    if not items:
+        return body
+    bullets = "\n".join(f"- {s}" for s in items)
+    body = body.strip()
+    return f"{body}\n\n{bullets}" if body else bullets
+
+
 def _string_list(value: Any) -> list[str]:
     """Coerce a model-supplied field to `list[str]`, never trusting its shape.
 
@@ -381,10 +408,15 @@ much harder to find later than stray projects are to merge.
 
 Selecting lines: skip lines that already contain `[→` anywhere (already
 digested — idempotent), skip blank lines, and skip lines that are pure
-section labels with no actionable content of their own. For a line with
-sub-bullets, treat the parent line as the entry and fold the sub-bullets
-into `sub_lines` (they become the entry's body context, not separate
-entries).
+section labels with no actionable content of their own.
+
+Sub-bullets / second-level items: when an actionable line has indented
+sub-bullets under it, treat the parent line as ONE entry and never split its
+sub-bullets into separate entries. Put each sub-bullet as its own string in
+`sub_lines` (verbatim, only fixing obvious typos). These are the concrete
+substance of the entry and are rendered into its body as a bullet list
+automatically, so keep `body` as short framing prose and do NOT re-list them
+there — and never summarize the concrete sub-items away.
 
 Classifying: pick `type` = "todo" (actionable, has a verb, a task or a
 question about doing something), "til" (something learned), "thought" (an
@@ -451,6 +483,7 @@ def build_pass2_prompt(project: str, items: Sequence[ValidatedItem]) -> str:
             "body": item.body,
             "summary": item.summary,
             "tags": item.tags,
+            "sub_lines": item.sub_lines,
         }
         for item in items
     ]
@@ -465,6 +498,11 @@ Rules:
 - Do NOT change `line` or `line_text` — return them byte-for-byte identical,
   they anchor these entries back to the journal.
 - You may improve `title` (still <=60 chars), `body`, `summary`, and `tags`.
+- `sub_lines` are the concrete second-level items the user wrote under this
+  line. They are read-only context and are rendered into the entry body
+  automatically — do NOT repeat them in `body`, and never write a `body` that
+  contradicts them (e.g. "no concrete list yet" when sub_lines is non-empty).
+  Keep `body` as short prose that frames those items.
 
 Items:
 {json.dumps(payload, ensure_ascii=False, indent=2)}
@@ -559,12 +597,15 @@ def _create_section_entries(
     for item in items:
         original_input = item.line_text
         if item.sub_lines:
-            original_input += "\n" + "\n".join(item.sub_lines)
+            original_input += "\n" + "\n".join(
+                f"  - {_normalize_sub_line(s)}" for s in item.sub_lines
+            )
+        body = render_body_with_sub_lines(item.body, item.sub_lines)
         create_result = entries.create_entry(
             cfg,
             item.type,
             item.title,
-            item.body,
+            body,
             tags=item.tags,
             project=project,
             summary=item.summary or None,
