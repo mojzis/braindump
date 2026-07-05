@@ -1,0 +1,43 @@
+name: CI
+
+# Lint, type-check, and test on every push and pull request.
+# Mirrors the local `poe check` task so CI matches what you run before pushing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --all-groups
+
+      - name: Lint
+        run: uv run poe lint
+
+      - name: Type-check
+        run: uv run poe typecheck
+
+      - name: Dead code
+        run: uv run poe dead-code
+
+      - name: Unused deps
+        run: uv run poe unused-deps
+
+      - name: Test
+        run: uv run poe test
