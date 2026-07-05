@@ -599,6 +599,8 @@ def doctor():
     """Validate indexes and report orphaned markdown files."""
     cfg = load_config()
     problems = 0
+    for tmp in store.sweep_stale_tmp(cfg):
+        typer.echo(f"REMOVED STALE TMP: {tmp.relative_to(cfg.home)}", err=True)
     for type_dir in ALL_TYPE_DIRS:
         idx = cfg.index_path(type_dir)
         if not idx.exists():

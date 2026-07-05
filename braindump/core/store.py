@@ -12,6 +12,8 @@ import json
 import os
 import re
 import shutil
+import tempfile
+import time
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,10 +93,57 @@ def next_id(cfg: Config) -> int:
 
 
 def atomic_write_text(path: Path, content: str) -> None:
+    """Atomically replace `path` with `content` (write-tmp-then-rename).
+
+    Guarantees no torn file and no crash under concurrent writers, but NOT a
+    lost-update guarantee: two concurrent writes to the same path are
+    last-writer-wins. Callers needing serialization must hold their own lock
+    (see `rewrite_index_atomic`, which wraps this pattern in `_locked`).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(content)
-    tmp.replace(path)
+    # Unique tmp name per write: a deterministic name (`.{name}.tmp`) collides
+    # when two writers target the same path concurrently (e.g. journal autosave
+    # racing the parse flush), so one replace() finds the tmp already moved.
+    # Orphans left by a hard crash are reclaimed by sweep_stale_tmp / bd doctor.
+    fd, tmp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    tmp = Path(tmp_name)
+    try:
+        # mkstemp forces 0o600; restore umask-respecting perms so files keep
+        # matching the rest of the store (e.g. index.jsonl at 0o644).
+        umask = os.umask(0)
+        os.umask(umask)
+        os.fchmod(fd, 0o666 & ~umask)
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
+def sweep_stale_tmp(cfg: Config, min_age_seconds: float = 60.0) -> list[Path]:
+    """Remove atomic-write tmp files (`.*.tmp`) orphaned by a hard crash.
+
+    A SIGKILL/power-loss between mkstemp and replace() leaves a hidden tmp
+    that no future write reclaims (unique names never collide). Only files
+    older than `min_age_seconds` are removed, so an in-flight concurrent write
+    is never yanked out from under itself. Returns the paths removed.
+    """
+    now = time.time()
+    removed: list[Path] = []
+    for tmp in cfg.home.rglob("*.tmp"):
+        if not tmp.name.startswith("."):
+            continue
+        try:
+            if now - tmp.stat().st_mtime < min_age_seconds:
+                continue
+            tmp.unlink()
+        except FileNotFoundError:
+            continue
+        removed.append(tmp)
+    return removed
 
 
 # --- frontmatter -----------------------------------------------------------

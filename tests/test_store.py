@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 
 from braindump.core import store
 from braindump.core.schema import Entry
@@ -66,6 +68,70 @@ def test_append_and_read_index(cfg):
     assert len(entries) == 1
     assert entries[0].id == 1
     assert entries[0].tags == ["a"]
+
+
+def test_atomic_write_text_round_trip(tmp_path):
+    p = tmp_path / "sub" / "f.md"
+    store.atomic_write_text(p, "hello")
+    assert p.read_text() == "hello"
+    store.atomic_write_text(p, "world")
+    assert p.read_text() == "world"
+    # no tmp litter left behind on the happy path
+    assert not list(p.parent.glob(".*.tmp"))
+
+
+def test_atomic_write_text_honors_umask(tmp_path):
+    old = os.umask(0o022)
+    try:
+        p = tmp_path / "f.md"
+        store.atomic_write_text(p, "x")
+        assert p.stat().st_mode & 0o777 == 0o644
+    finally:
+        os.umask(old)
+
+
+def test_atomic_write_text_concurrent_same_path(tmp_path):
+    """Regression: a deterministic tmp name made concurrent writes to the same
+    path race, and one replace() raised FileNotFoundError. Unique tmp names fix
+    it — many threads hammering one path must never crash, and the final file
+    must be one writer's full content (last-writer-wins, never torn)."""
+    p = tmp_path / "journal.md"
+    payloads = [f"content-{i}\n" * 200 for i in range(24)]
+    errors: list[BaseException] = []
+
+    def writer(text: str) -> None:
+        try:
+            for _ in range(10):
+                store.atomic_write_text(p, text)
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=writer, args=(t,)) for t in payloads]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert p.read_text() in payloads  # intact, one writer's full content
+    assert not list(p.parent.glob(".*.tmp"))  # every tmp reclaimed
+
+
+def test_sweep_stale_tmp(cfg):
+    stale = cfg.home / "todos" / ".old.md.abc.tmp"
+    stale.write_text("junk")
+    os.utime(stale, (0, 0))  # ancient mtime -> stale
+    fresh = cfg.home / "todos" / ".new.md.xyz.tmp"
+    fresh.write_text("in-flight")  # current mtime -> spared
+    keep = cfg.home / "todos" / "real.md"
+    keep.write_text("data")
+
+    removed = store.sweep_stale_tmp(cfg)
+
+    assert not stale.exists()
+    assert fresh.exists()
+    assert keep.exists()
+    assert removed == [stale]
 
 
 def test_rewrite_index_atomic(cfg):
