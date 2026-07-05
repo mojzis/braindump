@@ -143,6 +143,27 @@ def _journal_markdown(text: str) -> Markup:
     return Markup(_REF_CHIP_RE.sub(_ref_chip_sub, str(html)))  # noqa: S704
 
 
+class _SuppressShutdownCancel(logging.Filter):
+    """Drop uvicorn's "Exception in ASGI application" traceback when it's just
+    the long-lived `/events` SSE stream being force-cancelled on shutdown/reload.
+
+    `bd serve` runs with ``timeout_graceful_shutdown=0`` so Ctrl-C / --reload
+    don't hang on the never-closing SSE connection. The tradeoff is uvicorn
+    force-cancels the in-flight request, and starlette's StreamingResponse
+    disconnect-listener surfaces that as a `CancelledError` uvicorn logs at
+    ERROR. It's noise, not a real failure — filter exactly that record and
+    nothing else.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.getMessage().strip() != "Exception in ASGI application":
+            return True
+        exc = record.exc_info[1] if record.exc_info else None
+        return not isinstance(exc, asyncio.CancelledError)
+
+
+logging.getLogger("uvicorn.error").addFilter(_SuppressShutdownCancel())
+
 app = FastAPI(title="Braindump", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

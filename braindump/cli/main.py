@@ -643,6 +643,11 @@ def serve(
         host=host,
         port=port or cfg.port,
         reload=reload,
+        # The journal live-refresh SSE stream is a long-lived connection;
+        # without this, uvicorn's graceful shutdown blocks on it forever
+        # ("Waiting for connections to close. CTRL+C to force quit") on every
+        # Ctrl-C and every --reload restart. Force connections closed instead.
+        timeout_graceful_shutdown=0,
     )
 
 
