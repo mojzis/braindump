@@ -37,6 +37,10 @@
         <form hx-post="/api/journal/close" hx-swap="none">
           <button type="submit" title="finish today and open tomorrow">finish the day →</button>
         </form>
+        {% if past_days %}
+        <button type="button" id="earlier-days-btn" aria-expanded="false"
+                aria-controls="past-days-section" title="show earlier days">▸ earlier days</button>
+        {% endif %}
         <span id="autosave-dot" class="autosave-dot" data-status="idle" title="autosave status">
           <span class="autosave-mark"></span><span class="autosave-text">saved</span>
         </span>
@@ -46,12 +50,13 @@
         {% if job %}{% include "_parse_status.html" %}{% endif %}
       </div>
 
-      <details id="past-days-toggle" class="past-days-toggle">
-        <summary>earlier days</summary>
+      {% if past_days %}
+      <div id="past-days-section" class="past-days-section" hidden>
         <div id="past-days">
           {% include "_journal_day_section.html" %}
         </div>
-      </details>
+      </div>
+      {% endif %}
     {% endif %}
   </div>
 </div>

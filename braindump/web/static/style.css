@@ -139,15 +139,7 @@ body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: 
 .autosave-dot[data-status="saving"] .autosave-mark { background: var(--accent); }
 .autosave-dot[data-status="saved"] .autosave-mark { background: #6a9955; }
 
-.past-days-toggle { margin-top: 24px; }
-.past-days-toggle > summary {
-  cursor: pointer; color: var(--muted); font-size: 12px; text-transform: uppercase;
-  letter-spacing: 0.08em; list-style: none; padding: 6px 0; user-select: none;
-}
-.past-days-toggle > summary::-webkit-details-marker { display: none; }
-.past-days-toggle > summary::before { content: "▸ "; }
-.past-days-toggle[open] > summary::before { content: "▾ "; }
-.past-days-toggle > summary:hover { color: var(--accent); }
+.past-days-section { margin-top: 24px; }
 
 .parse-status { margin-top: 12px; font-family: system-ui, sans-serif; font-size: 13px; }
 .parse-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }

@@ -1,5 +1,25 @@
 (function () {
   "use strict";
+
+  // "earlier days" toggle lives in the always-visible sticky toolbar so it's
+  // reachable no matter how tall the editor grows. Wire it before the EasyMDE
+  // guard below, so it works even if the editor library fails to load.
+  var earlierBtn = document.getElementById("earlier-days-btn");
+  var pastSection = document.getElementById("past-days-section");
+  if (earlierBtn && pastSection) {
+    earlierBtn.addEventListener("click", function () {
+      var show = pastSection.hasAttribute("hidden");
+      if (show) {
+        pastSection.removeAttribute("hidden");
+        pastSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        pastSection.setAttribute("hidden", "");
+      }
+      earlierBtn.setAttribute("aria-expanded", show ? "true" : "false");
+      earlierBtn.textContent = (show ? "▾" : "▸") + " earlier days";
+    });
+  }
+
   var ta = document.getElementById("journal-editor");
   if (!ta || typeof EasyMDE === "undefined") return;
 
