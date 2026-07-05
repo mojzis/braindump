@@ -1,7 +1,9 @@
 name: CI
 
 # Lint, type-check, and test on every push and pull request.
-# Mirrors the local `poe check` task so CI matches what you run before pushing.
+# Runs the same checks as the local `poe check-all` task (minus the always-
+# passing vuln scan), one blocking step each, so CI matches what you run
+# before pushing.
 
 on:
   push:
