@@ -644,6 +644,21 @@ def serve(
     )
 
 
+@app.command("app")
+def app_cmd(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: Optional[int] = typer.Option(None, "--port"),
+):
+    """Run the web UI in a native desktop window (pywebview)."""
+    from braindump.web.desktop import run_app
+
+    try:
+        run_app(host=host, port=port)
+    except RuntimeError as e:
+        typer.echo(str(e), err=True)
+        raise typer.Exit(code=1) from e
+
+
 def main() -> None:
     app()
 

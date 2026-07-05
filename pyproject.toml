@@ -21,6 +21,10 @@ web = [
     "python-multipart>=0.0.32",
     "watchfiles>=1.2.0",
 ]
+app = [
+    "braindump[web]",
+    "pywebview>=5.4",
+]
 
 [dependency-groups]
 dev = [
