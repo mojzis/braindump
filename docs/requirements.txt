@@ -1,0 +1,4 @@
+# Documentation site dependencies (MkDocs + Material + llms.txt generation).
+# Used by .github/workflows/docs.yml and for local `mkdocs serve`.
+mkdocs-material>=9.5
+mkdocs-llmstxt>=0.2

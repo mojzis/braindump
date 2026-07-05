@@ -27,6 +27,10 @@ app = [
 ]
 
 [dependency-groups]
+docs = [
+    "mkdocs-material>=9.5",
+    "mkdocs-llmstxt>=0.2",
+]
 dev = [
     "pytest>=9.1.0",
     "pytest-cov",
