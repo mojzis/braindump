@@ -106,13 +106,19 @@ def test_atomic_write_text_concurrent_same_path(tmp_path):
         except BaseException as e:  # noqa: BLE001
             errors.append(e)
 
-    threads = [threading.Thread(target=writer, args=(t,)) for t in payloads]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    umask_before = os.umask(0o022)
+    os.umask(umask_before)
+    try:
+        threads = [threading.Thread(target=writer, args=(t,)) for t in payloads]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        umask_after = os.umask(umask_before)
 
     assert errors == []
+    assert umask_after == umask_before  # concurrent umask dance never corrupted it
     assert p.read_text() in payloads  # intact, one writer's full content
     assert not list(p.parent.glob(".*.tmp"))  # every tmp reclaimed
 

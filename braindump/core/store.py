@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import time
 from collections.abc import Iterator
 from datetime import datetime, timezone
@@ -91,6 +92,12 @@ def next_id(cfg: Config) -> int:
 
 # --- atomic text write -----------------------------------------------------
 
+# `os.umask` is process-global: it reads *and* sets in one call, so the
+# read-then-restore dance below is a race. Serialize just that pair so
+# concurrent writers (journal autosave vs. parse flush) can't interleave into
+# a bad mode or leave the process umask stuck at 0.
+_UMASK_LOCK = threading.Lock()
+
 
 def atomic_write_text(path: Path, content: str) -> None:
     """Atomically replace `path` with `content` (write-tmp-then-rename).
@@ -112,8 +119,9 @@ def atomic_write_text(path: Path, content: str) -> None:
     try:
         # mkstemp forces 0o600; restore umask-respecting perms so files keep
         # matching the rest of the store (e.g. index.jsonl at 0o644).
-        umask = os.umask(0)
-        os.umask(umask)
+        with _UMASK_LOCK:
+            umask = os.umask(0)
+            os.umask(umask)
         os.fchmod(fd, 0o666 & ~umask)
         with os.fdopen(fd, "w") as f:
             f.write(content)
