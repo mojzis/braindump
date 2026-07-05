@@ -213,4 +213,7 @@ pytest                 # run the core test suite
 bd serve               # local web UI
 ```
 
-When you finish a coding task in this repo, run the `python-review` skill over the changed Python before reporting done.
+When you finish a coding task in this repo, commit the change first, then run
+the `python-review` skill over the changed Python (cml-style: commit, then
+review the committed diff). Act on anything it flags — as a follow-up commit —
+before reporting done.
