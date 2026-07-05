@@ -76,6 +76,8 @@
           return;
         }
         if (isTyping(e)) return;
+        // Don't hijack native shortcuts like Ctrl/⌘+C (copy), Ctrl+R, etc.
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
         if (e.key === "?") { e.preventDefault(); DIALOG.showModal(); return; }
         if (e.key === "c") { e.preventDefault(); window.location = "/capture"; return; }
         if (e.key === "/") {
