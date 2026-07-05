@@ -27,6 +27,11 @@
   var todayForm = document.getElementById("today-editor-form");
   var parseForm = document.getElementById("parse-form");
   var dot = document.getElementById("autosave-dot");
+  var banner = document.getElementById("save-error-banner");
+
+  // Set true on every edit, cleared only by a confirmed-successful save.
+  // Guards the beforeunload prompt and gates the error banner.
+  var unsaved = false;
 
   var mde = new EasyMDE({
     element: ta,
@@ -86,6 +91,7 @@
   // contract (`hx-trigger="input ... from:textarea"` on the surrounding form).
   mde.codemirror.on("change", function () {
     ta.value = mde.value();
+    unsaved = true;
     htmx.trigger(ta, "input");
   });
 
@@ -106,6 +112,9 @@
       })
       .finally(function () {
         mde.codemirror.setOption("readOnly", false);
+        // Parse already flushed to disk; the programmatic value set above
+        // fires `change` and would otherwise leave a spurious dirty flag.
+        unsaved = false;
       });
   }
 
@@ -125,11 +134,31 @@
       dot.dataset.status = status;
       if (dotText) dotText.textContent = text;
     };
+    var showError = function () {
+      unsaved = true;
+      setDot("error", "not saved!");
+      if (banner) banner.hidden = false;
+    };
     setDot("idle", "");
     todayForm.addEventListener("htmx:beforeRequest", function () { setDot("saving", "saving…"); });
-    todayForm.addEventListener("htmx:afterRequest", function () {
+    todayForm.addEventListener("htmx:afterRequest", function (e) {
+      // `successful` is false for any non-2xx response; network failures
+      // (server down) surface via htmx:sendError below.
+      if (!e.detail.successful) { showError(); return; }
+      unsaved = false;
+      if (banner) banner.hidden = true;
       setDot("saved", "saved");
-      setTimeout(function () { setDot("idle", ""); }, 1600);
+      setTimeout(function () { if (dot.dataset.status === "saved") setDot("idle", ""); }, 1600);
     });
+    // Fired when the request never reaches the server (connection refused,
+    // offline). afterRequest may not fire in this case, so handle it directly.
+    todayForm.addEventListener("htmx:sendError", showError);
+    todayForm.addEventListener("htmx:timeout", showError);
   }
+
+  // Last line of defense: warn before unloading a tab that holds unsaved edits,
+  // so a stray refresh can't silently drop writing the server never accepted.
+  window.addEventListener("beforeunload", function (e) {
+    if (unsaved) { e.preventDefault(); e.returnValue = ""; }
+  });
 })();
