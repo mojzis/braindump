@@ -51,6 +51,36 @@
   });
   mde.codemirror.setOption("mode", "bd-refs");
 
+  // Ctrl/⌘-click a `[→type#id]` mark to open the entry in a new tab. Plain
+  // clicks fall through to normal cursor placement.
+  var REF_RE = /\[→(todo|til|thought|prompt)#(\d+)\]/g;
+  mde.codemirror.on("mousedown", function (cm, e) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    var pos = cm.coordsChar({ left: e.clientX, top: e.clientY });
+    var line = cm.getLine(pos.line);
+    if (!line) return;
+    REF_RE.lastIndex = 0;
+    var m;
+    while ((m = REF_RE.exec(line)) !== null) {
+      if (pos.ch >= m.index && pos.ch < m.index + m[0].length) {
+        CM.e_preventDefault(e);
+        window.open("/entries/" + m[2], "_blank");
+        return;
+      }
+    }
+  });
+
+  // Toggle the `ref-clickable` affordance on the paper while a modifier is held.
+  var paper = ta.closest(".paper");
+  if (paper) {
+    var syncModifier = function (e) {
+      paper.classList.toggle("ref-clickable", e.metaKey || e.ctrlKey);
+    };
+    document.addEventListener("keydown", syncModifier);
+    document.addEventListener("keyup", syncModifier);
+    window.addEventListener("blur", function () { paper.classList.remove("ref-clickable"); });
+  }
+
   // EasyMDE swallows native `input` events on the textarea, so sync the
   // hidden textarea by hand and re-fire `input` to preserve the autosave
   // contract (`hx-trigger="input ... from:textarea"` on the surrounding form).

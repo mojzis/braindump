@@ -104,6 +104,8 @@ ul li { margin: 6px 0; }
 .paper .CodeMirror-cursor { border-left-color: var(--fg); }
 .paper .cm-header { font-weight: 650; }
 .paper .cm-bd-ref { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 2px; }
+/* Ctrl/⌘ held → ref marks read as clickable (journal-editor.js opens the entry). */
+.paper.ref-clickable .cm-bd-ref { cursor: pointer; text-decoration: underline; }
 body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: none; }
 
 .day-sep { display: flex; align-items: center; gap: 12px; margin: 30px 0 14px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
