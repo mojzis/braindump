@@ -50,6 +50,7 @@ bd update 42 --tags a,b --project foo # patch metadata
 bd project focus braindump            # scope all queries to a project
 bd journal today                      # today's journal state
 bd serve                              # local web UI at http://127.0.0.1:8765/
+bd app                                # same UI in a native desktop window
 ```
 
 ### Web UI
@@ -66,7 +67,18 @@ bd serve                              # local web UI at http://127.0.0.1:8765/
 
 Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` for help.
 
-### Claude skills
+### Desktop window
+
+`bd app` runs the exact same web UI, but inside a native [pywebview](https://pywebview.flet.dev/)
+window instead of a browser tab — a lightweight way to keep braindump open as its
+own app locally. It's not a packaged/bundled build: it just starts the server and
+points a window at it. Requires the `[app]` extra:
+
+```bash
+uv tool install --force --reinstall --no-cache ".[app]"
+```
+
+Without it, `bd app` prints an install hint and falls back to suggesting `bd serve`.
 
 Start a new Claude Code session after installation. Available:
 
