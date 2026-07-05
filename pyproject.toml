@@ -20,6 +20,7 @@ web = [
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
     "watchfiles>=1.2.0",
+    "markupsafe>=2.1",
 ]
 app = [
     "braindump[web]",
@@ -92,7 +93,15 @@ paths = ["braindump"]
 min_confidence = 80
 
 [tool.deptry]
-per_rule_ignores = {"DEP003" = ["braindump"]}
+# pywebview's import name is `webview`, and it's an optional-extra dep loaded
+# lazily inside desktop.py — teach deptry the mapping so it isn't flagged.
+package_module_name_map = {"pywebview" = ["webview"]}
+
+[tool.deptry.per_rule_ignores]
+# braindump self-references its own `web` extra from the `app` extra.
+DEP002 = ["jinja2", "python-multipart", "braindump"]
+# jinja2 (via fastapi.templating) and python-multipart (form parsing) are used
+# by FastAPI at runtime without a direct import; braindump is the self-ref.
 
 [tool.poe]
 verbosity = -1

@@ -10,12 +10,14 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import typer
 
 from braindump.core import entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
+from braindump.core.query import StatusFilter
 from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, Entry, type_to_dir
 
 app = typer.Typer(
@@ -51,6 +53,10 @@ def _emit_hit_json(hit: query.Hit) -> None:
 def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
+    return date.fromisoformat(value)
+
+
+def _require_date(value: str) -> date:
     return date.fromisoformat(value)
 
 
@@ -214,7 +220,7 @@ def search(
         q=q or None,
         types=types,
         project=proj,
-        status=status,  # type: ignore[arg-type]
+        status=cast(StatusFilter, status),
         tags=tag,
         since=_parse_date(since),
         until=_parse_date(until),
@@ -457,7 +463,7 @@ def journal_append(
     if not body.strip():
         typer.echo("No text to append.", err=True)
         raise typer.Exit(code=1)
-    d = _parse_date(target_day) if target_day else journal.current_day(cfg)
+    d = _require_date(target_day) if target_day else journal.current_day(cfg)
     entry = journal.append_text(cfg, d, body)
     typer.echo(f"appended: {d.isoformat()} words: {entry.word_count or 0}")
 
@@ -473,7 +479,7 @@ def journal_close():
 @journal_app.command("show")
 def journal_show(day: str = typer.Argument(..., help="YYYY-MM-DD")):
     cfg = load_config()
-    typer.echo(journal.read_body(cfg, _parse_date(day)))
+    typer.echo(journal.read_body(cfg, _require_date(day)))
 
 
 # --- projects --------------------------------------------------------------
