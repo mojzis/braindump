@@ -35,6 +35,7 @@
             no entries created
           {% endfor %}
           {% if job.result.total_entries %}({{ job.result.total_entries }} total){% endif %}
+          {% if job.result.dropped %} · {{ job.result.dropped }} dropped{% endif %}
           {% if job.result.unanchored %} · {{ job.result.unanchored | length }} unanchored{% endif %}
           {% if job.result.errors %} · {{ job.result.errors | length }} errors{% endif %}
         </p>

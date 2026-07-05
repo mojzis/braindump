@@ -134,6 +134,23 @@ def test_validate_pass1_keeps_valid_item_and_slugifies_project():
     assert result[0].items[0].title == "T"
 
 
+def test_validate_pass1_tolerates_bullet_stripped_line_text():
+    # The model routinely echoes `line_text` with the leading "- " bullet
+    # stripped. The item must still anchor, and line_text must be stored as the
+    # ground-truth full line so annotation lands on the real bullet.
+    snapshot = ["- when developing in a branch, isolate the db"]
+    data = {
+        "sections": [
+            _section(
+                "proj", line=0, line_text="when developing in a branch, isolate the db"
+            )
+        ]
+    }
+    result = digest.validate_pass1(snapshot, data, [])
+    assert len(result) == 1
+    assert result[0].items[0].line_text == "- when developing in a branch, isolate the db"
+
+
 def test_validate_pass1_drops_blank_title():
     snapshot = ["a real actionable line"]
     data = {

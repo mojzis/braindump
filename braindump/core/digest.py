@@ -24,6 +24,7 @@ mark back per section.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Sequence
@@ -39,6 +40,8 @@ from braindump.core.config import Config
 
 ProgressCallback = Callable[[str, str], None]
 Runner = Callable[..., Awaitable[dict[str, Any]]]
+
+logger = logging.getLogger("braindump.digest")
 
 ENTRY_TYPES = ("todo", "til", "thought", "prompt")
 
@@ -172,20 +175,31 @@ class ValidatedSection:
     items: list[ValidatedItem] = field(default_factory=list)
 
 
-def _item_is_valid(snapshot_lines: list[str], raw: dict[str, Any]) -> bool:
+def _resolve_anchor(snapshot_lines: list[str], raw: dict[str, Any]) -> str | None:
+    """Return the ground-truth journal line this item anchors to, or None.
+
+    The model is asked to echo `line_text` verbatim, but it routinely strips a
+    leading bullet/number marker (``- foo`` -> ``foo``). Rather than silently
+    drop the item, accept the match when the model's text equals the snapshot
+    line after both are bullet-normalized, and always return the *snapshot*
+    line so downstream annotation anchors to the real, full line.
+    """
     idx = raw.get("line")
     if not isinstance(idx, int) or isinstance(idx, bool):
-        return False
+        return None
     if idx < 0 or idx >= len(snapshot_lines):
-        return False
+        return None
+    actual = snapshot_lines[idx]
+    if "[→" in actual:
+        return None
     line_text = raw.get("line_text")
-    if not isinstance(line_text, str) or snapshot_lines[idx] != line_text:
-        return False
-    if "[→" in snapshot_lines[idx]:
-        return False
-    if raw.get("type") not in ENTRY_TYPES:
-        return False
-    return bool(str(raw.get("title") or "").strip())
+    if not isinstance(line_text, str):
+        return None
+    if actual == line_text:
+        return actual
+    if _normalize_sub_line(actual) == _normalize_sub_line(line_text):
+        return actual
+    return None
 
 
 _BULLET_PREFIX_RE = re.compile(r"^\s*(?:[-*+•]|\d+[.)])\s+")
@@ -230,16 +244,18 @@ def _string_list(value: Any) -> list[str]:
 def _validate_item(
     snapshot_lines: list[str], raw: dict[str, Any]
 ) -> ValidatedItem | None:
-    if not _item_is_valid(snapshot_lines, raw):
+    actual = _resolve_anchor(snapshot_lines, raw)
+    if actual is None:
         return None
-    idx = raw["line"]
-    line_text = raw["line_text"]
-    item_type = raw["type"]
+    if raw.get("type") not in ENTRY_TYPES:
+        return None
     title = str(raw.get("title") or "").strip()
+    if not title:
+        return None
     return ValidatedItem(
-        line=idx,
-        line_text=line_text,
-        type=item_type,
+        line=raw["line"],
+        line_text=actual,
+        type=raw["type"],
         title=title,
         body=str(raw.get("body") or "").strip(),
         summary=str(raw.get("summary") or "").strip(),
@@ -528,6 +544,8 @@ class ParseResult:
     sections: list[SectionResult] = field(default_factory=list)
     unanchored: list[Annotation] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    proposed: int = 0
+    dropped: int = 0
 
     @property
     def total_entries(self) -> int:
@@ -669,6 +687,29 @@ async def run_parse(
     existing_names = [p.name for p in project_stats]
     sections = validate_pass1(snapshot_lines, pass1_data, existing_names)
     local_dirs = {p.name: p.local_dir for p in project_stats}
+
+    result.proposed = sum(
+        sum(1 for it in s.get("items", []) if isinstance(it, dict))
+        for s in pass1_data.get("sections", [])
+        if isinstance(s, dict)
+    )
+    kept = sum(len(s.items) for s in sections)
+    result.dropped = max(0, result.proposed - kept)
+    logger.info(
+        "parse %s: pass 1 proposed %d item(s) in %d section(s); kept %d, dropped %d",
+        day,
+        result.proposed,
+        len(sections),
+        kept,
+        result.dropped,
+    )
+    if result.dropped:
+        logger.warning(
+            "parse %s: %d proposed item(s) dropped in validation "
+            "(line index / line_text mismatch or already digested)",
+            day,
+            result.dropped,
+        )
 
     for section in sections:
         _report(section.project, "queued")
