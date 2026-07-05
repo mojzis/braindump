@@ -1,0 +1,144 @@
+site_name: Braindump
+site_description: >-
+  A portable, Claude Code-integrated personal knowledge management system —
+  todos, TILs, thoughts, prompts, and a daily journal as plain markdown with a
+  bd CLI, a local web UI, and /bd-* Claude slash-skills.
+site_author: Matous Mojzis
+site_url: https://mojzis.github.io/braindump/
+
+repo_name: mojzis/braindump
+repo_url: https://github.com/mojzis/braindump
+edit_uri: edit/main/docs/
+
+copyright: Copyright &copy; Matous Mojzis — MIT licensed
+
+# Keep the docs build-deps file next to the docs, but don't publish it.
+exclude_docs: |
+  requirements.txt
+
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/brain
+    repo: fontawesome/brands/github
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - content.action.edit
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Guides:
+      - CLI (bd): guides/cli.md
+      - Web UI: guides/web-ui.md
+      - Journal: guides/journal.md
+      - Claude skills: guides/claude-skills.md
+  - Reference:
+      - Data format: reference/data-format.md
+      - Architecture: reference/architecture.md
+  - For LLMs: llms.md
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.betterem
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: >-
+        Braindump is a portable, Claude Code-integrated personal knowledge
+        management system. It captures todos, TILs (Today I Learned), thoughts,
+        prompts, projects, and a daily journal as plain markdown files with JSONL
+        indexes. Three surfaces — the `bd` CLI, a local FastAPI + htmx web UI, and
+        a set of `/bd-*` Claude slash-skills — all run through one shared Python
+        core in `braindump/core/`.
+      sections:
+        Getting started:
+          - index.md
+          - getting-started/installation.md
+          - getting-started/quickstart.md
+        Guides:
+          - guides/cli.md
+          - guides/web-ui.md
+          - guides/journal.md
+          - guides/claude-skills.md
+        Reference:
+          - reference/data-format.md
+          - reference/architecture.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/mojzis/braindump
+      name: Braindump on GitHub
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css

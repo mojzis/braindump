@@ -1,0 +1,60 @@
+name: Docs
+
+# Build the MkDocs site and deploy it to GitHub Pages.
+#
+# One-time setup: in the repository's Settings → Pages, set
+# "Build and deployment" → Source to "GitHub Actions". No gh-pages branch is
+# used — the site is served straight from the artifact this workflow uploads.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - mkdocs.yml
+      - .github/workflows/docs.yml
+  # Allow building from the Actions tab (e.g. for the first deploy, or from a
+  # branch before it's merged to main).
+  workflow_dispatch:
+
+# Least-privilege token scoped to what Pages deployment needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once; let an in-progress run finish rather than
+# cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build site (strict)
+        run: |
+          uv run --with-requirements docs/requirements.txt \
+            mkdocs build --strict --site-dir site
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

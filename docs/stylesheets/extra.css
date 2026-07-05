@@ -1,0 +1,29 @@
+/* Braindump docs — small polish on top of Material defaults. */
+
+:root {
+  --md-primary-fg-color: #6a4bc0;
+  --md-primary-fg-color--light: #8b6fe0;
+  --md-primary-fg-color--dark: #4a2f9c;
+  --md-accent-fg-color: #7c5cff;
+}
+
+/* A slightly more generous home hero. */
+.md-typeset h1 {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Make the "three surfaces" cards feel like a grid on the home page. */
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.6rem;
+}
+
+/* Tighten inline code so command references read cleanly. */
+.md-typeset code {
+  border-radius: 0.25rem;
+}
+
+/* Give the LLM-context download callouts a touch more presence. */
+.md-typeset .admonition.tip {
+  border-left-width: 0.2rem;
+}
