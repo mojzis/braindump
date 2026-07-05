@@ -35,7 +35,8 @@ def test_create_todo_round_trip(cfg):
     assert "raw user text" in text
     assert 'tags: ["auth", "bug"]' in text
     assert "status: pending" in text
-    assert "summary" not in text.split("---", 2)[1]  # summary lives in JSONL, not frontmatter
+    # summary lives in JSONL, not frontmatter
+    assert "summary" not in text.split("---", 2)[1]
 
     stored = store.read_index(cfg, "todos")
     assert len(stored) == 1
@@ -62,7 +63,9 @@ def test_update_entry_rewrites_title_and_index(cfg):
     r = entries.create_entry(
         cfg, "todos", "old title", "body", tags=["a"], project="p", now=_fake_now()
     )
-    updated = entries.update_entry(cfg, r.entry.id, {"title": "new title", "tags": ["b"]})
+    updated = entries.update_entry(
+        cfg, r.entry.id, {"title": "new title", "tags": ["b"]}
+    )
     assert updated.title == "new title"
     assert updated.tags == ["b"]
     text = r.full_path.read_text()

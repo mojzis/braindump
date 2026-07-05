@@ -103,7 +103,7 @@ def test_atomic_write_text_concurrent_same_path(tmp_path):
         try:
             for _ in range(10):
                 store.atomic_write_text(p, text)
-        except BaseException as e:  # noqa: BLE001
+        except BaseException as e:
             errors.append(e)
 
     umask_before = os.umask(0o022)

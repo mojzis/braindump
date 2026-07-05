@@ -148,7 +148,9 @@ def test_validate_pass1_tolerates_bullet_stripped_line_text():
     }
     result = digest.validate_pass1(snapshot, data, [])
     assert len(result) == 1
-    assert result[0].items[0].line_text == "- when developing in a branch, isolate the db"
+    assert (
+        result[0].items[0].line_text == "- when developing in a branch, isolate the db"
+    )
 
 
 def test_validate_pass1_drops_blank_title():
@@ -320,7 +322,9 @@ def test_render_body_with_sub_lines_appends_bullets():
 
 
 def test_render_body_with_sub_lines_normalizes_existing_markers():
-    out = digest.render_body_with_sub_lines("", ["- do a", "* do b", "1. do c", "  do d"])
+    out = digest.render_body_with_sub_lines(
+        "", ["- do a", "* do b", "1. do c", "  do d"]
+    )
     assert out == "- do a\n- do b\n- do c\n- do d"
 
 

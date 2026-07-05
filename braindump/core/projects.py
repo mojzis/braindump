@@ -112,9 +112,9 @@ def _accumulate(bucket: ProjectStats, entry: Entry) -> None:
 
 __all__ = [
     "ProjectStats",
-    "list_projects",
-    "project_stats",
     "find_project_entry",
     "get_active_project",
+    "list_projects",
+    "project_stats",
     "set_active_project",
 ]

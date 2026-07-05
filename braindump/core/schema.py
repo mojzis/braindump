@@ -4,7 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 EntryType = Literal["todo", "til", "thought", "prompt", "journal", "project"]
 
 TODO_STATUSES = ("pending", "in-progress", "done")
@@ -27,7 +26,7 @@ ALL_TYPE_DIRS: tuple[str, ...] = tuple(TYPE_TO_DIR.values())
 
 
 def type_to_dir(type_or_dir: str) -> str:
-    """Accept either a type name ('todo') or a directory name ('todos') and return the dir."""
+    """Accept a type name ('todo') or directory name ('todos'); return the dir."""
     if type_or_dir in TYPE_TO_DIR:
         return TYPE_TO_DIR[type_or_dir]
     if type_or_dir in DIR_TO_TYPE:

@@ -49,7 +49,10 @@ def test_search_filter_by_project(cfg):
     _seed(cfg)
     hits = query.search(cfg, query.SearchFilters(project="alpha"))
     assert len(hits) == 2
-    assert {h.entry.title for h in hits} == {"Ship deploy pipeline", "Ripgrep glob trick"}
+    assert {h.entry.title for h in hits} == {
+        "Ship deploy pipeline",
+        "Ripgrep glob trick",
+    }
 
 
 def test_search_filter_by_status_open(cfg):

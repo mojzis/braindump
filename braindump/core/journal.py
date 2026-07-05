@@ -71,7 +71,7 @@ def get_or_create_day(
     *,
     project: str | None = None,
 ) -> Entry:
-    """Return the journal entry for day `d`, creating the file and index row if missing."""
+    """Journal entry for day `d`, creating the file and index row if missing."""
     existing = get_day_entry(cfg, d)
     if existing:
         return existing
@@ -208,7 +208,9 @@ def close_today(cfg: Config, *, project: str | None = None) -> Entry:
     return next_entry
 
 
-def previous_day_with_content(cfg: Config, d: date, max_look_back: int = 30) -> date | None:
+def previous_day_with_content(
+    cfg: Config, d: date, max_look_back: int = 30
+) -> date | None:
     for i in range(1, max_look_back + 1):
         candidate = d - timedelta(days=i)
         entry = get_day_entry(cfg, candidate)

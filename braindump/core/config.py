@@ -5,7 +5,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 DEFAULT_DAY_CUTOFF_HOUR = 4
 DEFAULT_PORT = 8765
 

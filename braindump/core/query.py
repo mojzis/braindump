@@ -13,14 +13,14 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Iterable, Literal
+from typing import Literal
 
 from braindump.core import store
 from braindump.core.config import Config
 from braindump.core.schema import ALL_TYPE_DIRS, Entry, type_to_dir
-
 
 StatusFilter = Literal["open", "done", "all"]
 
@@ -55,12 +55,10 @@ def _created_date(entry: Entry) -> date | None:
 def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
     if f.project is not None and entry.project != f.project:
         return False
-    if f.status == "open":
-        if entry.status == "done":
-            return False
-    elif f.status == "done":
-        if entry.status != "done":
-            return False
+    if f.status == "open" and entry.status == "done":
+        return False
+    if f.status == "done" and entry.status != "done":
+        return False
     if f.tags:
         entry_tags = set(entry.tags or [])
         if not all(t in entry_tags for t in f.tags):
@@ -142,7 +140,7 @@ def search(cfg: Config, f: SearchFilters) -> list[Hit]:
 
 
 def _rg_matches(cfg: Config, type_dir: str, words: list[str]) -> list[str]:
-    """Return relative file paths in `type_dir` whose markdown body matches every word."""
+    """Relative paths in `type_dir` whose markdown body matches every word."""
     root = cfg.type_dir(type_dir)
     if not root.exists():
         return []
@@ -172,12 +170,8 @@ def _rg_matches(cfg: Config, type_dir: str, words: list[str]) -> list[str]:
             return []
         files = [p for p in filtered.stdout.splitlines() if p]
 
-    rels: list[str] = []
     root_str = str(root).rstrip("/") + "/"
-    for p in files:
-        if p.startswith(root_str):
-            rels.append(p[len(root_str) :])
-    return rels
+    return [p[len(root_str) :] for p in files if p.startswith(root_str)]
 
 
 def _lookup_by_file_path(cfg: Config, type_dir: str, file_path: str) -> Entry | None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,16 +16,15 @@ from braindump.core.config import Config
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     Entry,
-    TYPE_TO_DIR,
     dir_to_type,
     type_to_dir,
 )
 
-
 # --- details block ---------------------------------------------------------
 
 _DETAILS_RE = re.compile(
-    r"(?ms)^\s*---\s*\n\s*<details>\s*\n\s*<summary>Original input</summary>.*?</details>\s*$"
+    r"(?ms)^\s*---\s*\n\s*<details>\s*\n\s*"
+    r"<summary>Original input</summary>.*?</details>\s*$"
 )
 
 
@@ -92,7 +91,7 @@ class CreateResult:
     full_path: Path
 
 
-def create_entry(
+def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a schema column
     cfg: Config,
     type_name: str,
     title: str,
@@ -123,12 +122,14 @@ def create_entry(
         # a project does not belong to itself
         project = None
     if now is None:
-        now = datetime.now()
+        now = datetime.now(UTC)
         created_at = store.utcnow_iso()
-    else:
+    elif now.tzinfo:
         # Caller supplied the clock — use it for both the file path and the
         # stamp so tests and CLI backfills stay consistent.
-        created_at = now.astimezone().strftime("%Y-%m-%dT%H:%M:%SZ") if now.tzinfo else now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        created_at = now.astimezone().strftime("%Y-%m-%dT%H:%M:%SZ")
+    else:
+        created_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     slug = store.slugify(title)
     stem = store.file_stem(slug, now)
     rel_dir = store.date_path(now)
@@ -152,9 +153,7 @@ def create_entry(
     if original_input is not None:
         entry_fields["input"] = original_input
     if type_fields:
-        for k, v in type_fields.items():
-            if v is not None:
-                entry_fields[k] = v
+        entry_fields.update({k: v for k, v in type_fields.items() if v is not None})
 
     entry = Entry.model_validate(entry_fields)
 
@@ -178,7 +177,7 @@ def _frontmatter_from_entry(entry: Entry) -> dict[str, Any]:
 
 
 def find_by_id(cfg: Config, entry_id: int) -> tuple[str, Entry] | None:
-    """Scan every index for the entry with this id. Returns (type_dir, Entry) or None."""
+    """Scan every index for this id. Returns (type_dir, Entry) or None."""
     for type_dir in ALL_TYPE_DIRS:
         for entry in store.read_index(cfg, type_dir):
             if entry.id == entry_id:
@@ -189,10 +188,7 @@ def find_by_id(cfg: Config, entry_id: int) -> tuple[str, Entry] | None:
 def find_by_file_path(
     cfg: Config, file_path: str, type_or_dir: str | None = None
 ) -> tuple[str, Entry] | None:
-    if type_or_dir:
-        type_dirs = [type_to_dir(type_or_dir)]
-    else:
-        type_dirs = list(ALL_TYPE_DIRS)
+    type_dirs = [type_to_dir(type_or_dir)] if type_or_dir else list(ALL_TYPE_DIRS)
     for type_dir in type_dirs:
         for entry in store.read_index(cfg, type_dir):
             if entry.file_path == file_path:
@@ -255,7 +251,7 @@ def update_entry(
     # rewrite markdown file: new frontmatter + (maybe) new body
     full_path = store.full_path_for(cfg, type_dir, entry.file_path)
     _, current_md_body = store.read_markdown(full_path)
-    heading, authored, details = split_body(current_md_body)
+    _heading, authored, details = split_body(current_md_body)
 
     new_title = patch.get("title", entry.title)
     new_heading = f"# {new_title}"

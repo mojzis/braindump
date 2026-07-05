@@ -46,7 +46,7 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
     Blocks until the window is closed, then shuts the server down.
     """
     try:
-        import webview  # ty: ignore[unresolved-import]  # optional 'app' extra
+        import webview  # noqa: PLC0415  # ty: ignore[unresolved-import]  # optional 'app' extra
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise RuntimeError(
             "pywebview is not installed. Install the desktop extra:\n"

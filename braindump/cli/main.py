@@ -10,14 +10,13 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 import typer
 
-from braindump.core import entries, journal, projects, query, store, tags as tags_mod
+from braindump.core import entries, journal, projects, query, store
+from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
 from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, Entry, type_to_dir
-
 
 app = typer.Typer(
     help="Braindump CLI — personal knowledge management.",
@@ -49,19 +48,19 @@ def _emit_hit_json(hit: query.Hit) -> None:
     typer.echo(json.dumps(data, ensure_ascii=False))
 
 
-def _parse_date(value: Optional[str]) -> Optional[date]:
+def _parse_date(value: str | None) -> date | None:
     if not value:
         return None
     return date.fromisoformat(value)
 
 
-def _split_csv(value: Optional[str]) -> list[str]:
+def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-def _effective_project(explicit: Optional[str], cfg) -> Optional[str]:
+def _effective_project(explicit: str | None, cfg) -> str | None:
     """Honor the active-project filter unless the caller passed --all or --project."""
     if explicit is not None:
         return explicit
@@ -73,38 +72,41 @@ def _effective_project(explicit: Optional[str], cfg) -> Optional[str]:
 
 @app.command()
 def create(
-    entry_type: str = typer.Argument(..., metavar="TYPE", help="todo, til, thought, prompt, project"),
+    entry_type: str = typer.Argument(
+        ..., metavar="TYPE", help="todo, til, thought, prompt, project"
+    ),
     title: str = typer.Argument(..., help="Entry title"),
     tag: list[str] = typer.Option([], "--tag", "-t", help="Tag (repeatable)"),
-    project: Optional[str] = typer.Option(None, "--project", "-p"),
-    summary: Optional[str] = typer.Option(None, "--summary", "-s"),
-    status: Optional[str] = typer.Option(None, "--status"),
-    priority: Optional[str] = typer.Option(None, "--priority"),
-    subtype: Optional[str] = typer.Option(None, "--subtype"),
-    category: Optional[str] = typer.Option(None, "--category"),
-    source: Optional[str] = typer.Option(None, "--source"),
-    mood: Optional[str] = typer.Option(None, "--mood"),
-    related_to: Optional[str] = typer.Option(None, "--related-to"),
-    prompt_type: Optional[str] = typer.Option(None, "--prompt-type"),
-    model_target: Optional[str] = typer.Option(None, "--model-target"),
-    due_date: Optional[str] = typer.Option(None, "--due-date"),
-    description: Optional[str] = typer.Option(None, "--description"),
-    state: Optional[str] = typer.Option(None, "--state"),
-    area: Optional[str] = typer.Option(None, "--area", help="Project grouping (project type; free-form, reused like a tag)"),
-    local_dir: Optional[str] = typer.Option(None, "--local-dir"),
+    project: str | None = typer.Option(None, "--project", "-p"),
+    summary: str | None = typer.Option(None, "--summary", "-s"),
+    status: str | None = typer.Option(None, "--status"),
+    priority: str | None = typer.Option(None, "--priority"),
+    subtype: str | None = typer.Option(None, "--subtype"),
+    category: str | None = typer.Option(None, "--category"),
+    source: str | None = typer.Option(None, "--source"),
+    mood: str | None = typer.Option(None, "--mood"),
+    related_to: str | None = typer.Option(None, "--related-to"),
+    prompt_type: str | None = typer.Option(None, "--prompt-type"),
+    model_target: str | None = typer.Option(None, "--model-target"),
+    due_date: str | None = typer.Option(None, "--due-date"),
+    description: str | None = typer.Option(None, "--description"),
+    state: str | None = typer.Option(None, "--state"),
+    area: str | None = typer.Option(
+        None,
+        "--area",
+        help="Project grouping (project type; free-form, reused like a tag)",
+    ),
+    local_dir: str | None = typer.Option(None, "--local-dir"),
     tech: list[str] = typer.Option([], "--tech", help="Tech stack entry (repeatable)"),
-    original_input: Optional[str] = typer.Option(None, "--original-input"),
-    original_input_file: Optional[Path] = typer.Option(None, "--original-input-file"),
-    body_file: Optional[Path] = typer.Option(None, "--body-file"),
+    original_input: str | None = typer.Option(None, "--original-input"),
+    original_input_file: Path | None = typer.Option(None, "--original-input-file"),
+    body_file: Path | None = typer.Option(None, "--body-file"),
 ):
     """Create a new entry. Body is read from stdin unless --body-file is given."""
     cfg = load_config()
     store.ensure_type_dirs(cfg)
 
-    if body_file is not None:
-        body = body_file.read_text()
-    else:
-        body = _read_stdin_if_piped()
+    body = body_file.read_text() if body_file is not None else _read_stdin_if_piped()
 
     if original_input_file is not None:
         original_input = original_input_file.read_text()
@@ -159,9 +161,9 @@ def create(
 
 @app.command("list")
 def list_cmd(
-    entry_type: Optional[str] = typer.Argument(None, metavar="[TYPE]"),
+    entry_type: str | None = typer.Argument(None, metavar="[TYPE]"),
     limit: int = typer.Option(10, "--limit", "-n"),
-    project: Optional[str] = typer.Option(None, "--project", "-p"),
+    project: str | None = typer.Option(None, "--project", "-p"),
     all_projects: bool = typer.Option(False, "--all", help="Ignore active project"),
     as_json: bool = typer.Option(False, "--json"),
 ):
@@ -180,7 +182,10 @@ def list_cmd(
         status_str = ""
         if h.entry.type == "todo":
             status_str = f" [{h.entry.status or 'pending'}]"
-        typer.echo(f"#{h.entry.id} {date_str} [{h.entry.type}]{status_str} {h.entry.title}{proj_str}")
+        typer.echo(
+            f"#{h.entry.id} {date_str} [{h.entry.type}]{status_str} "
+            f"{h.entry.title}{proj_str}"
+        )
 
 
 # --- search ----------------------------------------------------------------
@@ -189,13 +194,13 @@ def list_cmd(
 @app.command()
 def search(
     query_words: list[str] = typer.Argument(None, metavar="QUERY..."),
-    entry_type: Optional[str] = typer.Option(None, "--type"),
-    project: Optional[str] = typer.Option(None, "--project", "-p"),
+    entry_type: str | None = typer.Option(None, "--type"),
+    project: str | None = typer.Option(None, "--project", "-p"),
     all_projects: bool = typer.Option(False, "--all"),
     status: str = typer.Option("all", "--status", help="open, done, or all"),
     tag: list[str] = typer.Option([], "--tag", "-t"),
-    since: Optional[str] = typer.Option(None, "--since", help="YYYY-MM-DD"),
-    until: Optional[str] = typer.Option(None, "--until", help="YYYY-MM-DD"),
+    since: str | None = typer.Option(None, "--since", help="YYYY-MM-DD"),
+    until: str | None = typer.Option(None, "--until", help="YYYY-MM-DD"),
     limit: int = typer.Option(50, "--limit", "-n"),
     no_fulltext: bool = typer.Option(False, "--no-fulltext"),
     as_json: bool = typer.Option(True, "--json/--human"),
@@ -224,7 +229,9 @@ def search(
     for h in hits:
         date_str = (h.entry.created_at or "")[:10]
         proj_str = f" ({h.entry.project})" if h.entry.project else ""
-        typer.echo(f"#{h.entry.id} {date_str} [{h.entry.type}] {h.entry.title}{proj_str}")
+        typer.echo(
+            f"#{h.entry.id} {date_str} [{h.entry.type}] {h.entry.title}{proj_str}"
+        )
 
 
 # --- show ------------------------------------------------------------------
@@ -316,7 +323,9 @@ def show(
         type_dir, entry = found[entry_id]
         success_count += 1
         if as_json:
-            typer.echo(json.dumps(_entry_json(cfg, type_dir, entry), ensure_ascii=False))
+            typer.echo(
+                json.dumps(_entry_json(cfg, type_dir, entry), ensure_ascii=False)
+            )
         else:
             outputs.append(_format_entry(cfg, type_dir, entry))
 
@@ -342,14 +351,20 @@ def done(arg: str = typer.Argument(...)):
 @app.command()
 def update(
     entry_id: int = typer.Argument(..., metavar="ID"),
-    title: Optional[str] = typer.Option(None, "--title"),
-    summary: Optional[str] = typer.Option(None, "--summary"),
-    tags: Optional[str] = typer.Option(None, "--tags", help="Comma-separated — replaces existing tags"),
-    project: Optional[str] = typer.Option(None, "--project", "-p"),
-    status: Optional[str] = typer.Option(None, "--status"),
-    priority: Optional[str] = typer.Option(None, "--priority"),
-    area: Optional[str] = typer.Option(None, "--area", help="Project grouping (project type)"),
-    body_from_stdin: bool = typer.Option(False, "--body", help="Replace body with stdin"),
+    title: str | None = typer.Option(None, "--title"),
+    summary: str | None = typer.Option(None, "--summary"),
+    tags: str | None = typer.Option(
+        None, "--tags", help="Comma-separated — replaces existing tags"
+    ),
+    project: str | None = typer.Option(None, "--project", "-p"),
+    status: str | None = typer.Option(None, "--status"),
+    priority: str | None = typer.Option(None, "--priority"),
+    area: str | None = typer.Option(
+        None, "--area", help="Project grouping (project type)"
+    ),
+    body_from_stdin: bool = typer.Option(
+        False, "--body", help="Replace body with stdin"
+    ),
 ):
     """Patch an entry's metadata and (optionally) its body."""
     cfg = load_config()
@@ -394,7 +409,9 @@ def _resolve_todo(cfg, arg: str) -> int:
     # Otherwise treat as a search over open todos
     hits = query.search(
         cfg,
-        query.SearchFilters(q=arg, types=["todos"], status="open", limit=5, fulltext=False),
+        query.SearchFilters(
+            q=arg, types=["todos"], status="open", limit=5, fulltext=False
+        ),
     )
     if not hits:
         typer.echo(f"No open todos found for: {arg}", err=True)
@@ -402,7 +419,10 @@ def _resolve_todo(cfg, arg: str) -> int:
     if len(hits) > 1:
         typer.echo("Multiple matches:", err=True)
         for h in hits:
-            typer.echo(f"  #{h.entry.id} [{h.entry.status or 'pending'}] {h.entry.title}", err=True)
+            typer.echo(
+                f"  #{h.entry.id} [{h.entry.status or 'pending'}] {h.entry.title}",
+                err=True,
+            )
         raise typer.Exit(code=1)
     return hits[0].entry.id
 
@@ -426,10 +446,12 @@ def journal_today(
 
 @journal_app.command("append")
 def journal_append(
-    text: Optional[str] = typer.Argument(None),
-    target_day: Optional[str] = typer.Option(None, "--day", help="YYYY-MM-DD (defaults to today)"),
+    text: str | None = typer.Argument(None),
+    target_day: str | None = typer.Option(
+        None, "--day", help="YYYY-MM-DD (defaults to today)"
+    ),
 ):
-    """Append text to a day's journal. Text is read from stdin if not passed as an argument."""
+    """Append text to a day's journal. Text is read from stdin if not given."""
     cfg = load_config()
     body = text if text is not None else _read_stdin_if_piped()
     if not body.strip():
@@ -474,7 +496,9 @@ def _project_line(s: projects.ProjectStats, active: str | None) -> str:
 
 @project_app.command("list")
 def project_list(
-    by_area: bool = typer.Option(False, "--by-area", help="Group projects under their area"),
+    by_area: bool = typer.Option(
+        False, "--by-area", help="Group projects under their area"
+    ),
 ):
     """List all projects with aggregate stats."""
     cfg = load_config()
@@ -498,7 +522,7 @@ def project_list(
 
 @project_app.command("unregistered")
 def project_unregistered():
-    """List projects referenced by entries but never registered with `bd create project`."""
+    """List projects referenced by entries but never registered with create."""
     cfg = load_config()
     stats = [
         s
@@ -547,7 +571,7 @@ def project_show(name: str = typer.Argument(...)):
 
 @project_app.command("focus")
 def project_focus(
-    name: Optional[str] = typer.Argument(None),
+    name: str | None = typer.Argument(None),
     clear: bool = typer.Option(False, "--clear"),
 ):
     """Set or clear the active project filter."""
@@ -611,7 +635,9 @@ def doctor():
             full = store.full_path_for(cfg, type_dir, e.file_path)
             files_referenced.add(full.resolve())
             if not full.exists():
-                typer.echo(f"MISSING FILE: {type_dir}/{e.file_path} (id={e.id})", err=True)
+                typer.echo(
+                    f"MISSING FILE: {type_dir}/{e.file_path} (id={e.id})", err=True
+                )
                 problems += 1
         root = cfg.type_dir(type_dir)
         for md in root.rglob("*.md"):
@@ -631,11 +657,11 @@ def doctor():
 @app.command()
 def serve(
     host: str = typer.Option("127.0.0.1", "--host"),
-    port: Optional[int] = typer.Option(None, "--port"),
+    port: int | None = typer.Option(None, "--port"),
     reload: bool = typer.Option(False, "--reload"),
 ):
     """Start the local web UI."""
-    import uvicorn
+    import uvicorn  # noqa: PLC0415  # optional [web] dependency, imported lazily
 
     cfg = load_config()
     uvicorn.run(
@@ -654,10 +680,10 @@ def serve(
 @app.command("app")
 def app_cmd(
     host: str = typer.Option("127.0.0.1", "--host"),
-    port: Optional[int] = typer.Option(None, "--port"),
+    port: int | None = typer.Option(None, "--port"),
 ):
     """Run the web UI in a native desktop window (pywebview)."""
-    from braindump.web.desktop import run_app
+    from braindump.web.desktop import run_app  # noqa: PLC0415  # optional [app] dep
 
     try:
         run_app(host=host, port=port)

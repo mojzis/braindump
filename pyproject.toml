@@ -59,9 +59,19 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "DTZ", "T20", "PTH", "ERA", "PL", "TRY", "RUF", "S", "PERF", "FURB"]
+# TRY003: custom exception classes for every raise is heavier than it's worth here.
+ignore = ["TRY003"]
+
+[tool.ruff.lint.pylint]
+max-returns = 8
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["PLR2004", "PLR0913", "S"]
+"tests/**" = ["PLR2004", "PLR0913", "S", "DTZ", "PLC0415"]
+# Typer's API requires typer.Option()/Argument() calls as defaults (B008) and
+# gives commands many parameters (PLR0913) — both are idiomatic, not smells.
+"braindump/cli/main.py" = ["B008", "PLR0913"]
+# Deliberate `rg` shell-out for full-text search: fixed args, no user-controlled shell.
+"braindump/core/query.py" = ["S603", "S607"]
 
 [tool.ruff.format]
 

@@ -21,7 +21,9 @@ def entries_with_tag(cfg: Config, tag: str) -> list[tuple[str, int, str]]:
     """Return (type, id, title) triples for every entry carrying the tag."""
     out: list[tuple[str, int, str]] = []
     for type_dir in ALL_TYPE_DIRS:
-        for entry in store.read_index(cfg, type_dir):
-            if tag in (entry.tags or []):
-                out.append((entry.type, entry.id, entry.title))
+        out.extend(
+            (entry.type, entry.id, entry.title)
+            for entry in store.read_index(cfg, type_dir)
+            if tag in (entry.tags or [])
+        )
     return out

@@ -16,19 +16,18 @@ import tempfile
 import threading
 import time
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from braindump.core.config import Config
 from braindump.core.schema import ALL_TYPE_DIRS, Entry, type_to_dir
 
-
 # --- time ------------------------------------------------------------------
 
 
 def utcnow_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def local_now() -> datetime:
@@ -41,7 +40,7 @@ _slug_re = re.compile(r"[^a-z0-9]+")
 
 
 def slugify(title: str, max_len: int = 50) -> str:
-    """Match the bash slugify: lowercase, [^a-z0-9] -> '-', collapse, trim, cap at 50."""
+    """Match bash slugify: lowercase, [^a-z0-9] -> '-', collapse, trim, cap 50."""
     s = _slug_re.sub("-", title.lower()).strip("-")
     if len(s) > max_len:
         s = s[:max_len].rstrip("-")
@@ -64,7 +63,7 @@ def _locked(path: Path, mode: str = "a+") -> Iterator[Any]:
     """Open `path` with an exclusive fcntl lock. Ensures parent exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.touch(exist_ok=True)
-    with open(path, mode) as f:
+    with path.open(mode) as f:
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             yield f
@@ -240,8 +239,7 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
         raw = raw.strip()
         meta[key] = _parse_fm_value(raw)
     body = "\n".join(lines[end + 1 :])
-    if body.startswith("\n"):
-        body = body[1:]
+    body = body.removeprefix("\n")
     return meta, body
 
 
@@ -299,8 +297,8 @@ def read_index(cfg: Config, type_or_dir: str) -> list[Entry]:
         return []
     entries: list[Entry] = []
     with path.open() as f:
-        for line in f:
-            line = line.strip()
+        for raw in f:
+            line = raw.strip()
             if not line:
                 continue
             try:
