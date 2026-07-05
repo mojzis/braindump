@@ -96,6 +96,18 @@ def test_update_entry_rejects_immutable_fields(cfg):
         entries.update_entry(cfg, r.entry.id, {"file_path": "x.md"})
 
 
+def test_default_clock_file_path_uses_local_wall_clock(cfg):
+    # With no explicit clock the filename / YYYY-MM path must track local
+    # wall-clock, not UTC — the naming convention reads as "when I made it".
+    before = datetime.now().astimezone()
+    r = entries.create_entry(cfg, "todos", "local time", "b")
+    after = datetime.now().astimezone()
+    # both the directory and the --YYYY-MM-DD-HHmm stamp come from local now
+    assert r.entry.file_path.startswith(before.strftime("%Y/%m/"))
+    stamp = r.entry.file_path.rsplit("--", 1)[1].removesuffix(".md")
+    assert before.strftime("%Y-%m-%d-%H%M") <= stamp <= after.strftime("%Y-%m-%d-%H%M")
+
+
 def test_set_status_and_find_by_id(cfg):
     r = entries.create_entry(cfg, "todos", "t", "b", project="p", now=_fake_now())
     entries.set_status(cfg, r.entry.id, "done")

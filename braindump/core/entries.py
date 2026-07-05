@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -122,7 +122,9 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
         # a project does not belong to itself
         project = None
     if now is None:
-        now = datetime.now(UTC)
+        # Local wall-clock drives the filename / YYYY-MM path (reads as "when I
+        # made it"); created_at stays UTC. .astimezone() keeps DTZ happy.
+        now = datetime.now().astimezone()
         created_at = store.utcnow_iso()
     elif now.tzinfo:
         # Caller supplied the clock — use it for both the file path and the
