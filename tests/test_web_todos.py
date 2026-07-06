@@ -66,6 +66,41 @@ async def test_todos_all_includes_done(monkeypatch, cfg):
 
 
 @pytest.mark.anyio
+async def test_todos_hides_postponed_by_default(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _todo(cfg, "active one", minute=1)
+    _todo(cfg, "on hold", status="postponed", minute=2)
+
+    r = await _get("/todos")
+    assert "active one" in r.text
+    assert "on hold" not in r.text  # postponed hidden by default
+
+    r = await _get("/todos?postponed=1")
+    assert "on hold" in r.text
+    assert "active one" in r.text  # still open
+
+
+@pytest.mark.anyio
+async def test_todos_postponed_stays_hidden_with_all(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _todo(cfg, "done one", status="done", minute=1)
+    _todo(cfg, "on hold", status="postponed", minute=2)
+
+    # show done, but postponed is an independent axis
+    r = await _get("/todos?all=1")
+    assert "done one" in r.text
+    assert "on hold" not in r.text
+
+
+@pytest.mark.anyio
+async def test_todos_has_edit_link(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    result = _todo(cfg, "editable")
+    r = await _get("/todos")
+    assert f"/entries/{result.entry.id}/edit" in r.text
+
+
+@pytest.mark.anyio
 async def test_todos_project_filter(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
     _todo(cfg, "in alpha", project="alpha")

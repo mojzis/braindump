@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 EntryType = Literal["todo", "til", "thought", "prompt", "journal", "project"]
 
-TODO_STATUSES = ("pending", "in-progress", "done")
+TODO_STATUSES = ("pending", "in-progress", "postponed", "done")
 
 PROJECT_STATES = ("active", "paused", "archived")
 

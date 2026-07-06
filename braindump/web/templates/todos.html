@@ -5,6 +5,7 @@
 {% set base = [] %}
 {% if q %}{% set _ = base.append("q=" ~ q | urlencode) %}{% endif %}
 {% if show_all %}{% set _ = base.append("all=1") %}{% endif %}
+{% if show_postponed %}{% set _ = base.append("postponed=1") %}{% endif %}
 {% set sort_qs = base + (["project=" ~ selected | urlencode] if selected else []) + (["tag=" ~ tag | urlencode] if tag else []) %}
 {% set chip_qs = base + (["tag=" ~ tag | urlencode] if tag else []) + (["sort=" ~ sort, "dir=" ~ dir]) %}
 <div class="todos-page">
@@ -17,6 +18,8 @@
     <button type="submit">search</button>
     <label><input type="checkbox" name="all" value="1" {% if show_all %}checked{% endif %}
       onchange="this.form.submit()" /> show done too</label>
+    <label><input type="checkbox" name="postponed" value="1" {% if show_postponed %}checked{% endif %}
+      onchange="this.form.submit()" /> show postponed</label>
     <span class="muted">{{ total }} {{ "todo" if total == 1 else "todos" }}</span>
   </form>
 
@@ -59,6 +62,7 @@
           {{ th("project", "project") }}
           {{ th("title", "title") }}
           {{ th("tags", "tags") }}
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -80,6 +84,7 @@
               <a href="/todos?{{ base | join('&') }}{% if base %}&{% endif %}{% if selected %}project={{ selected | urlencode }}&{% endif %}sort={{ sort }}&dir={{ dir }}&tag={{ t | urlencode }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
             {% endfor %}
           </td>
+          <td><a href="/entries/{{ h.entry.id }}/edit" class="muted" title="edit">✎</a></td>
         </tr>
       {% endfor %}
       </tbody>

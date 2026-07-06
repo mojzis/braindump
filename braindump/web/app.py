@@ -684,6 +684,7 @@ def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds i
     sort: str = "date",
     dir: str = "desc",
     show_all: bool = Query(False, alias="all"),
+    show_postponed: bool = Query(False, alias="postponed"),
 ):
     cfg = load_config()
     # No active-project focus here: /todos is a cross-project view that
@@ -700,6 +701,10 @@ def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds i
             fulltext=False,
         ),
     )
+    # Postponed todos are hidden unless explicitly requested. "open" already
+    # keeps them (they're not done), so filter them out in Python.
+    if not show_postponed:
+        hits = [h for h in hits if h.entry.status != "postponed"]
     groups: dict[str, list[query.Hit]] = {}
     for h in hits:
         groups.setdefault(h.entry.project or "(none)", []).append(h)
@@ -723,6 +728,7 @@ def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds i
             sort=sort,
             dir="desc" if descending else "asc",
             show_all=show_all,
+            show_postponed=show_postponed,
         ),
     )
 

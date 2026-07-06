@@ -16,7 +16,7 @@
     {% if entry.type == "todo" %}
       <label>status
         <select name="status">
-          {% for s in ("pending", "in-progress", "done") %}
+          {% for s in ("pending", "in-progress", "postponed", "done") %}
             <option value="{{ s }}" {% if entry.status == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
