@@ -195,9 +195,16 @@ body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: 
 .entries-table tbody tr:hover, .projects-table tbody tr:hover { background: var(--bg); }
 .entries-table tr:last-child td, .projects-table tr:last-child td { border-bottom: none; }
 
-.todo-group { margin-bottom: 22px; }
-.todo-group h3 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; font-size: 15px; }
-.todo-group h3 .count { font-weight: 400; font-size: 12px; }
+.todo-projects { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.todo-projects .chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; text-decoration: none; }
+.todo-projects .chip .count { font-size: 11px; color: var(--muted); }
+.todo-projects .chip.muted { border-style: dashed; }
+.todo-projects .chip.active { border-color: var(--muted); background: var(--border-soft); font-weight: 600; }
+.active-filters { margin: 0 0 12px; }
+.entries-table.sortable thead th { text-align: left; font-weight: 600; font-size: 12px; }
+.entries-table.sortable thead th a { color: var(--muted); text-decoration: none; white-space: nowrap; }
+.entries-table.sortable thead th.sorted a { color: inherit; }
+.tags-cell a { color: var(--muted); }
 .entries-table tr.done td { color: var(--muted); text-decoration: line-through; }
 .entries-table tr.done td a { color: var(--muted); }
 

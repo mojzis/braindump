@@ -665,20 +665,35 @@ def api_entry_delete(entry_id: int):
 # --- todos ------------------------------------------------------------------
 
 
+_TODO_SORT_KEYS = {
+    "id": lambda h: h.entry.id,
+    "date": lambda h: h.entry.created_at or "",
+    "status": lambda h: h.entry.status or "",
+    "project": lambda h: (h.entry.project or "").lower(),
+    "title": lambda h: (h.entry.title or "").lower(),
+    "tags": lambda h: ", ".join(h.entry.tags).lower(),
+}
+
+
 @app.get("/todos", response_class=HTMLResponse)
 def todos_list(
     request: Request,
     q: str | None = None,
+    project: str | None = None,
+    tag: str | None = None,
+    sort: str = "project",
+    dir: str = "asc",
     show_all: bool = Query(False, alias="all"),
 ):
     cfg = load_config()
-    active = projects.get_active_project(cfg)
+    selected = project or projects.get_active_project(cfg)
     hits = query.search(
         cfg,
         query.SearchFilters(
             q=q or None,
             types=["todos"],
-            project=active,
+            project=selected,
+            tags=[tag] if tag else [],
             status="all" if show_all else "open",
             limit=500,
             fulltext=False,
@@ -688,14 +703,24 @@ def todos_list(
     for h in hits:
         groups.setdefault(h.entry.project or "(none)", []).append(h)
     grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
+
+    sort = sort if sort in _TODO_SORT_KEYS else "project"
+    descending = dir == "desc"
+    rows = sorted(hits, key=_TODO_SORT_KEYS[sort], reverse=descending)
+
     return templates.TemplateResponse(
         request,
         "todos.html",
         _context(
             request,
             grouped=grouped,
+            rows=rows,
             total=len(hits),
             q=q or "",
+            selected=project or "",
+            tag=tag or "",
+            sort=sort,
+            dir="desc" if descending else "asc",
             show_all=show_all,
         ),
     )
