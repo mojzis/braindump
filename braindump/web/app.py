@@ -684,7 +684,7 @@ def todos_list(
             fulltext=False,
         ),
     )
-    groups: dict[str, list] = {}
+    groups: dict[str, list[query.Hit]] = {}
     for h in hits:
         groups.setdefault(h.entry.project or "(none)", []).append(h)
     grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())

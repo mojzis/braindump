@@ -4,7 +4,6 @@
 <div class="todos-page">
   <form method="get" action="/todos" class="filters">
     <input type="text" name="q" value="{{ q }}" placeholder="search todos…" />
-    {% if show_all %}<input type="hidden" name="all" value="1" />{% endif %}
     <button type="submit">search</button>
     <label><input type="checkbox" name="all" value="1" {% if show_all %}checked{% endif %}
       onchange="this.form.submit()" /> show done too</label>
