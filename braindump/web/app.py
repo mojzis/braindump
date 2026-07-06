@@ -676,23 +676,24 @@ _TODO_SORT_KEYS = {
 
 
 @app.get("/todos", response_class=HTMLResponse)
-def todos_list(
+def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
     request: Request,
     q: str | None = None,
     project: str | None = None,
     tag: str | None = None,
-    sort: str = "project",
-    dir: str = "asc",
+    sort: str = "date",
+    dir: str = "desc",
     show_all: bool = Query(False, alias="all"),
 ):
     cfg = load_config()
-    selected = project or projects.get_active_project(cfg)
+    # No active-project focus here: /todos is a cross-project view that
+    # defaults to the most recent todos regardless of project.
     hits = query.search(
         cfg,
         query.SearchFilters(
             q=q or None,
             types=["todos"],
-            project=selected,
+            project=project or None,
             tags=[tag] if tag else [],
             status="all" if show_all else "open",
             limit=500,
@@ -704,7 +705,7 @@ def todos_list(
         groups.setdefault(h.entry.project or "(none)", []).append(h)
     grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
 
-    sort = sort if sort in _TODO_SORT_KEYS else "project"
+    sort = sort if sort in _TODO_SORT_KEYS else "date"
     descending = dir == "desc"
     rows = sorted(hits, key=_TODO_SORT_KEYS[sort], reverse=descending)
 
