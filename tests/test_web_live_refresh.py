@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from fastapi import Request
 from fastapi.responses import StreamingResponse
 from watchfiles import Change
 
@@ -48,7 +50,7 @@ async def test_lifespan_initializes_subscribers_and_cleans_up():
 async def test_events_endpoint_returns_sse_stream_and_registers_subscriber():
     async with app.router.lifespan_context(app):
         request = SimpleNamespace(app=app)
-        response = await events(request)
+        response = await events(cast(Request, request))
         assert isinstance(response, StreamingResponse)
         assert response.media_type == "text/event-stream"
         assert response.headers["cache-control"] == "no-cache"

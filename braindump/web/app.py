@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
+from typing import cast
 
 import markdown as md
 import nh3
@@ -34,6 +35,7 @@ from watchfiles import Change, awatch
 from braindump.core import claude_cli, digest, entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
+from braindump.core.query import StatusFilter
 from braindump.core.schema import ALL_TYPES, PROJECT_STATES
 
 BASE_DIR = Path(__file__).parent
@@ -55,7 +57,7 @@ class ParseJob:
     error: str | None = None
 
 
-def _watch_filter(change: Change, path: str) -> bool:
+def _watch_filter(_change: Change, path: str) -> bool:
     p = Path(path)
     name = p.name
     if name == ".state.json":
@@ -552,7 +554,7 @@ def entries_list(  # noqa: PLR0913 -- one query param per filter; splitting adds
         q=q or None,
         types=[type] if type else [],
         project=proj_filter,
-        status=status,  # type: ignore[arg-type]
+        status=cast(StatusFilter, status),
         tags=[tag] if tag else [],
         limit=100,
     )

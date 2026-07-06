@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import httpx
 import pytest
 
-from braindump.core import digest, journal
+from braindump.core import claude_cli, digest, journal
 from braindump.web.app import app
 
 
@@ -19,6 +19,16 @@ def anyio_backend() -> str:
 def _set_home(monkeypatch, cfg) -> None:
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
     monkeypatch.setenv("BRAINDUMP_DAY_CUTOFF", str(cfg.day_cutoff_hour))
+
+
+def _stub_claude_available(monkeypatch) -> None:
+    """Pretend the claude CLI is on PATH so parse jobs queue instead of erroring.
+
+    Tests that stub `digest.run_parse` never invoke the real binary, but the
+    parse endpoint gates on `claude_cli.is_available()` first — which is False
+    on CI runners where claude isn't installed.
+    """
+    monkeypatch.setattr(claude_cli, "is_available", lambda: True)
 
 
 def _client(app_instance=app):
@@ -33,6 +43,7 @@ def _client(app_instance=app):
 @pytest.mark.anyio
 async def test_parse_post_returns_409_when_job_already_running(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
     day = date(2026, 6, 1)
     journal.replace_body(cfg, day, "some notes")
 
@@ -66,6 +77,7 @@ async def test_parse_post_returns_409_when_job_already_running(monkeypatch, cfg)
 async def test_parse_post_409_does_not_clobber_day_file(monkeypatch, cfg):
     """A rejected (409) double-submit must not overwrite the running job's snapshot."""
     _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
     day = date(2026, 6, 8)
     journal.replace_body(cfg, day, "some notes")
 
@@ -97,6 +109,7 @@ async def test_parse_post_409_does_not_clobber_day_file(monkeypatch, cfg):
 @pytest.mark.anyio
 async def test_parse_post_flushes_editor_body_before_parsing(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
     day = date(2026, 6, 4)
     journal.replace_body(cfg, day, "stale content")
 
@@ -141,6 +154,7 @@ async def test_parse_post_returns_friendly_error_when_claude_missing(monkeypatch
 @pytest.mark.anyio
 async def test_parse_status_returns_286_and_trigger_header_when_done(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
     day = date(2026, 6, 2)
     journal.replace_body(cfg, day, "notes")
 
@@ -174,6 +188,7 @@ async def test_parse_status_returns_286_and_trigger_header_when_done(monkeypatch
 @pytest.mark.anyio
 async def test_parse_status_stays_200_while_running(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
     day = date(2026, 6, 5)
     journal.replace_body(cfg, day, "notes")
     gate = asyncio.Event()
@@ -200,6 +215,7 @@ async def test_parse_status_stays_200_while_running(monkeypatch, cfg):
 async def test_lifespan_shutdown_cancels_in_flight_parse_task(monkeypatch, cfg):
     """The parse task must not be orphaned when the server shuts down mid-parse."""
     _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
     day = date(2026, 6, 7)
     journal.replace_body(cfg, day, "notes")
 
