@@ -662,6 +662,45 @@ def api_entry_delete(entry_id: int):
     return HTMLResponse(headers={"HX-Redirect": "/entries"}, content="")
 
 
+# --- todos ------------------------------------------------------------------
+
+
+@app.get("/todos", response_class=HTMLResponse)
+def todos_list(
+    request: Request,
+    q: str | None = None,
+    show_all: bool = Query(False, alias="all"),
+):
+    cfg = load_config()
+    active = projects.get_active_project(cfg)
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            q=q or None,
+            types=["todos"],
+            project=active,
+            status="all" if show_all else "open",
+            limit=500,
+            fulltext=False,
+        ),
+    )
+    groups: dict[str, list] = {}
+    for h in hits:
+        groups.setdefault(h.entry.project or "(none)", []).append(h)
+    grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
+    return templates.TemplateResponse(
+        request,
+        "todos.html",
+        _context(
+            request,
+            grouped=grouped,
+            total=len(hits),
+            q=q or "",
+            show_all=show_all,
+        ),
+    )
+
+
 # --- projects --------------------------------------------------------------
 
 
