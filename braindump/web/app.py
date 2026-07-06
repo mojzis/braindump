@@ -682,7 +682,7 @@ def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds i
     project: str | None = None,
     tag: str | None = None,
     sort: str = "date",
-    dir: str = "desc",
+    direction: str = Query("desc", alias="dir"),
     show_all: bool = Query(False, alias="all"),
     show_postponed: bool = Query(False, alias="postponed"),
 ):
@@ -711,7 +711,8 @@ def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds i
     grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
 
     sort = sort if sort in _TODO_SORT_KEYS else "date"
-    descending = dir == "desc"
+    # Unrecognized dir falls back to the default (desc), matching the sort fallback.
+    descending = direction != "asc"
     rows = sorted(hits, key=_TODO_SORT_KEYS[sort], reverse=descending)
 
     return templates.TemplateResponse(
