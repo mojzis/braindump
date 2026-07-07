@@ -24,7 +24,7 @@ web = [
 ]
 app = [
     "braindump[web]",
-    "pywebview>=5.4",
+    "pywebview>=6.2.1",
 ]
 
 [dependency-groups]
