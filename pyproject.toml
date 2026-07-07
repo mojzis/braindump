@@ -29,7 +29,7 @@ app = [
 
 [dependency-groups]
 docs = [
-    "mkdocs-material>=9.5",
+    "mkdocs-material>=9.7.6",
     "mkdocs-llmstxt>=0.2",
 ]
 dev = [
