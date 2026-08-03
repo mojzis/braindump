@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Matous Mojzis" }]
 dependencies = [
-    "markdown>=3.10.2",
+    "markdown>=3.10.3",
     "nh3>=0.3.6",
     "pydantic>=2.13.4",
     "typer>=0.26.8",
