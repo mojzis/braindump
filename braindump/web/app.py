@@ -74,10 +74,12 @@ def _watch_filter(_change: Change, path: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()
-    # Starlette's State is untyped, so these are documented rather than annotated:
-    # subscribers is a set[asyncio.Queue[str]] (one queue per SSE client),
-    # parse_job a ParseJob | None, parse_task an asyncio.Task | None.
-    app.state.subscribers = set()
+    # Starlette's State is untyped, so bind a typed local and share the object
+    # with it — that keeps a real declaration for the one long-lived container.
+    subscribers: set[asyncio.Queue[str]] = set()
+    app.state.subscribers = subscribers
+    # parse_job (ParseJob | None) and parse_task (asyncio.Task | None) are
+    # reassigned from the parse handlers, so they can only be documented here.
     app.state.parse_job = None
     app.state.parse_task = None
     stop = asyncio.Event()
@@ -90,7 +92,7 @@ async def lifespan(app: FastAPI):
                 async for _changes in awatch(
                     cfg.home, watch_filter=_watch_filter, stop_event=stop
                 ):
-                    for q in list(app.state.subscribers):
+                    for q in list(subscribers):
                         with contextlib.suppress(asyncio.QueueFull):
                             q.put_nowait("reload")
             except asyncio.CancelledError:
@@ -104,7 +106,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop.set()
-        for q in list(app.state.subscribers):
+        for q in list(subscribers):
             with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait("__shutdown__")
         task.cancel()
