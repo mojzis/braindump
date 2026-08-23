@@ -74,9 +74,14 @@ def _watch_filter(_change: Change, path: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()
-    app.state.subscribers: set[asyncio.Queue[str]] = set()
-    app.state.parse_job: ParseJob | None = None
-    app.state.parse_task: asyncio.Task | None = None
+    # Starlette's State is untyped, so bind a typed local and share the object
+    # with it — that keeps a real declaration for the one long-lived container.
+    subscribers: set[asyncio.Queue[str]] = set()
+    app.state.subscribers = subscribers
+    # parse_job (ParseJob | None) and parse_task (asyncio.Task | None) are
+    # reassigned from the parse handlers, so they can only be documented here.
+    app.state.parse_job = None
+    app.state.parse_task = None
     stop = asyncio.Event()
     app.state.watch_stop = stop
     log = logging.getLogger("braindump.web")
@@ -87,7 +92,7 @@ async def lifespan(app: FastAPI):
                 async for _changes in awatch(
                     cfg.home, watch_filter=_watch_filter, stop_event=stop
                 ):
-                    for q in list(app.state.subscribers):
+                    for q in list(subscribers):
                         with contextlib.suppress(asyncio.QueueFull):
                             q.put_nowait("reload")
             except asyncio.CancelledError:
@@ -101,7 +106,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop.set()
-        for q in list(app.state.subscribers):
+        for q in list(subscribers):
             with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait("__shutdown__")
         task.cancel()
@@ -484,7 +489,7 @@ def capture_get(
 
 
 @app.post("/capture")
-def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitting adds indirection
+def capture_post(  # noqa: PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -538,7 +543,7 @@ def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitt
 
 
 @app.get("/entries", response_class=HTMLResponse)
-def entries_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
+def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
     request: Request,
     q: str | None = None,
     type: str | None = None,
@@ -619,7 +624,7 @@ def entry_edit(request: Request, entry_id: int):
 
 
 @app.post("/api/entries/{entry_id}", response_class=HTMLResponse)
-def api_entry_update(  # noqa: PLR0913 -- one Form field per editable attribute; splitting adds indirection
+def api_entry_update(  # noqa: PLR0913, PLR0917 -- one Form field per editable attribute; splitting adds indirection
     request: Request,
     entry_id: int,
     title: str | None = Form(None),
@@ -676,7 +681,7 @@ _TODO_SORT_KEYS = {
 
 
 @app.get("/todos", response_class=HTMLResponse)
-def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
+def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
     request: Request,
     q: str | None = None,
     project: str | None = None,
