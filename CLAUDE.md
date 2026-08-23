@@ -191,7 +191,7 @@ Authored content…
 
 ## Key Conventions
 
-- Creation skills output only `done: <file_path>` on success
+- `bd create` / `bd done` / `bd update` echo `#<id>` alongside the file path; creation skills output only that line (`created: #<id> <file_path>`) on success, so the id survives into the transcript for later sessions
 - All timestamps are UTC ISO 8601
 - Tags are lowercase with hyphens
 - The `input` field in JSONL always stores original user input verbatim

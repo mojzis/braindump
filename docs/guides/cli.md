@@ -57,8 +57,12 @@ fields `--description`, `--state`, `--area`, `--local-dir`, `--tech`). See
 On success `bd create` prints exactly:
 
 ```text
-done: <file_path>
+created: #<id> <file_path>
 ```
+
+The id is the entry's handle for everything after creation — `bd show <id>`,
+`bd update <id>`, `bd done <id>` — so it's echoed at creation time rather than
+left to be looked up. `bd done` and `bd update` print `#<id>` the same way.
 
 ## Listing
 

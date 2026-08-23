@@ -1,4 +1,4 @@
-"""Tests for the bd show command."""
+"""Tests for the bd CLI commands."""
 from __future__ import annotations
 
 import json
@@ -147,3 +147,31 @@ def test_show_no_tables(tmp_path, monkeypatch):
     assert res.exit_code == 0
     # No table borders
     assert "|" not in res.output
+
+
+def test_create_echoes_the_new_id(tmp_path, monkeypatch):
+    """The id is what you reference the entry by later — print it, not just the path."""
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(app, ["create", "todo", "Fix auth bug", "--tag", "auth"])
+    assert res.exit_code == 0
+    assert res.output.startswith("created: #")
+
+    eid = int(res.output.split("#", 1)[1].split()[0])
+    shown = runner.invoke(app, ["show", str(eid)])
+    assert "Fix auth bug" in shown.output
+
+
+def test_done_and_update_echo_the_id(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    eid = _create_todo(cfg).entry.id
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(app, ["update", str(eid), "--title", "Fix auth bug for real"])
+    assert res.exit_code == 0
+    assert res.output.startswith(f"updated: #{eid} ")
+
+    res = runner.invoke(app, ["done", str(eid)])
+    assert res.exit_code == 0
+    assert res.output.startswith(f"done: #{eid} ")

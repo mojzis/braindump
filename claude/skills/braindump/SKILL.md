@@ -216,10 +216,15 @@ All commands go through the `bd` CLI.
 
 ## Output Style
 
-After successfully creating an entry, respond only with:
+After successfully creating an entry, respond only with the line `bd create`
+printed — id included:
 ```
-done: <file_path>
+created: #<id> <file_path>
 ```
+
+The id matters: it's how the entry is referenced from any later session
+(`bd show 42`, `bd update 42`, `bd done 42`). Dropping it makes the entry
+findable only by search. `bd done` and `bd update` echo `#<id>` the same way.
 
 No extra text, summaries, or commentary unless:
 - There's an error to report

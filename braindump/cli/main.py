@@ -160,7 +160,7 @@ def create(
         )
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
-    typer.echo(f"done: {result.entry.file_path}")
+    typer.echo(f"created: #{result.entry.id} {result.entry.file_path}")
 
 
 # --- list ------------------------------------------------------------------
@@ -353,7 +353,7 @@ def done(arg: str = typer.Argument(...)):
     cfg = load_config()
     entry_id = _resolve_todo(cfg, arg)
     updated = entries.mark_done(cfg, entry_id)
-    typer.echo(f"done: {updated.file_path}")
+    typer.echo(f"done: #{updated.id} {updated.file_path}")
 
 
 @app.command()
@@ -393,7 +393,7 @@ def update(
         patch["area"] = area
     body = _read_stdin_if_piped() if body_from_stdin else None
     updated = entries.update_entry(cfg, entry_id, patch, body=body)
-    typer.echo(f"updated: {updated.file_path}")
+    typer.echo(f"updated: #{updated.id} {updated.file_path}")
 
 
 @app.command()

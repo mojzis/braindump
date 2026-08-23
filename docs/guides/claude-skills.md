@@ -54,11 +54,15 @@ title of a first-class `project` entry. Bare names with no entry show up as
 
 ### Output contract
 
-On success, creation skills output only:
+On success, creation skills output only the line `bd create` printed:
 
 ```text
-done: <file_path>
+created: #<id> <file_path>
 ```
+
+The id is deliberately in that one line: it's how you reference the entry from a
+later session (`bd show 42`, `bd done 42`), and the skill's output is the only
+place it appears in the transcript.
 
 ## The digest skill
 
