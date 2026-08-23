@@ -34,7 +34,9 @@ $ARGUMENTS
 2. **Infer metadata:**
    - `title`: concise title (max 60 chars)
    - `summary`: one-line summary
-   - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse)
+   - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse). Never tag
+     an entry with its own project name — `project` already records that, and
+     `bd create` strips it. Tag the subject, not the location.
    - `project`: use <current-project> value, or pick an existing project from <existing-projects> if the task clearly belongs to one
    - `subtype`: kind of task (code, think, read, write, call, general)
    - `status`: "pending"

@@ -56,7 +56,8 @@ $ARGUMENTS
      `fastapi`, `htmx`). One `--tech` flag per item. Do **not** guess.
    - `tags`: 1-3 relevant tags from `<existing-tags>` (prefer reuse). Tags on
      a project entry are metadata about the project itself (e.g. `web`,
-     `tool`), not replacements for the fields above.
+     `tool`), not replacements for the fields above. Never tag it with its own
+     name — the title already carries that.
    - **Never pass `--project`.** A project entry does not belong to itself;
      `bd create project` forces the `project` field to `None`.
 

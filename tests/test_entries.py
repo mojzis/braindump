@@ -182,3 +182,45 @@ def test_delete_entry_moves_file_to_trash(cfg):
     assert store.read_index(cfg, "todos") == []
     trashed = list((cfg.trash_dir / "todos").rglob("*.md"))
     assert len(trashed) == 1
+
+
+def test_create_drops_a_tag_that_repeats_the_project(cfg):
+    """`project` already says it; the tag would only pollute tag analytics."""
+    result = entries.create_entry(
+        cfg,
+        "todo",
+        "Fix the parser",
+        "body",
+        tags=["braindump", "parser", "BRAINDUMP"],
+        project="braindump",
+        now=_fake_now(),
+    )
+    assert result.entry.tags == ["parser"]
+
+
+def test_create_keeps_a_tag_naming_a_different_project(cfg):
+    """Cross-references ("this introspect todo is about braindump") are real."""
+    result = entries.create_entry(
+        cfg,
+        "todo",
+        "Borrow the index format",
+        "body",
+        tags=["braindump", "schema"],
+        project="introspect",
+        now=_fake_now(),
+    )
+    assert result.entry.tags == ["braindump", "schema"]
+
+
+def test_update_drops_the_tag_when_the_project_moves(cfg):
+    r = entries.create_entry(
+        cfg,
+        "todo",
+        "Fix the parser",
+        "body",
+        tags=["parser"],
+        project="introspect",
+        now=_fake_now(),
+    )
+    updated = entries.update_entry(cfg, r.entry.id, {"project": "parser"})
+    assert updated.tags == []

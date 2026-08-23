@@ -194,6 +194,7 @@ Authored content…
 - `bd create` / `bd done` / `bd update` echo `#<id>` alongside the file path; creation skills output only that line (`created: #<id> <file_path>`) on success, so the id survives into the transcript for later sessions
 - All timestamps are UTC ISO 8601
 - Tags are lowercase with hyphens
+- A tag equal to the entry's own `project` is stripped on create/update (`entries.drop_self_project_tag`) — the field already says it, and project names otherwise dominate tag analytics; a tag naming a *different* project is a deliberate cross-reference and is kept
 - The `input` field in JSONL always stores original user input verbatim
 - Index mutations rewrite the file atomically under `fcntl.flock`
 - The `~/braindump/.state.json` holds the active project focus; it's applied automatically by `bd list` / `bd search` / the web UI until cleared with `bd project focus --clear`

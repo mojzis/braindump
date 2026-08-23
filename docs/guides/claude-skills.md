@@ -52,6 +52,12 @@ overridable. `project` is separate from tags and is a by-name reference to the
 title of a first-class `project` entry. Bare names with no entry show up as
 "unregistered" until you create a matching project.
 
+Because `project` is its own field, an entry is never tagged with its own
+project name — `bd create` and `bd update` strip such a tag. Otherwise project
+names pile up in `bd tags stats` and crowd out the tags that say what an entry
+is actually *about*. A tag naming a **different** project survives: that's a
+cross-reference, not a duplicate.
+
 ### Output contract
 
 On success, creation skills output only the line `bd create` printed:

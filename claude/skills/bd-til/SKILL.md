@@ -34,7 +34,9 @@ $ARGUMENTS
 2. **Infer metadata:**
    - `title`: concise title (max 60 chars)
    - `summary`: one-line summary
-   - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse)
+   - `tags`: 1-5 relevant tags from <existing-tags> (prefer reuse). Never tag
+     an entry with its own project name — `project` already records that, and
+     `bd create` strips it. Tag the subject, not the location.
    - `project`: use <current-project> value (or an existing project if more relevant)
    - `category`: topic area (programming, tools, concepts, debugging, etc.)
    - `source`: if a source is mentioned

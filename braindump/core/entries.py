@@ -91,6 +91,21 @@ class CreateResult:
     full_path: Path
 
 
+def drop_self_project_tag(tags: list[str] | None, project: str | None) -> list[str]:
+    """Strip a tag that just repeats the entry's own project name.
+
+    `project` is already a first-class field, so tagging a braindump entry
+    `braindump` says nothing the entry doesn't already say — it only inflates
+    tag analytics, where project names then dominate the real topic tags. A tag
+    naming a *different* project is left alone: that's a cross-reference
+    ("this introspect todo is about braindump"), which is worth keeping.
+    """
+    tags = list(tags or [])
+    if not project:
+        return tags
+    return [t for t in tags if t.casefold() != project.casefold()]
+
+
 def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a schema column
     cfg: Config,
     type_name: str,
@@ -146,7 +161,7 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
         "title": title,
         "file_path": rel_file_path,
         "created_at": created_at,
-        "tags": tags or [],
+        "tags": drop_self_project_tag(tags, project),
     }
     if summary is not None:
         entry_fields["summary"] = summary
@@ -248,6 +263,7 @@ def update_entry(
         raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
 
     updated = entry.model_copy(update=patch)
+    updated.tags = drop_self_project_tag(updated.tags, updated.project)
     updated.updated_at = store.utcnow_iso()
 
     # rewrite markdown file: new frontmatter + (maybe) new body
