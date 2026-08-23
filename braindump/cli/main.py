@@ -708,10 +708,8 @@ def app_cmd(
         if foreground:
             run_app(host=host, port=port)
             return
-        cfg = load_config()
-        log_file = cfg.home / ".bd-app.log"
-        pid = launch_detached(host=host, port=port, log_file=log_file)
-    except RuntimeError as e:
+        pid, log_file = launch_detached(host=host, port=port)
+    except (RuntimeError, OSError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=1) from e
     typer.echo(f"bd app running in the background (pid {pid})  log: {log_file}")

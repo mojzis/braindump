@@ -111,6 +111,8 @@ bd app --foreground     # stay attached (use this when debugging a crash)
 
 If something is already serving on the port (a running `bd serve`, or another
 `bd app`), the window attaches to that server instead of starting a second one.
+The server belongs to whichever process started it, so closing *that* window
+also stops the server for any window that attached to it.
 
 Requires the `[app]` extra:
 
@@ -120,12 +122,17 @@ uv tool install --force --reinstall --no-cache ".[app]"
 
 Without it, `bd app` prints an install hint and falls back to suggesting `bd serve`.
 
-The `[app]` extra ships a Qt webview backend (`qtpy` + PyQt6 WebEngine, ~200 MB of
-wheels) rather than relying on the host's GTK/WebKit bindings. pywebview has no
-renderer of its own, and system GTK bindings (`python-gobject` + `webkit2gtk`) are
-invisible to an isolated uv tool environment — and are built against the system
-Python, which needn't match the one uv picked. Bundling Qt makes `bd app` work
-without any distro packages.
+The `[app]` extra pulls `pywebview[qt]`, i.e. a Qt webview backend (`qtpy` +
+PyQt6 WebEngine, ~200 MB of wheels), rather than relying on the host's GTK/WebKit
+bindings. pywebview has no renderer of its own, and system GTK bindings
+(`python-gobject` + `webkit2gtk`) are invisible to an isolated uv tool
+environment — and are built against the system Python, which needn't match the
+one uv picked. Bundling Qt makes `bd app` work without any distro packages.
+
+Note that PyQt6 is GPL-3/commercial-licensed while braindump itself is MIT. It's
+an optional extra you install yourself and nothing is distributed together, so
+this is not a problem in practice — but if you'd rather not have it, skip `[app]`
+and use `bd serve` in a browser.
 
 Start a new Claude Code session after installation. Available:
 

@@ -66,8 +66,4 @@ $ARGUMENTS
 
 ## Output
 
-`created: #<id> <file_path>` — echo the line `bd create` printed, verbatim.
-
-The id is the handle for every later command (`bd show <id>`, `bd update <id>`,
-`bd done <id>`), and a future session has no other cheap way to find this entry,
-so it must survive into the transcript. Never drop it or reword it away.
+`created: #<id> <file_path>` — echo the line `bd create` printed, verbatim (the id included; see the shared braindump skill for why).

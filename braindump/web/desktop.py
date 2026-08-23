@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import ModuleType
 
 import uvicorn
 
@@ -33,6 +34,7 @@ _STARTUP_GRACE = 5.0
 #: 800x600 default.
 _WINDOW_WIDTH = 1400
 _WINDOW_HEIGHT = 950
+_WINDOW_MIN_SIZE = (900, 600)
 
 #: Window/taskbar icon. Same brain the web UI uses as its favicon; pywebview
 #: wants a raster file path, so we ship the rendered PNG next to the SVG.
@@ -67,9 +69,9 @@ def _wait_until_ready(host: str, port: int, timeout: float = 20.0) -> bool:
     return False
 
 
-def _import_webview():
+def _import_webview() -> ModuleType:
     try:
-        import webview  # noqa: PLC0415  # ty: ignore[unresolved-import]  # optional 'app' extra
+        import webview  # noqa: PLC0415  # optional 'app' extra
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise RuntimeError(
             "pywebview is not installed. Install the desktop extra:\n"
@@ -83,8 +85,8 @@ def launch_detached(
     host: str = "127.0.0.1",
     port: int | None = None,
     log_file: Path | None = None,
-) -> int:
-    """Start `bd app --foreground` in its own session and return its pid.
+) -> tuple[int, Path]:
+    """Start `bd app --foreground` in its own session; return (pid, log path).
 
     The child gets a new process group and its stdio redirected to `log_file`,
     so it survives the terminal (and any Ctrl-C in it) that launched it. We
@@ -93,8 +95,16 @@ def launch_detached(
     window that never appears.
     """
     cfg = load_config()
+    resolved_port = port if port is not None else cfg.port
     log_file = log_file or cfg.home / ".bd-app.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # The port coming up is only evidence the child started if it wasn't
+    # already up: `run_app` deliberately attaches to an existing server, so a
+    # running `bd serve` would otherwise mask a child that died on spawn.
+    port_was_open = _port_open(host, resolved_port, timeout=0.2)
+    # Only what this child writes may be quoted back as its crash output.
+    log_offset = log_file.stat().st_size if log_file.exists() else 0
 
     cmd = [sys.executable, "-m", "braindump.cli.main", "app", "--foreground"]
     cmd += ["--host", host]
@@ -108,26 +118,30 @@ def launch_detached(
             stdout=log,
             stderr=log,
             start_new_session=True,
-            close_fds=True,
         )
 
     deadline = time.monotonic() + _STARTUP_GRACE
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             raise RuntimeError(
-                f"bd app exited immediately. Log: {log_file}\n{_log_tail(log_file)}"
+                f"bd app exited immediately. Log: {log_file}\n"
+                f"{_log_tail(log_file, log_offset)}"
             )
-        if _port_open(host, port or cfg.port, timeout=0.2):
+        if not port_was_open and _port_open(host, resolved_port, timeout=0.2):
             break
         time.sleep(0.1)
-    return proc.pid
+    return proc.pid, log_file
 
 
-def _log_tail(log_file: Path, lines: int = 15) -> str:
+def _log_tail(log_file: Path, offset: int = 0, lines: int = 15) -> str:
+    """Last few lines the child wrote, i.e. everything past `offset`."""
     try:
-        return "\n".join(log_file.read_text(errors="replace").splitlines()[-lines:])
+        with log_file.open("rb") as fh:
+            fh.seek(offset)
+            written = fh.read().decode(errors="replace")
     except OSError:  # pragma: no cover - unreadable log is not worth failing over
         return ""
+    return "\n".join(written.splitlines()[-lines:])
 
 
 def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
@@ -135,7 +149,8 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
 
     If the port is already serving (a `bd serve`, or another `bd app`), we
     attach a window to that server rather than starting — and later killing —
-    a second one.
+    a second one. The server belongs to whichever process started it, so
+    closing *that* window stops it for any window that attached to it.
     """
     webview = _import_webview()
 
@@ -167,7 +182,7 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
             url,
             width=_WINDOW_WIDTH,
             height=_WINDOW_HEIGHT,
-            min_size=(900, 600),
+            min_size=_WINDOW_MIN_SIZE,
         )
         webview.start(icon=str(_ICON_PATH) if _ICON_PATH.exists() else None)
     finally:
