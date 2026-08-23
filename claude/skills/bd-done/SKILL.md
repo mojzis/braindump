@@ -26,10 +26,10 @@ $ARGUMENTS
    ```
 
 3. **Handle results:**
-   - If it succeeds, report which todo was marked done (the command prints `done: <file_path>`).
+   - If it succeeds, report which todo was marked done (the command prints `done: #<id> <file_path>`).
    - If multiple matches are found, `bd done` lists them on stderr and exits non-zero — show that list to the user and ask them to pick one by ID.
    - If no matches, say so and suggest `/bd-search` to find the right entry.
 
 ## Output
 
-`done: <file_path>`
+`done: #<id> <file_path>` — echo the line `bd done` printed, id included.

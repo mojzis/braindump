@@ -4,6 +4,7 @@ This module is intentionally thin: all logic lives in `braindump.core.*`. The
 CLI is just argument parsing, stdin plumbing, and output formatting. Both the
 Claude skills and any shell scripts should call into this surface.
 """
+
 from __future__ import annotations
 
 import json
@@ -159,7 +160,7 @@ def create(
         )
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
-    typer.echo(f"done: {result.entry.file_path}")
+    typer.echo(f"created: #{result.entry.id} {result.entry.file_path}")
 
 
 # --- list ------------------------------------------------------------------
@@ -264,7 +265,8 @@ def _read_authored_body(cfg: Config, type_dir: str, entry: Entry) -> str:
 
 
 def _find_entries_by_ids(
-    cfg: Config, ids: set[int],
+    cfg: Config,
+    ids: set[int],
 ) -> dict[int, tuple[str, Entry]]:
     """Scan indexes once and return all requested entries."""
     found: dict[int, tuple[str, Entry]] = {}
@@ -351,7 +353,7 @@ def done(arg: str = typer.Argument(...)):
     cfg = load_config()
     entry_id = _resolve_todo(cfg, arg)
     updated = entries.mark_done(cfg, entry_id)
-    typer.echo(f"done: {updated.file_path}")
+    typer.echo(f"done: #{updated.id} {updated.file_path}")
 
 
 @app.command()
@@ -391,7 +393,7 @@ def update(
         patch["area"] = area
     body = _read_stdin_if_piped() if body_from_stdin else None
     updated = entries.update_entry(cfg, entry_id, patch, body=body)
-    typer.echo(f"updated: {updated.file_path}")
+    typer.echo(f"updated: #{updated.id} {updated.file_path}")
 
 
 @app.command()
@@ -687,15 +689,30 @@ def serve(
 def app_cmd(
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int | None = typer.Option(None, "--port"),
+    foreground: bool = typer.Option(
+        False,
+        "--foreground",
+        "-f",
+        help="Stay attached to this terminal instead of detaching.",
+    ),
 ):
-    """Run the web UI in a native desktop window (pywebview)."""
-    from braindump.web.desktop import run_app  # noqa: PLC0415  # optional [app] dep
+    """Run the web UI in a native desktop window (pywebview).
+
+    Detaches by default: the window keeps running after the shell that started
+    it closes, and its output goes to `~/braindump/.bd-app.log`.
+    """
+    # optional [app] dep — imported lazily
+    from braindump.web.desktop import launch_detached, run_app  # noqa: PLC0415
 
     try:
-        run_app(host=host, port=port)
-    except RuntimeError as e:
+        if foreground:
+            run_app(host=host, port=port)
+            return
+        pid, log_file = launch_detached(host=host, port=port)
+    except (RuntimeError, OSError) as e:
         typer.echo(str(e), err=True)
         raise typer.Exit(code=1) from e
+    typer.echo(f"bd app running in the background (pid {pid})  log: {log_file}")
 
 
 def main() -> None:

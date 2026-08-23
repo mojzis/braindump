@@ -7,16 +7,16 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Matous Mojzis" }]
 dependencies = [
-    "markdown>=3.10.2",
-    "nh3>=0.3.6",
+    "markdown>=3.10.3",
+    "nh3>=0.3.7",
     "pydantic>=2.13.4",
-    "typer>=0.26.8",
+    "typer>=0.27.1",
 ]
 
 [project.optional-dependencies]
 web = [
-    "fastapi>=0.139.0",
-    "uvicorn[standard]>=0.50.2",
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.52.4",
     "jinja2>=3.1.6",
     "python-multipart>=0.0.32",
     "watchfiles>=1.2.0",
@@ -24,12 +24,12 @@ web = [
 ]
 app = [
     "braindump[web]",
-    "pywebview>=6.2.1",
+    "pywebview[qt]>=6.2.1",
 ]
 
 [dependency-groups]
 docs = [
-    "mkdocs-material>=9.7.6",
+    "mkdocs-material>=9.7.7",
     "mkdocs-llmstxt>=0.5.0",
 ]
 dev = [
@@ -37,8 +37,8 @@ dev = [
     "pytest-cov",
     "freezegun>=1.5.5",
     "httpx>=0.28.1",
-    "ruff",
-    "ty",
+    "ruff>=0.16.4",
+    "ty>=0.0.74",
     "vulture",
     "deptry",
     "poethepoet>=0.48.0",
@@ -69,8 +69,9 @@ max-returns = 8
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004", "PLR0913", "S", "DTZ", "PLC0415"]
 # Typer's API requires typer.Option()/Argument() calls as defaults (B008) and
-# gives commands many parameters (PLR0913) — both are idiomatic, not smells.
-"braindump/cli/main.py" = ["B008", "PLR0913"]
+# gives commands many parameters (PLR0913/PLR0917) — Typer binds them from flags,
+# so nobody ever passes them positionally. Idiomatic, not smells.
+"braindump/cli/main.py" = ["B008", "PLR0913", "PLR0917"]
 # Deliberate `rg` shell-out for full-text search: fixed args, no user-controlled shell.
 "braindump/core/query.py" = ["S603", "S607"]
 

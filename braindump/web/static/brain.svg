@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Braindump">
+  <rect width="64" height="64" rx="14" fill="#f6f1e4"/>
+  <g fill="none" stroke="#b07a2e" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- left hemisphere outline -->
+    <path d="M32 14.5c-3.2-3.1-8.6-3-11.4.4-4.2-.6-7.6 2.5-7.3 6.4-3.4 1.7-4.3 6-1.8 8.7-1.6 3.5.4 7.5 4 8.5.1 4 3.9 6.9 7.8 5.9 1.9 3.4 6.6 4 9.3 1.2"/>
+    <!-- right hemisphere outline -->
+    <path d="M32 14.5c3.2-3.1 8.6-3 11.4.4 4.2-.6 7.6 2.5 7.3 6.4 3.4 1.7 4.3 6 1.8 8.7 1.6 3.5-.4 7.5-4 8.5-.1 4-3.9 6.9-7.8 5.9-1.9 3.4-6.6 4-9.3 1.2"/>
+    <!-- central fissure -->
+    <path d="M32 14.5v31"/>
+    <!-- folds -->
+    <path d="M23.5 21.5c3.2.4 5 2.4 5 5.2M22 34.5c3.6-.6 6.5 1 6.5 4.3"/>
+    <path d="M40.5 21.5c-3.2.4-5 2.4-5 5.2M42 34.5c-3.6-.6-6.5 1-6.5 4.3"/>
+    <!-- brain stem -->
+    <path d="M32 45.5v6"/>
+  </g>
+</svg>

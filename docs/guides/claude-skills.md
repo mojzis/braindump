@@ -52,13 +52,23 @@ overridable. `project` is separate from tags and is a by-name reference to the
 title of a first-class `project` entry. Bare names with no entry show up as
 "unregistered" until you create a matching project.
 
+Because `project` is its own field, an entry is never tagged with its own
+project name — `bd create` and `bd update` strip such a tag. Otherwise project
+names pile up in `bd tags stats` and crowd out the tags that say what an entry
+is actually *about*. A tag naming a **different** project survives: that's a
+cross-reference, not a duplicate.
+
 ### Output contract
 
-On success, creation skills output only:
+On success, creation skills output only the line `bd create` printed:
 
 ```text
-done: <file_path>
+created: #<id> <file_path>
 ```
+
+The id is deliberately in that one line: it's how you reference the entry from a
+later session (`bd show 42`, `bd done 42`), and the skill's output is the only
+place it appears in the transcript.
 
 ## The digest skill
 

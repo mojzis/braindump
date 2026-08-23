@@ -74,9 +74,14 @@ def _watch_filter(_change: Change, path: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()
-    app.state.subscribers: set[asyncio.Queue[str]] = set()
-    app.state.parse_job: ParseJob | None = None
-    app.state.parse_task: asyncio.Task | None = None
+    # Starlette's State is untyped, so bind a typed local and share the object
+    # with it — that keeps a real declaration for the one long-lived container.
+    subscribers: set[asyncio.Queue[str]] = set()
+    app.state.subscribers = subscribers
+    # parse_job (ParseJob | None) and parse_task (asyncio.Task | None) are
+    # reassigned from the parse handlers, so they can only be documented here.
+    app.state.parse_job = None
+    app.state.parse_task = None
     stop = asyncio.Event()
     app.state.watch_stop = stop
     log = logging.getLogger("braindump.web")
@@ -87,7 +92,7 @@ async def lifespan(app: FastAPI):
                 async for _changes in awatch(
                     cfg.home, watch_filter=_watch_filter, stop_event=stop
                 ):
-                    for q in list(app.state.subscribers):
+                    for q in list(subscribers):
                         with contextlib.suppress(asyncio.QueueFull):
                             q.put_nowait("reload")
             except asyncio.CancelledError:
@@ -101,7 +106,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop.set()
-        for q in list(app.state.subscribers):
+        for q in list(subscribers):
             with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait("__shutdown__")
         task.cancel()
@@ -484,7 +489,7 @@ def capture_get(
 
 
 @app.post("/capture")
-def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitting adds indirection
+def capture_post(  # noqa: PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -538,7 +543,7 @@ def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitt
 
 
 @app.get("/entries", response_class=HTMLResponse)
-def entries_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
+def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
     request: Request,
     q: str | None = None,
     type: str | None = None,
@@ -619,7 +624,7 @@ def entry_edit(request: Request, entry_id: int):
 
 
 @app.post("/api/entries/{entry_id}", response_class=HTMLResponse)
-def api_entry_update(  # noqa: PLR0913 -- one Form field per editable attribute; splitting adds indirection
+def api_entry_update(  # noqa: PLR0913, PLR0917 -- one Form field per editable attribute; splitting adds indirection
     request: Request,
     entry_id: int,
     title: str | None = Form(None),
@@ -660,6 +665,78 @@ def api_entry_delete(entry_id: int):
     cfg = load_config()
     entries.delete_entry(cfg, entry_id)
     return HTMLResponse(headers={"HX-Redirect": "/entries"}, content="")
+
+
+# --- todos ------------------------------------------------------------------
+
+
+_TODO_SORT_KEYS = {
+    "id": lambda h: h.entry.id,
+    "date": lambda h: h.entry.created_at or "",
+    "status": lambda h: h.entry.status or "",
+    "project": lambda h: (h.entry.project or "").lower(),
+    "title": lambda h: (h.entry.title or "").lower(),
+    "tags": lambda h: ", ".join(h.entry.tags).lower(),
+}
+
+
+@app.get("/todos", response_class=HTMLResponse)
+def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
+    request: Request,
+    q: str | None = None,
+    project: str | None = None,
+    tag: str | None = None,
+    sort: str = "date",
+    direction: str = Query("desc", alias="dir"),
+    show_all: bool = Query(False, alias="all"),
+    show_postponed: bool = Query(False, alias="postponed"),
+):
+    cfg = load_config()
+    # No active-project focus here: /todos is a cross-project view that
+    # defaults to the most recent todos regardless of project.
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            q=q or None,
+            types=["todos"],
+            project=project or None,
+            tags=[tag] if tag else [],
+            status="all" if show_all else "open",
+            limit=500,
+            fulltext=False,
+        ),
+    )
+    # Postponed todos are hidden unless explicitly requested. "open" already
+    # keeps them (they're not done), so filter them out in Python.
+    if not show_postponed:
+        hits = [h for h in hits if h.entry.status != "postponed"]
+    groups: dict[str, list[query.Hit]] = {}
+    for h in hits:
+        groups.setdefault(h.entry.project or "(none)", []).append(h)
+    grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
+
+    sort = sort if sort in _TODO_SORT_KEYS else "date"
+    # Unrecognized dir falls back to the default (desc), matching the sort fallback.
+    descending = direction != "asc"
+    rows = sorted(hits, key=_TODO_SORT_KEYS[sort], reverse=descending)
+
+    return templates.TemplateResponse(
+        request,
+        "todos.html",
+        _context(
+            request,
+            grouped=grouped,
+            rows=rows,
+            total=len(hits),
+            q=q or "",
+            selected=project or "",
+            tag=tag or "",
+            sort=sort,
+            dir="desc" if descending else "asc",
+            show_all=show_all,
+            show_postponed=show_postponed,
+        ),
+    )
 
 
 # --- projects --------------------------------------------------------------

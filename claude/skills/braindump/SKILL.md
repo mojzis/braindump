@@ -95,6 +95,14 @@ This allows filtering/searching entries by the project they were created in.
 - **Limit:** 1-5 tags per entry
 - **Specificity:** Prefer specific over generic (`gitlab-ci` > `ci`)
 - **Consistency:** Avoid duplicates (`docs` OR `documentation`, not both)
+- **Never tag an entry with its own project name.** `project` is already a
+  field on the entry; `--project braindump --tag braindump` says the same thing
+  twice and makes project names dominate `bd tags stats`, drowning out the tags
+  that actually describe subject matter. `bd create` strips such a tag anyway —
+  don't pass it. Tagging a *different* project's name is fine and meaningful:
+  it's a cross-reference ("this introspect todo is about braindump").
+- Tags answer "what is this about?" (`auth`, `ruff`, `performance`), not
+  "where does it live?" — that's what `project` is for.
 
 **Available tags:**
 
@@ -216,10 +224,15 @@ All commands go through the `bd` CLI.
 
 ## Output Style
 
-After successfully creating an entry, respond only with:
+After successfully creating an entry, respond only with the line `bd create`
+printed — id included:
 ```
-done: <file_path>
+created: #<id> <file_path>
 ```
+
+The id matters: it's how the entry is referenced from any later session
+(`bd show 42`, `bd update 42`, `bd done 42`). Dropping it makes the entry
+findable only by search. `bd done` and `bd update` echo `#<id>` the same way.
 
 No extra text, summaries, or commentary unless:
 - There's an error to report
