@@ -24,7 +24,10 @@ web = [
 ]
 app = [
     "braindump[web]",
+    "pyqt6>=6.11.0",
+    "pyqt6-webengine>=6.11.0",
     "pywebview>=5.4",
+    "qtpy>=2.4.3",
 ]
 
 [dependency-groups]
