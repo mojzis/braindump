@@ -69,7 +69,7 @@ bd journal today|append|close|show <YYYY-MM-DD>
 bd tags stats|show <tag>
 bd doctor                                # validate indexes
 bd serve [--host 127.0.0.1] [--port 8765]
-bd app   [--host 127.0.0.1] [--port 8765]   # same UI in a native pywebview window
+bd app   [--host 127.0.0.1] [--port 8765] [-f]   # same UI in a native pywebview window (detached unless -f)
 ```
 
 ## Web UI
@@ -77,7 +77,11 @@ bd app   [--host 127.0.0.1] [--port 8765]   # same UI in a native pywebview wind
 `bd serve` starts a local FastAPI server (default `http://127.0.0.1:8765/`). `bd app`
 starts the same server in a background thread and points a native pywebview window at
 it (see `braindump/web/desktop.py`) — a convenience wrapper, not a packaged build;
-needs the `[app]` extra. Pages:
+needs the `[app]` extra (which pins a Qt backend, since an isolated uv tool env
+can't see system GTK bindings). `bd app` detaches by default, re-execing itself
+as `bd app --foreground` in a new session with output redirected to
+`~/braindump/.bd-app.log`; it attaches to an already-running server on the port
+rather than starting a second one. Pages:
 
 - `/` — dashboard (today's journal preview, open todos, recent activity, top tags, projects)
 - `/journal` — the running doc: today's editor on top, the last ~7 days rendered below with lazy-load-on-scroll for older days, autosave, `✳ parse`, and a "finish the day" button

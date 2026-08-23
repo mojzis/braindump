@@ -9,7 +9,11 @@ A portable Claude Code-integrated personal knowledge management system. Capture 
 
 ## Installation
 
+Braindump is **not published to PyPI** — you install it from a local checkout.
+
 ```bash
+git clone <this-repo> ~/git/braindump
+cd ~/git/braindump
 ./install.sh
 ```
 
@@ -19,22 +23,44 @@ This will:
 3. Seed the data directory at `~/braindump/` with empty indexes for each type
 4. Drop optional session-tracking scripts into `~/braindump/scripts/`
 
-### Reinstalling / upgrading the global `bd`
+### How the `uv tool` install works
 
-`bd` is installed as a [uv tool](https://docs.astral.sh/uv/concepts/tools/) — it
-runs from its own isolated environment under `~/.local/share/uv/tools/braindump/`,
-**not** from this repo's checkout. To pick up local changes (or fix a broken
-install), reinstall from the repo directory:
+`bd` is installed as a [uv tool](https://docs.astral.sh/uv/concepts/tools/): uv
+builds the package from this directory and drops it into its **own isolated
+environment** under `~/.local/share/uv/tools/braindump/`, then puts a `bd`
+shim on your `PATH` at `~/.local/bin/bd`.
+
+Two consequences worth internalizing:
+
+- **The installed `bd` is a copy, not a live link to this checkout.** Editing
+  files here does not change the `bd` on your `PATH` until you reinstall.
+- **The tool environment is isolated from system site-packages.** Anything `bd`
+  needs at runtime has to come from an extra (see `[project.optional-dependencies]`
+  in `pyproject.toml`), not from a distro package.
+
+Reinstall from the repo directory to pick up local changes (or fix a broken
+install) — the trailing `.` is the local path, and the bracketed part picks the
+extras:
 
 ```bash
 cd ~/git/braindump
-uv tool install --force --reinstall --no-cache ".[web]"
+uv tool install --force --reinstall --no-cache ".[web]"      # CLI + bd serve
+uv tool install --force --reinstall --no-cache ".[app]"      # + bd app desktop window
 ```
 
-The `[web]` extra is required for `bd serve`. If it's omitted you'll get
-`ModuleNotFoundError: No module named 'uvicorn'` when starting the web UI — that's
-the symptom of a `bd` installed without it. Running `./install.sh` does the same
-thing (it always installs with `[web]`).
+Extras are not cumulative across installs — each `uv tool install` replaces the
+environment, so pass every extra you want in one go (`".[app]"` already pulls in
+`[web]`). Missing extras show up as import errors at run time:
+`ModuleNotFoundError: No module named 'uvicorn'` means a `bd` installed without
+`[web]`. Running `./install.sh` does the `[web]` install for you.
+
+Useful uv tool commands:
+
+```bash
+uv tool list                 # what's installed, and which commands each provides
+uv tool uninstall braindump  # remove bd entirely
+uv tool dir                  # where the tool environments live
+```
 
 ## Usage
 
@@ -50,7 +76,7 @@ bd update 42 --tags a,b --project foo # patch metadata
 bd project focus braindump            # scope all queries to a project
 bd journal today                      # today's journal state
 bd serve                              # local web UI at http://127.0.0.1:8765/
-bd app                                # same UI in a native desktop window
+bd app                                # same UI in a native desktop window (detached)
 ```
 
 ### Web UI
@@ -72,13 +98,34 @@ Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` 
 `bd app` runs the exact same web UI, but inside a native [pywebview](https://pywebview.flet.dev/)
 window instead of a browser tab — a lightweight way to keep braindump open as its
 own app locally. It's not a packaged/bundled build: it just starts the server and
-points a window at it. Requires the `[app]` extra:
+points a window at it.
+
+It **detaches by default** — the command returns immediately, the window keeps
+running after you close the terminal, and anything the process prints goes to
+`~/braindump/.bd-app.log`:
+
+```bash
+bd app                  # detach, print the pid, hand the shell back
+bd app --foreground     # stay attached (use this when debugging a crash)
+```
+
+If something is already serving on the port (a running `bd serve`, or another
+`bd app`), the window attaches to that server instead of starting a second one.
+
+Requires the `[app]` extra:
 
 ```bash
 uv tool install --force --reinstall --no-cache ".[app]"
 ```
 
 Without it, `bd app` prints an install hint and falls back to suggesting `bd serve`.
+
+The `[app]` extra ships a Qt webview backend (`qtpy` + PyQt6 WebEngine, ~200 MB of
+wheels) rather than relying on the host's GTK/WebKit bindings. pywebview has no
+renderer of its own, and system GTK bindings (`python-gobject` + `webkit2gtk`) are
+invisible to an isolated uv tool environment — and are built against the system
+Python, which needn't match the one uv picked. Bundling Qt makes `bd app` work
+without any distro packages.
 
 Start a new Claude Code session after installation. Available:
 
