@@ -74,9 +74,12 @@ def _watch_filter(_change: Change, path: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cfg = load_config()
-    app.state.subscribers: set[asyncio.Queue[str]] = set()
-    app.state.parse_job: ParseJob | None = None
-    app.state.parse_task: asyncio.Task | None = None
+    # Starlette's State is untyped, so these are documented rather than annotated:
+    # subscribers is a set[asyncio.Queue[str]] (one queue per SSE client),
+    # parse_job a ParseJob | None, parse_task an asyncio.Task | None.
+    app.state.subscribers = set()
+    app.state.parse_job = None
+    app.state.parse_task = None
     stop = asyncio.Event()
     app.state.watch_stop = stop
     log = logging.getLogger("braindump.web")
@@ -484,7 +487,7 @@ def capture_get(
 
 
 @app.post("/capture")
-def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitting adds indirection
+def capture_post(  # noqa: PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -538,7 +541,7 @@ def capture_post(  # noqa: PLR0913 -- one Form field per entry attribute; splitt
 
 
 @app.get("/entries", response_class=HTMLResponse)
-def entries_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
+def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
     request: Request,
     q: str | None = None,
     type: str | None = None,
@@ -619,7 +622,7 @@ def entry_edit(request: Request, entry_id: int):
 
 
 @app.post("/api/entries/{entry_id}", response_class=HTMLResponse)
-def api_entry_update(  # noqa: PLR0913 -- one Form field per editable attribute; splitting adds indirection
+def api_entry_update(  # noqa: PLR0913, PLR0917 -- one Form field per editable attribute; splitting adds indirection
     request: Request,
     entry_id: int,
     title: str | None = Form(None),
@@ -676,7 +679,7 @@ _TODO_SORT_KEYS = {
 
 
 @app.get("/todos", response_class=HTMLResponse)
-def todos_list(  # noqa: PLR0913 -- one query param per filter; splitting adds indirection
+def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
     request: Request,
     q: str | None = None,
     project: str | None = None,
