@@ -7,7 +7,11 @@
       <span class="type-chip">{{ entry.type }}</span>
       <h2>{{ entry.title }}</h2>
     </div>
-    <a class="edit-link" href="/entries/{{ entry.id }}/edit">edit</a>
+    <div class="entry-head-actions">
+      <button type="button" class="ghost-btn" data-copy-from="#entry-source"
+              title="copy this entry's markdown">copy</button>
+      <a class="edit-link" href="/entries/{{ entry.id }}/edit">edit</a>
+    </div>
   </header>
 
   <p class="entry-meta muted">
@@ -32,6 +36,8 @@
   {% if entry.summary %}<p class="entry-summary">{{ entry.summary }}</p>{% endif %}
 
   <div class="prose">{{ body | markdown }}</div>
+  {# the markdown behind the rendered body, for the copy button #}
+  <script type="application/json" id="entry-source">{{ body | tojson }}</script>
 
   <div class="entry-foot">
     <a href="/entries">← all entries</a>

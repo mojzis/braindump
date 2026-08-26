@@ -94,6 +94,17 @@ rather than starting a second one. Pages:
 
 Keyboard shortcuts: `g d` dashboard, `g j` journal, `g c` capture, `g e` entries, `g p` projects, `/` focus search, `⌘/ctrl+enter` parse (on the journal page), `?` help.
 
+### Copying out of the app
+
+pywebview gives a window no right-click menu and (on Qt) no JS clipboard
+access, which left `bd app` with no way to get text out. Both halves of the fix
+travel together: `desktop.py` hands the native view a copy/cut/paste/select-all
+context menu and switches `JavascriptCanAccessClipboard` on, and
+`static/clipboard.js` adds `copy` buttons (`data-copy-from` reads an element,
+`data-copy-url` fetches one — both copy markdown source, not rendered HTML)
+plus a `⌘/ctrl+C` fallback that only fires when the webview's own `copy` event
+doesn't. Everything degrades to a working browser tab if the native half fails.
+
 ### Journal parse pipeline
 
 `✳ parse` on the running doc turns free-form journal writing into structured

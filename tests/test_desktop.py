@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import socket
 import subprocess
+import sys
+import types
 from typing import ClassVar
 
 import pytest
@@ -32,15 +34,33 @@ class _FakeProc:
         return self._exit_code
 
 
+class _StubEvent:
+    """Stand-in for pywebview's Event, which registers handlers with `+=`."""
+
+    def __init__(self):
+        self.handlers: list = []
+
+    def __iadd__(self, handler):
+        self.handlers.append(handler)
+        return self
+
+
+class _StubWindow:
+    def __init__(self):
+        self.events = types.SimpleNamespace(before_show=_StubEvent())
+
+
 class _StubWebview:
     """Stand-in for the pywebview module."""
 
     def __init__(self):
         self.windows: list[tuple[str, str]] = []
+        self.window = _StubWindow()
         self.started = False
 
     def create_window(self, title, url, **kwargs):
         self.windows.append((title, url))
+        return self.window
 
     def start(self, **kwargs):
         self.started = True
@@ -237,3 +257,181 @@ def test_bd_app_reports_a_failed_launch(monkeypatch):
     res = runner.invoke(cli_app, ["app"])
     assert res.exit_code == 1
     assert "exited immediately" in res.output
+
+
+# --- clipboard plumbing ----------------------------------------------------
+
+
+class _FakeSettings:
+    class WebAttribute:  # Qt6 nests its enums; Qt5 doesn't (see _FakeQt5Page)
+        JavascriptCanAccessClipboard = "clipboard"
+
+    def __init__(self):
+        self.attributes: dict = {}
+
+    def setAttribute(self, attribute, value):
+        self.attributes[attribute] = value
+
+
+class _FakePage:
+    class WebAction:
+        Copy = "copy"
+        Cut = "cut"
+        Paste = "paste"
+        SelectAll = "select-all"
+
+    def __init__(self):
+        self._settings = _FakeSettings()
+
+    def settings(self):
+        return self._settings
+
+    def action(self, member):
+        return f"action:{member}"
+
+
+class _FakeSignal:
+    def __init__(self):
+        self.slots: list = []
+
+    def connect(self, slot):
+        self.slots.append(slot)
+
+
+class _FakeView:
+    def __init__(self, page=None):
+        self._page = page or _FakePage()
+        self.customContextMenuRequested = _FakeSignal()
+        self.policy = None
+
+    def page(self):
+        return self._page
+
+    def setContextMenuPolicy(self, policy):
+        self.policy = policy
+
+    def mapToGlobal(self, pos):
+        return ("global", pos)
+
+
+class _FakeMenu:
+    last: ClassVar[_FakeMenu | None] = None
+
+    def __init__(self, parent):
+        self.parent = parent
+        self.actions: list = []
+        self.shown_at = None
+        _FakeMenu.last = self
+
+    def addAction(self, action):
+        self.actions.append(action)
+
+    def exec(self, pos):
+        self.shown_at = pos
+
+
+def _stub_qtpy(monkeypatch):
+    """Put a minimal fake qtpy on sys.modules; the real one needs a Qt build."""
+    widgets = types.SimpleNamespace(QMenu=_FakeMenu)
+    qtpy = types.SimpleNamespace(
+        QtWidgets=widgets,
+        QtCore=types.SimpleNamespace(
+            Qt=types.SimpleNamespace(
+                ContextMenuPolicy=types.SimpleNamespace(CustomContextMenu="custom")
+            )
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "qtpy", qtpy)
+    monkeypatch.setitem(sys.modules, "qtpy.QtWidgets", widgets)
+
+
+def test_run_app_registers_the_clipboard_hook(monkeypatch):
+    stub = _StubWebview()
+    monkeypatch.setattr(desktop, "_import_webview", lambda: stub)
+    monkeypatch.setattr(desktop, "_port_open", lambda *a, **kw: True)
+
+    desktop.run_app(host="127.0.0.1", port=9911)
+
+    assert stub.window.events.before_show.handlers == [desktop._on_before_show]
+
+
+def test_install_qt_clipboard_wires_an_edit_menu(monkeypatch):
+    _stub_qtpy(monkeypatch)
+    view = _FakeView()
+
+    desktop._install_qt_clipboard(view)
+
+    assert view.page().settings().attributes == {"clipboard": True}
+    assert view.policy == "custom"
+    assert len(view.customContextMenuRequested.slots) == 1
+
+    view.customContextMenuRequested.slots[0]((3, 4))
+    menu = _FakeMenu.last
+    assert menu is not None
+    assert menu.actions == [
+        "action:copy",
+        "action:cut",
+        "action:paste",
+        "action:select-all",
+    ]
+    assert menu.shown_at == ("global", (3, 4))
+
+
+def test_install_qt_clipboard_handles_flat_qt5_enums(monkeypatch):
+    _stub_qtpy(monkeypatch)
+
+    class _FakeQt5Settings:
+        # Qt5 hangs the members off the class itself, with no nesting class.
+        JavascriptCanAccessClipboard = "clipboard"
+
+        def __init__(self):
+            self.attributes: dict = {}
+
+        def setAttribute(self, attribute, value):
+            self.attributes[attribute] = value
+
+    class _FakeQt5Page:
+        Copy = "copy"
+        Cut = "cut"
+        Paste = "paste"
+        SelectAll = "select-all"
+
+        def __init__(self):
+            self._settings = _FakeQt5Settings()
+
+        def settings(self):
+            return self._settings
+
+        def action(self, member):
+            return f"action:{member}"
+
+    view = _FakeView(page=_FakeQt5Page())
+    desktop._install_qt_clipboard(view)
+
+    assert view.page().settings().attributes == {"clipboard": True}
+    view.customContextMenuRequested.slots[0]((0, 0))
+    menu = _FakeMenu.last
+    assert menu is not None
+    assert menu.actions == [
+        "action:copy",
+        "action:cut",
+        "action:paste",
+        "action:select-all",
+    ]
+
+
+def test_before_show_ignores_backends_without_a_qt_view():
+    """Cocoa and GTK hand us a native window with no `.webview` — and no need."""
+    desktop._on_before_show(types.SimpleNamespace(native=object()))
+
+
+def test_before_show_survives_a_backend_it_cannot_wire(monkeypatch, caplog):
+    def boom(view):
+        raise RuntimeError("no such attribute")
+
+    monkeypatch.setattr(desktop, "_install_qt_clipboard", boom)
+
+    native = types.SimpleNamespace(webview=_FakeView())
+    desktop._on_before_show(types.SimpleNamespace(native=native))
+
+    assert "could not enable the copy menu" in caplog.text
