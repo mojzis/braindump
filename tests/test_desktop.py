@@ -56,11 +56,13 @@ class _StubWebview:
 
     def __init__(self):
         self.windows: list[tuple[str, str]] = []
+        self.window_kwargs: dict = {}
         self.window = _StubWindow()
         self.started = False
 
     def create_window(self, title, url, **kwargs):
         self.windows.append((title, url))
+        self.window_kwargs = kwargs
         return self.window
 
     def start(self, **kwargs):
@@ -371,6 +373,17 @@ def qtpy_stub(monkeypatch):
     )
     monkeypatch.setitem(sys.modules, "qtpy", qtpy)
     monkeypatch.setitem(sys.modules, "qtpy.QtWidgets", widgets)
+
+
+def test_run_app_asks_for_a_selectable_window(monkeypatch):
+    """Without this pywebview injects `user-select: none` into every page."""
+    stub = _StubWebview()
+    monkeypatch.setattr(desktop, "_import_webview", lambda: stub)
+    monkeypatch.setattr(desktop, "_port_open", lambda *a, **kw: True)
+
+    desktop.run_app(host="127.0.0.1", port=9911)
+
+    assert stub.window_kwargs["text_select"] is True
 
 
 def test_run_app_registers_the_clipboard_hook(monkeypatch):

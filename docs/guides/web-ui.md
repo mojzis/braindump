@@ -13,10 +13,14 @@ bd app                           # same UI in a native pywebview window ([app] e
 [pywebview](https://pywebview.flet.dev/) window at it — a convenience wrapper,
 not a packaged build.
 
-## Copying text out
+## Selecting and copying text
 
-The desktop window has no browser chrome, and pywebview turns the native
-right-click menu off, so the UI brings its own copy affordances:
+pywebview windows are built for kiosk-style apps: by default they inject
+`user-select: none` into the page, so text can't even be selected. `bd app`
+turns that off (`text_select=True`), so selection behaves like a browser tab.
+
+On top of that, the window has no browser chrome and no native right-click
+menu, so the UI brings its own copy affordances:
 
 - **`copy` buttons** on an entry, on today's journal editor, and on every past
   day — they copy the **markdown source**, not the rendered HTML, so what you

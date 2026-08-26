@@ -9,11 +9,12 @@ window instead of a browser tab.
 the shell it was started from; `run_app` is the attached/foreground path the
 detached child re-enters.
 
-One thing the window doesn't inherit from a browser tab is the copy plumbing:
-pywebview switches the native context menu off outside debug mode, and its Qt
-backend leaves JS clipboard access disabled, so text in the window can't be
-gotten out of it. `_enable_clipboard` puts both back (see also
-`web/static/clipboard.js`, the in-page half of the same fix).
+One thing the window doesn't inherit from a browser tab is getting text back
+out of it. pywebview injects `user-select: none` into the page unless a window
+asks for `text_select`, switches the native context menu off outside debug
+mode, and (on Qt) leaves JS clipboard access disabled. `run_app` and
+`_enable_clipboard_on_show` undo all three, and `web/static/clipboard.js` is
+the in-page half of the same fix.
 """
 
 from __future__ import annotations
@@ -298,6 +299,11 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
             width=_WINDOW_WIDTH,
             height=_WINDOW_HEIGHT,
             min_size=_WINDOW_MIN_SIZE,
+            # pywebview defaults this to False, which injects
+            # `body { user-select: none; cursor: default }` into the page on
+            # every backend — so nothing in the window could even be selected,
+            # let alone copied. Braindump is a reading app; text selects.
+            text_select=True,
         )
         _enable_clipboard_on_show(window)
         webview.start(icon=str(_ICON_PATH) if _ICON_PATH.exists() else None)
