@@ -11,17 +11,50 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
-from typing import cast
+from typing import NoReturn, cast
 
 import typer
+from typer.core import TyperGroup
 
 from braindump.core import entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
+from braindump.core.errors import BraindumpError, storage_error
 from braindump.core.query import StatusFilter
 from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, Entry, type_to_dir
 
+
+def _fail(exc: BraindumpError) -> NoReturn:
+    """Report an expected failure the way the rest of the CLI reports errors."""
+    typer.echo(f"error: {exc}", err=True)
+    if exc.hint:
+        typer.echo(f"hint: {exc.hint}", err=True)
+    raise typer.Exit(code=1) from exc
+
+
+class BraindumpCLI(TyperGroup):
+    """Root group that renders expected failures as messages, not tracebacks.
+
+    Click resolves and runs every subcommand inside this group's `invoke`, so
+    one handler here covers all of `bd` — including the common case of running
+    it somewhere it can't save (a sandbox that only grants the workspace, a
+    read-only mount, a `~/braindump` owned by another user), where the failure
+    lands mid-write and used to surface as a raw `PermissionError`.
+    """
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except BraindumpError as exc:
+            _fail(exc)
+        except OSError as exc:
+            # Anything filesystem-shaped that didn't come through the store:
+            # a missing --body-file, an unreadable --original-input-file.
+            _fail(storage_error(exc))
+
+
 app = typer.Typer(
+    cls=BraindumpCLI,
     help="Braindump CLI — personal knowledge management.",
     no_args_is_help=True,
     add_completion=False,
@@ -631,6 +664,12 @@ def doctor():
     """Validate indexes and report orphaned markdown files."""
     cfg = load_config()
     problems = 0
+    unwritable = store.writable_error(cfg)
+    if unwritable is not None:
+        typer.echo(f"NOT WRITABLE: {unwritable}", err=True)
+        if unwritable.hint:
+            typer.echo(f"              {unwritable.hint}", err=True)
+        problems += 1
     for tmp in store.sweep_stale_tmp(cfg):
         typer.echo(f"REMOVED STALE TMP: {tmp.relative_to(cfg.home)}", err=True)
     for type_dir in ALL_TYPE_DIRS:

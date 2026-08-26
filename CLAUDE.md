@@ -29,6 +29,7 @@ braindump/
 │   ├── core/
 │   │   ├── config.py          # ~/braindump path, day cutoff, active project state
 │   │   ├── schema.py          # pydantic models and type<->dir maps
+│   │   ├── errors.py          # expected failures (missing id, unwritable store)
 │   │   ├── store.py           # slugs, fcntl-guarded IDs, atomic JSONL + markdown IO
 │   │   ├── entries.py         # create / update / set_status / delete
 │   │   ├── query.py           # search with filters + ripgrep full-text fallback
@@ -197,6 +198,7 @@ Authored content…
 - A tag equal to the entry's own `project` is stripped on create/update (`entries.drop_self_project_tag`) — the field already says it, and project names otherwise dominate tag analytics; a tag naming a *different* project is a deliberate cross-reference and is kept
 - The `input` field in JSONL always stores original user input verbatim
 - Index mutations rewrite the file atomically under `fcntl.flock`
+- Expected failures raise a `BraindumpError` from `core/errors.py` — a missing id, or a data directory this process can't write to (a sandbox, a read-only mount). `store.py` guards every filesystem call and translates the `OSError`; the `bd` root group prints `error:` + `hint:` and exits 1, the web UI answers 403/404. A traceback out of `bd` means braindump has a bug
 - The `~/braindump/.state.json` holds the active project focus; it's applied automatically by `bd list` / `bd search` / the web UI until cleared with `bd project focus --clear`
 
 ## Journal day cutoff
