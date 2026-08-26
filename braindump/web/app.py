@@ -439,7 +439,8 @@ async def api_journal_parse(request: Request, day: str, body: str = Form("")):
             job.status = "done"
         except Exception as exc:  # surfaced to the user via the status fragment
             job.status = "error"
-            job.error = str(exc)
+            hint = getattr(exc, "hint", None)
+            job.error = f"{exc}\n{hint}" if hint else str(exc)
 
     request.app.state.parse_task = asyncio.create_task(_runner())
     return templates.TemplateResponse(

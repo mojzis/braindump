@@ -389,14 +389,19 @@ def writable_error(cfg: Config) -> StorageError | None:
     inside a sandbox that allows the bits but blocks the write itself — so
     actually try one, and hand back the error instead of raising it: the only
     caller is `bd doctor`, which reports rather than fails.
+
+    The probe name is unique (two concurrent doctors can't unlink each other's)
+    and hidden with a `.tmp` suffix, which keeps it out of the web UI's file
+    watcher and lets `sweep_stale_tmp` reclaim one left by a crash.
     """
-    probe = cfg.home / ".bd-write-probe"
     try:
-        cfg.home.mkdir(parents=True, exist_ok=True)
-        probe.touch()
-        probe.unlink()
+        fd, name = tempfile.mkstemp(
+            dir=cfg.home, prefix=".bd-write-probe.", suffix=".tmp"
+        )
     except OSError as exc:
         return storage_error(exc, cfg.home, "write")
+    os.close(fd)
+    Path(name).unlink(missing_ok=True)
     return None
 
 
@@ -407,7 +412,8 @@ def full_path_for(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
 def move_to_trash(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
     src = full_path_for(cfg, type_or_dir, rel_file_path)
     dst = cfg.trash_dir / type_to_dir(type_or_dir) / rel_file_path
-    with _guard(src, "delete"):
+    with _guard(dst, "write"):
         dst.parent.mkdir(parents=True, exist_ok=True)
+    with _guard(src, "delete"):
         shutil.move(str(src), str(dst))
     return dst

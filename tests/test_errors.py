@@ -44,6 +44,8 @@ def _deny_writes(monkeypatch) -> None:
     def denied(*_args, **_kwargs):
         raise PermissionError(errno.EACCES, "Permission denied")
 
+    # `store.tempfile` *is* the tempfile module, so this patch is global for
+    # the test — deliberately, since that's what a sandbox does to everyone.
     monkeypatch.setattr(store.tempfile, "mkstemp", denied)
     monkeypatch.setattr(Path, "touch", denied)
     monkeypatch.setattr(Path, "write_text", denied)
@@ -75,6 +77,12 @@ def test_full_disk_gets_its_own_hint():
     assert "full" in exc.hint
 
 
+def test_full_disk_outside_the_store_blames_no_disk():
+    """`bd list > /dev/full` fills stdout's disk, which says nothing about ours."""
+    exc = storage_error(OSError(errno.ENOSPC, "No space left on device"))
+    assert exc.hint is None
+
+
 def test_unclassified_errno_carries_no_hint():
     exc = storage_error(OSError(errno.EIO, "I/O error"), Path("/x"))
     assert isinstance(exc, StorageError)
@@ -82,9 +90,34 @@ def test_unclassified_errno_carries_no_hint():
     assert "i/o error" in str(exc)
 
 
+def test_a_denied_read_is_not_a_read_only_store():
+    """A file braindump can't read needs different advice than one it can't save.
+
+    Making the directory writable does nothing for a read denial, so it must
+    not inherit the write hint — nor the 403 the web UI gives a blocked write.
+    """
+    exc = storage_error(OSError(errno.EACCES, "Permission denied"), Path("/x"), "read")
+    assert not isinstance(exc, ReadOnlyStoreError)
+    assert exc.hint is not None
+    assert "read" in exc.hint
+
+
+def test_a_path_outside_the_store_gets_no_store_advice():
+    """The CLI's catch-all passes no path — usually an input file, not the store."""
+    exc = storage_error(PermissionError(errno.EACCES, "Permission denied", "/in.md"))
+    assert "/in.md" in str(exc)
+    assert exc.hint is None
+
+
 def test_error_falls_back_to_the_errnos_own_filename():
     exc = storage_error(FileNotFoundError(errno.ENOENT, "No such file", "/nope.md"))
     assert "/nope.md" in str(exc)
+
+
+def test_error_with_no_known_target_names_no_location():
+    assert str(storage_error(OSError(errno.EPIPE, "Broken pipe"))) == (
+        "cannot access: broken pipe"
+    )
 
 
 # --- core ------------------------------------------------------------------
@@ -170,6 +203,37 @@ def test_cli_done_unknown_id_explains_itself(cfg, monkeypatch):
     assert res.exit_code == 1
     assert "Traceback" not in res.output
     assert "error: entry #9999 not found" in res.output
+
+
+def test_cli_done_ambiguous_query_reports_the_candidates(cfg, monkeypatch):
+    _todo(cfg, "water the plants")
+    _todo(cfg, "water the lawn")
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(cli_app, ["done", "water"])
+    assert res.exit_code == 1
+    assert "water the plants" in res.output
+    assert "error: 'water' matches 2 open todos" in res.output
+
+
+def test_cli_done_query_with_no_match_uses_the_error_convention(cfg, monkeypatch):
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    res = runner.invoke(cli_app, ["done", "nothing-like-this"])
+    assert res.exit_code == 1
+    assert "error: no open todos found for: nothing-like-this" in res.output
+
+
+def test_cli_broken_pipe_is_not_a_storage_error(cfg, monkeypatch):
+    """`bd list | head` closes stdout early; that is not the store failing."""
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    def closed_pipe(*_args, **_kwargs):
+        raise BrokenPipeError(errno.EPIPE, "Broken pipe")
+
+    monkeypatch.setattr(query, "search", closed_pipe)
+    res = runner.invoke(cli_app, ["list"])
+    assert "error:" not in res.output
+    assert "cannot access" not in res.output
 
 
 def test_cli_reports_a_missing_input_file(cfg, monkeypatch):

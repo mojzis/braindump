@@ -11,7 +11,7 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import Any, NoReturn, cast
 
 import typer
 from typer.core import TyperGroup
@@ -42,11 +42,15 @@ class BraindumpCLI(TyperGroup):
     lands mid-write and used to surface as a raw `PermissionError`.
     """
 
-    def invoke(self, ctx):
+    def invoke(self, ctx: Any) -> Any:
         try:
             return super().invoke(ctx)
         except BraindumpError as exc:
             _fail(exc)
+        except BrokenPipeError:
+            # `bd list | head` closing stdout early is the shell working as
+            # intended, not a store failure. Click exits quietly on EPIPE.
+            raise
         except OSError as exc:
             # Anything filesystem-shaped that didn't come through the store:
             # a missing --body-file, an unreadable --original-input-file.
@@ -445,8 +449,7 @@ def _resolve_todo(cfg, arg: str) -> int:
         found = entries.find_by_file_path(cfg, arg, "todos")
         if found:
             return found[1].id
-        typer.echo(f"No todo found with file path: {arg}", err=True)
-        raise typer.Exit(code=1)
+        raise BraindumpError(f"no todo found with file path: {arg}")
     # Otherwise treat as a search over open todos
     hits = query.search(
         cfg,
@@ -455,8 +458,7 @@ def _resolve_todo(cfg, arg: str) -> int:
         ),
     )
     if not hits:
-        typer.echo(f"No open todos found for: {arg}", err=True)
-        raise typer.Exit(code=1)
+        raise BraindumpError(f"no open todos found for: {arg}")
     if len(hits) > 1:
         typer.echo("Multiple matches:", err=True)
         for h in hits:
@@ -464,7 +466,7 @@ def _resolve_todo(cfg, arg: str) -> int:
                 f"  #{h.entry.id} [{h.entry.status or 'pending'}] {h.entry.title}",
                 err=True,
             )
-        raise typer.Exit(code=1)
+        raise BraindumpError(f"{arg!r} matches {len(hits)} open todos — pass an id")
     return hits[0].entry.id
 
 
