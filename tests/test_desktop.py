@@ -6,6 +6,7 @@ stubbed, so no display or native backend is needed.
 
 from __future__ import annotations
 
+import inspect
 import socket
 import subprocess
 import sys
@@ -263,7 +264,9 @@ def test_bd_app_reports_a_failed_launch(monkeypatch):
 
 
 class _FakeSettings:
-    class WebAttribute:  # Qt6 nests its enums; Qt5 doesn't (see _FakeQt5Page)
+    """Qt6 layout: enum members live on a nested type."""
+
+    class WebAttribute:
         JavascriptCanAccessClipboard = "clipboard"
 
     def __init__(self):
@@ -280,14 +283,37 @@ class _FakePage:
         Paste = "paste"
         SelectAll = "select-all"
 
+    settings_class: ClassVar[type] = _FakeSettings
+
     def __init__(self):
-        self._settings = _FakeSettings()
+        self._settings = self.settings_class()
 
     def settings(self):
         return self._settings
 
     def action(self, member):
         return f"action:{member}"
+
+
+class _FakeQt5Settings(_FakeSettings):
+    """Qt5 layout: the nested type exists but carries no members."""
+
+    class WebAttribute:
+        pass
+
+    JavascriptCanAccessClipboard = "clipboard"
+
+
+class _FakeQt5Page(_FakePage):
+    class WebAction:
+        pass
+
+    Copy = "copy"
+    Cut = "cut"
+    Paste = "paste"
+    SelectAll = "select-all"
+
+    settings_class: ClassVar[type] = _FakeQt5Settings
 
 
 class _FakeSignal:
@@ -330,8 +356,10 @@ class _FakeMenu:
         self.shown_at = pos
 
 
-def _stub_qtpy(monkeypatch):
+@pytest.fixture
+def qtpy_stub(monkeypatch):
     """Put a minimal fake qtpy on sys.modules; the real one needs a Qt build."""
+    _FakeMenu.last = None  # never let one test's menu answer for another's
     widgets = types.SimpleNamespace(QMenu=_FakeMenu)
     qtpy = types.SimpleNamespace(
         QtWidgets=widgets,
@@ -353,11 +381,14 @@ def test_run_app_registers_the_clipboard_hook(monkeypatch):
     desktop.run_app(host="127.0.0.1", port=9911)
 
     assert stub.window.events.before_show.handlers == [desktop._on_before_show]
+    # pywebview hands the window only to a parameter with this exact name, and
+    # calls the handler with no arguments otherwise (webview/event.py).
+    assert "window" in inspect.signature(desktop._on_before_show).parameters
 
 
-def test_install_qt_clipboard_wires_an_edit_menu(monkeypatch):
-    _stub_qtpy(monkeypatch)
-    view = _FakeView()
+@pytest.mark.parametrize("page_class", [_FakePage, _FakeQt5Page], ids=["qt6", "qt5"])
+def test_install_qt_clipboard_wires_an_edit_menu(qtpy_stub, page_class):
+    view = _FakeView(page=page_class())
 
     desktop._install_qt_clipboard(view)
 
@@ -377,52 +408,19 @@ def test_install_qt_clipboard_wires_an_edit_menu(monkeypatch):
     assert menu.shown_at == ("global", (3, 4))
 
 
-def test_install_qt_clipboard_handles_flat_qt5_enums(monkeypatch):
-    _stub_qtpy(monkeypatch)
-
-    class _FakeQt5Settings:
-        # Qt5 hangs the members off the class itself, with no nesting class.
-        JavascriptCanAccessClipboard = "clipboard"
-
-        def __init__(self):
-            self.attributes: dict = {}
-
-        def setAttribute(self, attribute, value):
-            self.attributes[attribute] = value
-
-    class _FakeQt5Page:
-        Copy = "copy"
-        Cut = "cut"
-        Paste = "paste"
-        SelectAll = "select-all"
-
-        def __init__(self):
-            self._settings = _FakeQt5Settings()
-
-        def settings(self):
-            return self._settings
-
-        def action(self, member):
-            return f"action:{member}"
-
-    view = _FakeView(page=_FakeQt5Page())
-    desktop._install_qt_clipboard(view)
-
-    assert view.page().settings().attributes == {"clipboard": True}
-    view.customContextMenuRequested.slots[0]((0, 0))
-    menu = _FakeMenu.last
-    assert menu is not None
-    assert menu.actions == [
-        "action:copy",
-        "action:cut",
-        "action:paste",
-        "action:select-all",
-    ]
-
-
-def test_before_show_ignores_backends_without_a_qt_view():
+def test_before_show_ignores_backends_without_a_qt_view(monkeypatch):
     """Cocoa and GTK hand us a native window with no `.webview` — and no need."""
+    wired: list = []
+    monkeypatch.setattr(desktop, "_install_qt_clipboard", wired.append)
+
     desktop._on_before_show(types.SimpleNamespace(native=object()))
+    assert wired == []
+
+    view = _FakeView()
+    desktop._on_before_show(
+        types.SimpleNamespace(native=types.SimpleNamespace(webview=view))
+    )
+    assert wired == [view]
 
 
 def test_before_show_survives_a_backend_it_cannot_wire(monkeypatch, caplog):
@@ -435,3 +433,4 @@ def test_before_show_survives_a_backend_it_cannot_wire(monkeypatch, caplog):
     desktop._on_before_show(types.SimpleNamespace(native=native))
 
     assert "could not enable the copy menu" in caplog.text
+    assert "no such attribute" in caplog.text  # the warning has to name the cause

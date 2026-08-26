@@ -158,14 +158,27 @@ def _log_tail(log_file: Path, offset: int = 0, lines: int = 15) -> str:
 #: imported so the same code works against the Qt5 and Qt6 enum layouts.
 _EDIT_ACTIONS = ("Copy", "Cut", "Paste", "SelectAll")
 
+#: Distinguishes "no such enum member" from a member that is falsy (Qt's enums
+#: start at 0, so `or` would misread the first one of every enum).
+_MISSING = object()
 
-def _enum(obj: Any, name: str) -> Any:
-    """Qt6 nests enum members under a class (`WebAction.Copy`), Qt5 doesn't."""
-    return getattr(type(obj), name, type(obj))
+
+def _qt_enum_member(scope: Any, enum_name: str, member: str) -> Any:
+    """Look a Qt enum member up under either binding's layout, else None.
+
+    Qt6 nests members under the enum type (`WebAction.Copy`); Qt5 hangs them off
+    the enclosing class (`QWebEnginePage.Copy`) while still exposing a member-less
+    `WebAction` type, so the nested lookup has to fall through rather than stop
+    at the first name that resolves.
+    """
+    value = getattr(getattr(scope, enum_name, None), member, _MISSING)
+    if value is _MISSING:
+        value = getattr(scope, member, _MISSING)
+    return None if value is _MISSING else value
 
 
-def _enable_clipboard(window: Any) -> None:
-    """Ask to switch the window's copy plumbing on once its native widget exists.
+def _enable_clipboard_on_show(window: Any) -> None:
+    """Register the copy plumbing to be switched on once the window exists.
 
     `before_show` is the last event pywebview fires from the GUI thread while
     the window is still being built, which is where native widgets may be
@@ -173,10 +186,15 @@ def _enable_clipboard(window: Any) -> None:
     """
     events = getattr(window, "events", None)
     if events is None or getattr(events, "before_show", None) is None:
+        # Registration runs inline in `run_app`, so an unfamiliar window shape
+        # must not raise: no copy menu still beats no window.
         return  # pragma: no cover - every pywebview window has the event
     events.before_show += _on_before_show
 
 
+# The parameter *name* is load-bearing: pywebview's Event.set() passes the
+# window only to a handler that declares a parameter literally called `window`,
+# and calls it with no arguments otherwise (see webview/event.py).
 def _on_before_show(window: Any) -> None:
     """Grant copy/paste to the native view; never block the window over it."""
     # Only the Qt backend needs (and exposes) this: its `native` is pywebview's
@@ -200,36 +218,45 @@ def _install_qt_clipboard(view: Any) -> None:
     page = view.page()
 
     # `navigator.clipboard.writeText` — what the in-page copy buttons use — is
-    # off by default in QtWebEngine. Paste stays off: nothing in the UI writes
-    # to the clipboard, and native ctrl+V doesn't go through this setting.
+    # off by default in QtWebEngine. The matching `JavascriptCanPaste` stays
+    # off: nothing in the UI reads the clipboard, and the native ctrl+V (and
+    # the Paste entry below) don't go through that setting.
     settings = page.settings()
-    attribute = getattr(
-        _enum(settings, "WebAttribute"), "JavascriptCanAccessClipboard", None
+    attribute = _qt_enum_member(
+        type(settings), "WebAttribute", "JavascriptCanAccessClipboard"
     )
-    if attribute is not None:
+    if attribute is None:
+        logger.warning(
+            "this webview has no JS clipboard setting; copy buttons "
+            "will fall back to execCommand"
+        )
+    else:
         settings.setAttribute(attribute, True)
 
-    web_action = _enum(page, "WebAction")
     actions = [
         page.action(member)
-        for member in (getattr(web_action, name, None) for name in _EDIT_ACTIONS)
+        for member in (
+            _qt_enum_member(type(page), "WebAction", name) for name in _EDIT_ACTIONS
+        )
         if member is not None
     ]
-    if not actions:  # pragma: no cover - an unrecognisable page gets no menu
+    if not actions:
+        logger.warning("this webview exposes no edit actions; no context menu")
         return
 
+    # One menu for the life of the view: the actions never change, and a fresh
+    # QMenu parented to the view would outlive every right-click.
+    menu = QMenu(view)
+    for action in actions:
+        menu.addAction(action)
+    popup = getattr(menu, "exec", None) or menu.exec_
+
     def show_menu(pos: Any) -> None:
-        menu = QMenu(view)
-        for action in actions:
-            menu.addAction(action)
-        popup = getattr(menu, "exec", None) or menu.exec_
         popup(view.mapToGlobal(pos))
 
-    policy = getattr(QtCore.Qt, "ContextMenuPolicy", QtCore.Qt)
-    view.setContextMenuPolicy(policy.CustomContextMenu)
+    policy = _qt_enum_member(QtCore.Qt, "ContextMenuPolicy", "CustomContextMenu")
+    view.setContextMenuPolicy(policy)
     view.customContextMenuRequested.connect(show_menu)
-    # The connection alone doesn't own the closure; the view has to.
-    view._bd_context_menu = show_menu
 
 
 def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
@@ -272,7 +299,7 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
             height=_WINDOW_HEIGHT,
             min_size=_WINDOW_MIN_SIZE,
         )
-        _enable_clipboard(window)
+        _enable_clipboard_on_show(window)
         webview.start(icon=str(_ICON_PATH) if _ICON_PATH.exists() else None)
     finally:
         if server is not None:

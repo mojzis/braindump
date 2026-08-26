@@ -36,7 +36,7 @@ async def _get(url):
 
 
 @pytest.mark.anyio
-async def test_every_page_loads_the_clipboard_script(monkeypatch, cfg):
+async def test_base_layout_loads_the_clipboard_script(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
 
     r = await _get("/entries")
@@ -76,3 +76,22 @@ async def test_past_journal_days_each_get_a_copy_button(monkeypatch, cfg):
 
     assert r.status_code == 200
     assert 'data-copy-url="/api/journal/2026-06-01/body"' in r.text
+
+
+@pytest.mark.anyio
+async def test_entry_markdown_cannot_break_out_of_its_script_tag(monkeypatch, cfg):
+    """The copy payload is JSON inside <script>; a body must not close it."""
+    _set_home(monkeypatch, cfg)
+    created = entries.create_entry(
+        cfg,
+        "thoughts",
+        "sneaky",
+        "before </script><b>boom</b> after",
+        now=datetime(2026, 4, 11, 14, 15),
+    )
+
+    r = await _get(f"/entries/{created.entry.id}")
+
+    assert r.status_code == 200
+    assert "</script><b>" not in r.text
+    assert "\\u003c/script\\u003e" in r.text
