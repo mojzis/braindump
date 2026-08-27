@@ -35,6 +35,7 @@ from watchfiles import Change, awatch
 from braindump.core import claude_cli, digest, entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
+from braindump.core.errors import BraindumpError, EntryNotFoundError, ReadOnlyStoreError
 from braindump.core.query import StatusFilter
 from braindump.core.schema import ALL_TYPES, PROJECT_STATES
 
@@ -176,6 +177,24 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.filters["markdown"] = _render_markdown
 templates.env.filters["journal_markdown"] = _journal_markdown
+
+
+@app.exception_handler(EntryNotFoundError)
+async def _entry_not_found(_request: Request, exc: Exception) -> Response:
+    return PlainTextResponse(str(exc), status_code=404)
+
+
+@app.exception_handler(BraindumpError)
+async def _braindump_error(_request: Request, exc: Exception) -> Response:
+    """Answer with the message the CLI would print instead of a 500 traceback.
+
+    Almost always a data directory the server can't write to — worth telling
+    the browser plainly, since no amount of retrying the request fixes it.
+    """
+    status = 403 if isinstance(exc, ReadOnlyStoreError) else 500
+    hint = getattr(exc, "hint", None)
+    body = f"{exc}\n\n{hint}" if hint else str(exc)
+    return PlainTextResponse(body, status_code=status)
 
 
 @app.get("/events")
@@ -420,7 +439,8 @@ async def api_journal_parse(request: Request, day: str, body: str = Form("")):
             job.status = "done"
         except Exception as exc:  # surfaced to the user via the status fragment
             job.status = "error"
-            job.error = str(exc)
+            hint = getattr(exc, "hint", None)
+            job.error = f"{exc}\n{hint}" if hint else str(exc)
 
     request.app.state.parse_task = asyncio.create_task(_runner())
     return templates.TemplateResponse(

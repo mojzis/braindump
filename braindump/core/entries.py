@@ -13,6 +13,7 @@ from typing import Any
 
 from braindump.core import store
 from braindump.core.config import Config
+from braindump.core.errors import EntryNotFoundError
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     Entry,
@@ -255,7 +256,7 @@ def update_entry(
     """
     found = find_by_id(cfg, entry_id)
     if found is None:
-        raise KeyError(f"entry id {entry_id} not found")
+        raise EntryNotFoundError(entry_id)
     type_dir, entry = found
 
     bad = set(patch) - _MUTABLE_FIELDS
@@ -304,7 +305,7 @@ def delete_entry(cfg: Config, entry_id: int) -> Entry:
     """Soft delete: move the markdown file to .trash/ and drop the index line."""
     found = find_by_id(cfg, entry_id)
     if found is None:
-        raise KeyError(f"entry id {entry_id} not found")
+        raise EntryNotFoundError(entry_id)
     type_dir, entry = found
 
     store.move_to_trash(cfg, type_dir, entry.file_path)

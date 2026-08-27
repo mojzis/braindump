@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from braindump.core.config import Config
+from braindump.core.errors import StorageError, storage_error
 from braindump.core.schema import ALL_TYPE_DIRS, Entry, type_to_dir
 
 # --- time ------------------------------------------------------------------
@@ -55,6 +56,24 @@ def date_path(when: datetime) -> str:
     return when.strftime("%Y/%m")
 
 
+# --- error translation -----------------------------------------------------
+
+
+@contextlib.contextmanager
+def _guard(path: Path, action: str) -> Iterator[None]:
+    """Turn filesystem failures on `path` into a `StorageError` for the surface.
+
+    A braindump directory that can't be written — a sandbox that only grants
+    the workspace, a read-only mount, a file owned by someone else — is a
+    normal thing to run into, not a bug, so it gets a message instead of a
+    traceback. Every write in this module runs inside one of these.
+    """
+    try:
+        yield
+    except OSError as exc:
+        raise storage_error(exc, path, action) from exc
+
+
 # --- locks -----------------------------------------------------------------
 
 
@@ -77,7 +96,7 @@ def _locked(path: Path, mode: str = "a+") -> Iterator[Any]:
 def next_id(cfg: Config) -> int:
     """Atomically read, increment, and persist the shared ID counter."""
     path = cfg.next_id_file
-    with _locked(path, mode="r+") as f:
+    with _guard(path, "write"), _locked(path, mode="r+") as f:
         raw = f.read().strip()
         current = int(raw) if raw else 1
         next_value = current + 1
@@ -106,28 +125,30 @@ def atomic_write_text(path: Path, content: str) -> None:
     last-writer-wins. Callers needing serialization must hold their own lock
     (see `rewrite_index_atomic`, which wraps this pattern in `_locked`).
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Unique tmp name per write: a deterministic name (`.{name}.tmp`) collides
-    # when two writers target the same path concurrently (e.g. journal autosave
-    # racing the parse flush), so one replace() finds the tmp already moved.
-    # Orphans left by a hard crash are reclaimed by sweep_stale_tmp / bd doctor.
-    fd, tmp_name = tempfile.mkstemp(
-        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
-    )
-    tmp = Path(tmp_name)
-    try:
-        # mkstemp forces 0o600; restore umask-respecting perms so files keep
-        # matching the rest of the store (e.g. index.jsonl at 0o644).
-        with _UMASK_LOCK:
-            umask = os.umask(0)
-            os.umask(umask)
-        os.fchmod(fd, 0o666 & ~umask)
-        with os.fdopen(fd, "w") as f:
-            f.write(content)
-        tmp.replace(path)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    with _guard(path, "write"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Unique tmp name per write: a deterministic name (`.{name}.tmp`)
+        # collides when two writers target the same path concurrently (e.g.
+        # journal autosave racing the parse flush), so one replace() finds the
+        # tmp already moved. Orphans left by a hard crash are reclaimed by
+        # sweep_stale_tmp / bd doctor.
+        fd, tmp_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        tmp = Path(tmp_name)
+        try:
+            # mkstemp forces 0o600; restore umask-respecting perms so files
+            # keep matching the rest of the store (e.g. index.jsonl at 0o644).
+            with _UMASK_LOCK:
+                umask = os.umask(0)
+                os.umask(umask)
+            os.fchmod(fd, 0o666 & ~umask)
+            with os.fdopen(fd, "w") as f:
+                f.write(content)
+            tmp.replace(path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def sweep_stale_tmp(cfg: Config, min_age_seconds: float = 60.0) -> list[Path]:
@@ -147,7 +168,9 @@ def sweep_stale_tmp(cfg: Config, min_age_seconds: float = 60.0) -> list[Path]:
             if now - tmp.stat().st_mtime < min_age_seconds:
                 continue
             tmp.unlink()
-        except FileNotFoundError:
+        except OSError:
+            # Already gone, or not ours to remove — either way not worth
+            # failing a sweep over.
             continue
         removed.append(tmp)
     return removed
@@ -272,7 +295,8 @@ def build_markdown(frontmatter: dict[str, Any], title: str, body: str) -> str:
 
 
 def read_markdown(path: Path) -> tuple[dict[str, Any], str]:
-    text = path.read_text()
+    with _guard(path, "read"):
+        text = path.read_text()
     return parse_frontmatter(text)
 
 
@@ -296,7 +320,7 @@ def read_index(cfg: Config, type_or_dir: str) -> list[Entry]:
     if not path.exists():
         return []
     entries: list[Entry] = []
-    with path.open() as f:
+    with _guard(path, "read"), path.open() as f:
         for raw in f:
             line = raw.strip()
             if not line:
@@ -318,7 +342,7 @@ def append_index(cfg: Config, type_or_dir: str, entry: Entry) -> None:
     type_dir = type_to_dir(type_or_dir)
     path = cfg.index_path(type_dir)
     line = json.dumps(entry.to_index_json(), ensure_ascii=False)
-    with _locked(path, mode="a+") as f:
+    with _guard(path, "write"), _locked(path, mode="a+") as f:
         f.seek(0, os.SEEK_END)
         if f.tell() > 0:
             # ensure we start on a new line even if the last write was truncated
@@ -338,7 +362,7 @@ def rewrite_index_atomic(cfg: Config, type_or_dir: str, entries: list[Entry]) ->
     """
     type_dir = type_to_dir(type_or_dir)
     path = cfg.index_path(type_dir)
-    with _locked(path, mode="a+"):
+    with _guard(path, "write"), _locked(path, mode="a+"):
         tmp = path.with_name(f".{path.name}.tmp")
         with tmp.open("w") as out:
             for entry in entries:
@@ -352,9 +376,33 @@ def rewrite_index_atomic(cfg: Config, type_or_dir: str, entries: list[Entry]) ->
 
 
 def ensure_type_dirs(cfg: Config) -> None:
-    for t in ALL_TYPE_DIRS:
-        (cfg.home / t).mkdir(parents=True, exist_ok=True)
-        (cfg.home / t / "index.jsonl").touch(exist_ok=True)
+    with _guard(cfg.home, "write"):
+        for t in ALL_TYPE_DIRS:
+            (cfg.home / t).mkdir(parents=True, exist_ok=True)
+            (cfg.home / t / "index.jsonl").touch(exist_ok=True)
+
+
+def writable_error(cfg: Config) -> StorageError | None:
+    """Probe-write the data directory; return why it isn't writable, or None.
+
+    `os.access` answers from the permission bits, which is the wrong question
+    inside a sandbox that allows the bits but blocks the write itself — so
+    actually try one, and hand back the error instead of raising it: the only
+    caller is `bd doctor`, which reports rather than fails.
+
+    The probe name is unique (two concurrent doctors can't unlink each other's)
+    and hidden with a `.tmp` suffix, which keeps it out of the web UI's file
+    watcher and lets `sweep_stale_tmp` reclaim one left by a crash.
+    """
+    try:
+        fd, name = tempfile.mkstemp(
+            dir=cfg.home, prefix=".bd-write-probe.", suffix=".tmp"
+        )
+    except OSError as exc:
+        return storage_error(exc, cfg.home, "write")
+    os.close(fd)
+    Path(name).unlink(missing_ok=True)
+    return None
 
 
 def full_path_for(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
@@ -364,6 +412,8 @@ def full_path_for(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
 def move_to_trash(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
     src = full_path_for(cfg, type_or_dir, rel_file_path)
     dst = cfg.trash_dir / type_to_dir(type_or_dir) / rel_file_path
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dst))
+    with _guard(dst, "write"):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+    with _guard(src, "delete"):
+        shutil.move(str(src), str(dst))
     return dst

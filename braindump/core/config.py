@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from braindump.core.errors import storage_error
+
 DEFAULT_DAY_CUTOFF_HOUR = 4
 DEFAULT_PORT = 8765
 
@@ -51,10 +53,13 @@ def read_state(cfg: Config) -> dict:
 
 
 def write_state(cfg: Config, state: dict) -> None:
-    cfg.state_file.parent.mkdir(parents=True, exist_ok=True)
-    tmp = cfg.state_file.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(state, indent=2))
-    tmp.replace(cfg.state_file)
+    try:
+        cfg.state_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = cfg.state_file.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, indent=2))
+        tmp.replace(cfg.state_file)
+    except OSError as exc:
+        raise storage_error(exc, cfg.state_file, "write") from exc
 
 
 def get_active_project(cfg: Config) -> str | None:

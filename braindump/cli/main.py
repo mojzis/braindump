@@ -11,17 +11,54 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
-from typing import cast
+from typing import Any, NoReturn, cast
 
 import typer
+from typer.core import TyperGroup
 
 from braindump.core import entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
+from braindump.core.errors import BraindumpError, storage_error
 from braindump.core.query import StatusFilter
 from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, Entry, type_to_dir
 
+
+def _fail(exc: BraindumpError) -> NoReturn:
+    """Report an expected failure the way the rest of the CLI reports errors."""
+    typer.echo(f"error: {exc}", err=True)
+    if exc.hint:
+        typer.echo(f"hint: {exc.hint}", err=True)
+    raise typer.Exit(code=1) from exc
+
+
+class BraindumpCLI(TyperGroup):
+    """Root group that renders expected failures as messages, not tracebacks.
+
+    Click resolves and runs every subcommand inside this group's `invoke`, so
+    one handler here covers all of `bd` — including the common case of running
+    it somewhere it can't save (a sandbox that only grants the workspace, a
+    read-only mount, a `~/braindump` owned by another user), where the failure
+    lands mid-write and used to surface as a raw `PermissionError`.
+    """
+
+    def invoke(self, ctx: Any) -> Any:
+        try:
+            return super().invoke(ctx)
+        except BraindumpError as exc:
+            _fail(exc)
+        except BrokenPipeError:
+            # `bd list | head` closing stdout early is the shell working as
+            # intended, not a store failure. Click exits quietly on EPIPE.
+            raise
+        except OSError as exc:
+            # Anything filesystem-shaped that didn't come through the store:
+            # a missing --body-file, an unreadable --original-input-file.
+            _fail(storage_error(exc))
+
+
 app = typer.Typer(
+    cls=BraindumpCLI,
     help="Braindump CLI — personal knowledge management.",
     no_args_is_help=True,
     add_completion=False,
@@ -412,8 +449,7 @@ def _resolve_todo(cfg, arg: str) -> int:
         found = entries.find_by_file_path(cfg, arg, "todos")
         if found:
             return found[1].id
-        typer.echo(f"No todo found with file path: {arg}", err=True)
-        raise typer.Exit(code=1)
+        raise BraindumpError(f"no todo found with file path: {arg}")
     # Otherwise treat as a search over open todos
     hits = query.search(
         cfg,
@@ -422,8 +458,7 @@ def _resolve_todo(cfg, arg: str) -> int:
         ),
     )
     if not hits:
-        typer.echo(f"No open todos found for: {arg}", err=True)
-        raise typer.Exit(code=1)
+        raise BraindumpError(f"no open todos found for: {arg}")
     if len(hits) > 1:
         typer.echo("Multiple matches:", err=True)
         for h in hits:
@@ -431,7 +466,7 @@ def _resolve_todo(cfg, arg: str) -> int:
                 f"  #{h.entry.id} [{h.entry.status or 'pending'}] {h.entry.title}",
                 err=True,
             )
-        raise typer.Exit(code=1)
+        raise BraindumpError(f"{arg!r} matches {len(hits)} open todos — pass an id")
     return hits[0].entry.id
 
 
@@ -631,6 +666,12 @@ def doctor():
     """Validate indexes and report orphaned markdown files."""
     cfg = load_config()
     problems = 0
+    unwritable = store.writable_error(cfg)
+    if unwritable is not None:
+        typer.echo(f"NOT WRITABLE: {unwritable}", err=True)
+        if unwritable.hint:
+            typer.echo(f"              {unwritable.hint}", err=True)
+        problems += 1
     for tmp in store.sweep_stale_tmp(cfg):
         typer.echo(f"REMOVED STALE TMP: {tmp.relative_to(cfg.home)}", err=True)
     for type_dir in ALL_TYPE_DIRS:
