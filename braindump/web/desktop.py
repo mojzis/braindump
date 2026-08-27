@@ -270,7 +270,7 @@ def _install_qt_clipboard(view: Any) -> None:
     view.customContextMenuRequested.connect(show_menu)
 
 
-def _brand_macos_app(name: str = _APP_NAME) -> None:
+def _brand_macos_app() -> None:
     """Have macOS call this process `Braindump` instead of `Python 3.14`.
 
     `bd app` is an ordinary interpreter process with no .app bundle of its
@@ -294,8 +294,8 @@ def _brand_macos_app(name: str = _APP_NAME) -> None:
         # Same lookup order as macOS itself (and as pywebview's cocoa backend):
         # a localized dictionary, when there is one, is what gets read.
         info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
-        info["CFBundleName"] = name
-        info["CFBundleDisplayName"] = name
+        info["CFBundleName"] = _APP_NAME
+        info["CFBundleDisplayName"] = _APP_NAME
     except Exception as exc:
         # A window called "Python" beats no window at all.
         logger.warning("could not set the macOS app name: %s", exc)
@@ -309,8 +309,8 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
     a second one. The server belongs to whichever process started it, so
     closing *that* window stops it for any window that attached to it.
     """
-    # Before pywebview is anywhere near importing its Cocoa backend, which is
-    # where macOS decides what this process is called.
+    # Must stay above _import_webview(): pywebview's Cocoa backend registers
+    # the process — and its name is taken — at import time.
     _brand_macos_app()
     webview = _import_webview()
 

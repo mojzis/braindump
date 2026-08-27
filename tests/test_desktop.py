@@ -117,6 +117,17 @@ def _no_startup_wait(monkeypatch):
     monkeypatch.setattr(desktop, "_STARTUP_GRACE", 0.2)
 
 
+@pytest.fixture(autouse=True)
+def _not_macos_by_default(monkeypatch):
+    """Keep `run_app` from really renaming the bundle of a mac dev machine.
+
+    `_brand_macos_app` mutates the running process's info dictionary, which is
+    a genuine native side effect in a file that otherwise touches nothing. The
+    tests that want it opt back in by setting the platform themselves.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+
+
 def test_launch_detached_spawns_foreground_child(monkeypatch, tmp_path):
     captured = {}
     _stub_popen(monkeypatch, _FakeProc(), captured)
@@ -291,7 +302,7 @@ def test_brand_macos_app_renames_the_bundle(monkeypatch):
     bundle = _FakeBundle(
         info={"CFBundleName": "Python", "CFBundleDisplayName": "Python 3.14"}
     )
-    monkeypatch.setattr(desktop.sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", "darwin")
     _stub_foundation(monkeypatch, bundle)
 
     desktop._brand_macos_app()
@@ -303,20 +314,22 @@ def test_brand_macos_app_renames_the_bundle(monkeypatch):
 
 def test_brand_macos_app_prefers_the_localized_dictionary(monkeypatch):
     """macOS (and pywebview) read the localized one when there is one."""
-    bundle = _FakeBundle(
-        info={"CFBundleName": "Python"}, localized={"CFBundleName": "Python"}
-    )
-    monkeypatch.setattr(desktop.sys, "platform", "darwin")
+    original = {"CFBundleName": "Python", "CFBundleDisplayName": "Python 3.14"}
+    bundle = _FakeBundle(info=dict(original), localized=dict(original))
+    monkeypatch.setattr(sys, "platform", "darwin")
     _stub_foundation(monkeypatch, bundle)
 
     desktop._brand_macos_app()
 
-    assert bundle.localized["CFBundleName"] == "Braindump"
-    assert bundle.info["CFBundleName"] == "Python"
+    assert bundle.localized == {
+        "CFBundleName": "Braindump",
+        "CFBundleDisplayName": "Braindump",
+    }
+    assert bundle.info == original
 
 
 def test_brand_macos_app_does_nothing_off_darwin(monkeypatch):
-    monkeypatch.setattr(desktop.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setitem(
         sys.modules,
         "Foundation",
@@ -336,7 +349,7 @@ def test_brand_macos_app_survives_an_unusable_bundle(monkeypatch, caplog):
     def boom():
         raise RuntimeError("no main bundle")
 
-    monkeypatch.setattr(desktop.sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setitem(
         sys.modules,
         "Foundation",
@@ -354,9 +367,12 @@ def test_run_app_brands_before_pywebview_is_imported(monkeypatch):
     stub = _StubWebview()
 
     monkeypatch.setattr(desktop, "_brand_macos_app", lambda: order.append("brand"))
-    monkeypatch.setattr(
-        desktop, "_import_webview", lambda: (order.append("import"), stub)[1]
-    )
+
+    def fake_import():
+        order.append("import")
+        return stub
+
+    monkeypatch.setattr(desktop, "_import_webview", fake_import)
     monkeypatch.setattr(desktop, "_port_open", lambda *a, **kw: True)
 
     desktop.run_app(host="127.0.0.1", port=9911)
