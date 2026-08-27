@@ -82,7 +82,10 @@ needs the `[app]` extra (which pins a Qt backend, since an isolated uv tool env
 can't see system GTK bindings). `bd app` detaches by default, re-execing itself
 as `bd app --foreground` in a new session with output redirected to
 `~/braindump/.bd-app.log`; it attaches to an already-running server on the port
-rather than starting a second one. Pages:
+rather than starting a second one. On macOS `desktop._brand_macos_app` patches
+`CFBundleName`/`CFBundleDisplayName` on the main bundle *before* pywebview
+imports its Cocoa backend (which registers the process at import time), so the
+menu bar and ⌘-tab switcher say "Braindump" instead of "Python 3.14". Pages:
 
 - `/` — dashboard (today's journal preview, open todos, recent activity, top tags, projects)
 - `/journal` — the running doc: today's editor on top, the last ~7 days rendered below with lazy-load-on-scroll for older days, autosave, `✳ parse`, and a "finish the day" button

@@ -117,6 +117,17 @@ def _no_startup_wait(monkeypatch):
     monkeypatch.setattr(desktop, "_STARTUP_GRACE", 0.2)
 
 
+@pytest.fixture(autouse=True)
+def _not_macos_by_default(monkeypatch):
+    """Keep `run_app` from really renaming the bundle of a mac dev machine.
+
+    `_brand_macos_app` mutates the running process's info dictionary, which is
+    a genuine native side effect in a file that otherwise touches nothing. The
+    tests that want it opt back in by setting the platform themselves.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+
+
 def test_launch_detached_spawns_foreground_child(monkeypatch, tmp_path):
     captured = {}
     _stub_popen(monkeypatch, _FakeProc(), captured)
@@ -260,6 +271,113 @@ def test_bd_app_reports_a_failed_launch(monkeypatch):
     res = runner.invoke(cli_app, ["app"])
     assert res.exit_code == 1
     assert "exited immediately" in res.output
+
+
+# --- the macOS app name ----------------------------------------------------
+
+
+class _FakeBundle:
+    """Stand-in for NSBundle.mainBundle() and its info dictionaries."""
+
+    def __init__(self, info: dict | None = None, localized: dict | None = None):
+        self.info = {} if info is None else info
+        self.localized = localized
+
+    def infoDictionary(self):
+        return self.info
+
+    def localizedInfoDictionary(self):
+        return self.localized
+
+
+def _stub_foundation(monkeypatch, bundle):
+    foundation = types.SimpleNamespace(
+        NSBundle=types.SimpleNamespace(mainBundle=lambda: bundle)
+    )
+    monkeypatch.setitem(sys.modules, "Foundation", foundation)
+
+
+def test_brand_macos_app_renames_the_bundle(monkeypatch):
+    """Otherwise macOS names the window after the interpreter."""
+    bundle = _FakeBundle(
+        info={"CFBundleName": "Python", "CFBundleDisplayName": "Python 3.14"}
+    )
+    monkeypatch.setattr(sys, "platform", "darwin")
+    _stub_foundation(monkeypatch, bundle)
+
+    desktop._brand_macos_app()
+
+    # The menu bar reads CFBundleName, the app switcher CFBundleDisplayName.
+    assert bundle.info["CFBundleName"] == "Braindump"
+    assert bundle.info["CFBundleDisplayName"] == "Braindump"
+
+
+def test_brand_macos_app_prefers_the_localized_dictionary(monkeypatch):
+    """macOS (and pywebview) read the localized one when there is one."""
+    original = {"CFBundleName": "Python", "CFBundleDisplayName": "Python 3.14"}
+    bundle = _FakeBundle(info=dict(original), localized=dict(original))
+    monkeypatch.setattr(sys, "platform", "darwin")
+    _stub_foundation(monkeypatch, bundle)
+
+    desktop._brand_macos_app()
+
+    assert bundle.localized == {
+        "CFBundleName": "Braindump",
+        "CFBundleDisplayName": "Braindump",
+    }
+    assert bundle.info == original
+
+
+def test_brand_macos_app_does_nothing_off_darwin(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setitem(
+        sys.modules,
+        "Foundation",
+        types.SimpleNamespace(
+            NSBundle=types.SimpleNamespace(
+                mainBundle=lambda: pytest.fail("touched AppKit off macOS")
+            )
+        ),
+    )
+
+    desktop._brand_macos_app()
+
+
+def test_brand_macos_app_survives_an_unusable_bundle(monkeypatch, caplog):
+    """A window called "Python" beats no window at all."""
+
+    def boom():
+        raise RuntimeError("no main bundle")
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setitem(
+        sys.modules,
+        "Foundation",
+        types.SimpleNamespace(NSBundle=types.SimpleNamespace(mainBundle=boom)),
+    )
+
+    desktop._brand_macos_app()
+
+    assert "could not set the macOS app name" in caplog.text
+
+
+def test_run_app_brands_before_pywebview_is_imported(monkeypatch):
+    """Cocoa registers the process (and takes its name) at backend import."""
+    order: list[str] = []
+    stub = _StubWebview()
+
+    monkeypatch.setattr(desktop, "_brand_macos_app", lambda: order.append("brand"))
+
+    def fake_import():
+        order.append("import")
+        return stub
+
+    monkeypatch.setattr(desktop, "_import_webview", fake_import)
+    monkeypatch.setattr(desktop, "_port_open", lambda *a, **kw: True)
+
+    desktop.run_app(host="127.0.0.1", port=9911)
+
+    assert order == ["brand", "import"]
 
 
 # --- clipboard plumbing ----------------------------------------------------

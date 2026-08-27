@@ -15,6 +15,10 @@ asks for `text_select`, switches the native context menu off outside debug
 mode, and (on Qt) leaves JS clipboard access disabled. `run_app` and
 `_enable_clipboard_on_show` undo all three, and `web/static/clipboard.js` is
 the in-page half of the same fix.
+
+The other thing a window doesn't get for free is its own name: unbundled
+Python introduces itself to macOS as the interpreter, so `_brand_macos_app`
+renames it before the window server ever asks.
 """
 
 from __future__ import annotations
@@ -39,6 +43,10 @@ logger = logging.getLogger("braindump.app")
 #: assumes the child came up fine. Long enough to catch import-time blowups
 #: (missing extra, no webview backend), short enough not to feel like a hang.
 _STARTUP_GRACE = 5.0
+
+#: What braindump calls itself as an app: the window title, and on macOS the
+#: name in the menu bar and the app switcher.
+_APP_NAME = "Braindump"
 
 #: Default window geometry. The journal editor plus the rendered days below it
 #: want a lot of vertical room, so start noticeably larger than pywebview's
@@ -262,6 +270,37 @@ def _install_qt_clipboard(view: Any) -> None:
     view.customContextMenuRequested.connect(show_menu)
 
 
+def _brand_macos_app() -> None:
+    """Have macOS call this process `Braindump` instead of `Python 3.14`.
+
+    `bd app` is an ordinary interpreter process with no .app bundle of its
+    own, so macOS names it from the bundle it does find — the framework
+    Python's. The menu bar reads `CFBundleName` there (pywebview reads the
+    same key for its About/Hide/Quit items), the Dock and the ⌘-tab switcher
+    read `CFBundleDisplayName`; overwriting both in the in-memory info
+    dictionary is the whole fix.
+
+    Timing is the catch: pywebview's Cocoa backend calls `setActivationPolicy_`
+    at *import* time, which is when the process registers with the window
+    server and its name is taken. So this has to run before the backend is
+    imported — `run_app` calls it before it even imports pywebview.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from Foundation import NSBundle  # noqa: PLC0415  # macOS-only, via pyobjc
+
+        bundle = NSBundle.mainBundle()
+        # Same lookup order as macOS itself (and as pywebview's cocoa backend):
+        # a localized dictionary, when there is one, is what gets read.
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        info["CFBundleName"] = _APP_NAME
+        info["CFBundleDisplayName"] = _APP_NAME
+    except Exception as exc:
+        # A window called "Python" beats no window at all.
+        logger.warning("could not set the macOS app name: %s", exc)
+
+
 def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
     """Launch the web UI in a pywebview window, blocking until it's closed.
 
@@ -270,6 +309,9 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
     a second one. The server belongs to whichever process started it, so
     closing *that* window stops it for any window that attached to it.
     """
+    # Must stay above _import_webview(): pywebview's Cocoa backend registers
+    # the process — and its name is taken — at import time.
+    _brand_macos_app()
     webview = _import_webview()
 
     cfg = load_config()
@@ -296,7 +338,7 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
 
     try:
         window = webview.create_window(
-            "Braindump",
+            _APP_NAME,
             url,
             width=_WINDOW_WIDTH,
             height=_WINDOW_HEIGHT,

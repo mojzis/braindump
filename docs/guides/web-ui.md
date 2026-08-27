@@ -13,6 +13,12 @@ bd app                           # same UI in a native pywebview window ([app] e
 [pywebview](https://pywebview.flet.dev/) window at it — a convenience wrapper,
 not a packaged build.
 
+On macOS it also renames itself: without a .app bundle of its own, the window
+would introduce itself as `Python 3.14` in the ⌘-tab switcher and `Python` in
+the menu bar. `bd app` overwrites both bundle keys (`CFBundleDisplayName` and
+`CFBundleName`) before the Cocoa backend registers the process, so it shows up
+as **Braindump**.
+
 ## Selecting and copying text
 
 pywebview windows are built for kiosk-style apps: by default they inject
