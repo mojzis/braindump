@@ -246,8 +246,10 @@ def _install_qt_clipboard(view: Any) -> None:
         return
 
     # One menu for the life of the view: the actions never change, and a fresh
-    # QMenu parented to the view would outlive every right-click.
-    menu = QMenu(view)
+    # QMenu parented to the view would outlive every right-click. Typed loosely
+    # because the binding decides how a menu is opened — Qt6 dropped the
+    # `exec_()` spelling Qt5 needs, and a static QMenu type only knows one.
+    menu: Any = QMenu(view)
     for action in actions:
         menu.addAction(action)
     popup = getattr(menu, "exec", None) or menu.exec_
