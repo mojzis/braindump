@@ -25,6 +25,9 @@ web = [
 app = [
     "braindump[web]",
     "pywebview[qt]>=6.2.1",
+    # Comes with pywebview[qt] anyway, but desktop.py imports it directly to
+    # wire the window's copy menu, so it's a dependency of ours too.
+    "qtpy>=2.4.3",
 ]
 
 [dependency-groups]

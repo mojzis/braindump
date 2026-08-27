@@ -16,6 +16,9 @@
       </header>
       <p><a class="ghost-btn" href="/journal">← back to the running doc</a></p>
       <div class="day-body">
+        <button type="button" class="copy-btn day-permalink"
+                data-copy-url="/api/journal/{{ day.isoformat() }}/body"
+                title="copy this day's markdown">copy</button>
         {% if body and body.strip() %}{{ body | journal_markdown }}{% else %}<p class="muted">(empty)</p>{% endif %}
       </div>
     {% else %}
@@ -41,6 +44,8 @@
         <form hx-post="/api/journal/close" hx-swap="none">
           <button type="submit" title="finish today and open tomorrow">finish the day →</button>
         </form>
+        <button type="button" data-copy-from="#journal-editor"
+                title="copy today's writing as markdown">copy</button>
         {% if past_days %}
         <button type="button" id="earlier-days-btn" aria-expanded="false"
                 aria-controls="past-days-section" title="show earlier days">▸ earlier days</button>

@@ -8,10 +8,18 @@ window instead of a browser tab.
 `bd app` detaches by default (see `launch_detached`), so the window outlives
 the shell it was started from; `run_app` is the attached/foreground path the
 detached child re-enters.
+
+One thing the window doesn't inherit from a browser tab is getting text back
+out of it. pywebview injects `user-select: none` into the page unless a window
+asks for `text_select`, switches the native context menu off outside debug
+mode, and (on Qt) leaves JS clipboard access disabled. `run_app` and
+`_enable_clipboard_on_show` undo all three, and `web/static/clipboard.js` is
+the in-page half of the same fix.
 """
 
 from __future__ import annotations
 
+import logging
 import socket
 import subprocess
 import sys
@@ -19,10 +27,13 @@ import threading
 import time
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import uvicorn
 
 from braindump.core.config import load_config
+
+logger = logging.getLogger("braindump.app")
 
 #: How long the parent waits after spawning the detached child before it
 #: assumes the child came up fine. Long enough to catch import-time blowups
@@ -144,6 +155,113 @@ def _log_tail(log_file: Path, offset: int = 0, lines: int = 15) -> str:
     return "\n".join(written.splitlines()[-lines:])
 
 
+#: Editing actions offered in the window's right-click menu. Named rather than
+#: imported so the same code works against the Qt5 and Qt6 enum layouts.
+_EDIT_ACTIONS = ("Copy", "Cut", "Paste", "SelectAll")
+
+#: Distinguishes "no such enum member" from a member that is falsy (Qt's enums
+#: start at 0, so `or` would misread the first one of every enum).
+_MISSING = object()
+
+
+def _qt_enum_member(scope: Any, enum_name: str, member: str) -> Any:
+    """Look a Qt enum member up under either binding's layout, else None.
+
+    Qt6 nests members under the enum type (`WebAction.Copy`); Qt5 hangs them off
+    the enclosing class (`QWebEnginePage.Copy`) while still exposing a member-less
+    `WebAction` type, so the nested lookup has to fall through rather than stop
+    at the first name that resolves.
+    """
+    value = getattr(getattr(scope, enum_name, None), member, _MISSING)
+    if value is _MISSING:
+        value = getattr(scope, member, _MISSING)
+    return None if value is _MISSING else value
+
+
+def _enable_clipboard_on_show(window: Any) -> None:
+    """Register the copy plumbing to be switched on once the window exists.
+
+    `before_show` is the last event pywebview fires from the GUI thread while
+    the window is still being built, which is where native widgets may be
+    touched from.
+    """
+    events = getattr(window, "events", None)
+    if events is None or getattr(events, "before_show", None) is None:
+        # Registration runs inline in `run_app`, so an unfamiliar window shape
+        # must not raise: no copy menu still beats no window.
+        return  # pragma: no cover - every pywebview window has the event
+    events.before_show += _on_before_show
+
+
+# The parameter *name* is load-bearing: pywebview's Event.set() passes the
+# window only to a handler that declares a parameter literally called `window`,
+# and calls it with no arguments otherwise (see webview/event.py).
+def _on_before_show(window: Any) -> None:
+    """Grant copy/paste to the native view; never block the window over it."""
+    # Only the Qt backend needs (and exposes) this: its `native` is pywebview's
+    # own QMainWindow, carrying the QWebEngineView as `.webview`. Cocoa already
+    # ships an Edit menu, and GTK hands us a bare GtkWindow.
+    view = getattr(getattr(window, "native", None), "webview", None)
+    if view is None:
+        return
+    try:
+        _install_qt_clipboard(view)
+    except Exception as exc:
+        # A copy menu is not worth a dead window; say so in the log and go on.
+        logger.warning("could not enable the copy menu: %s", exc)
+
+
+def _install_qt_clipboard(view: Any) -> None:
+    """Give a QWebEngineView an edit context menu and JS clipboard access."""
+    from qtpy import QtCore  # noqa: PLC0415  # optional 'app' extra
+    from qtpy.QtWidgets import QMenu  # noqa: PLC0415
+
+    page = view.page()
+
+    # `navigator.clipboard.writeText` — what the in-page copy buttons use — is
+    # off by default in QtWebEngine. The matching `JavascriptCanPaste` stays
+    # off: nothing in the UI reads the clipboard, and the native ctrl+V (and
+    # the Paste entry below) don't go through that setting.
+    settings = page.settings()
+    attribute = _qt_enum_member(
+        type(settings), "WebAttribute", "JavascriptCanAccessClipboard"
+    )
+    if attribute is None:
+        logger.warning(
+            "this webview has no JS clipboard setting; copy buttons "
+            "will fall back to execCommand"
+        )
+    else:
+        settings.setAttribute(attribute, True)
+
+    actions = [
+        page.action(member)
+        for member in (
+            _qt_enum_member(type(page), "WebAction", name) for name in _EDIT_ACTIONS
+        )
+        if member is not None
+    ]
+    if not actions:
+        logger.warning("this webview exposes no edit actions; no context menu")
+        return
+
+    # One menu for the life of the view: the actions never change, and a fresh
+    # QMenu parented to the view would outlive every right-click. Typed loosely
+    # because the binding decides how a menu is opened — Qt6 dropped the
+    # `exec_()` spelling Qt5 needs, and a static QMenu type only knows one.
+    menu: Any = QMenu(view)
+    for action in actions:
+        menu.addAction(action)
+    popup = getattr(menu, "exec", None) or menu.exec_
+
+    def show_menu(pos: Any) -> None:
+        popup(view.mapToGlobal(pos))
+
+    policy = _qt_enum_member(QtCore.Qt, "ContextMenuPolicy", "CustomContextMenu")
+    view.setContextMenuPolicy(policy)
+    view.customContextMenuRequested.connect(show_menu)
+
+
 def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
     """Launch the web UI in a pywebview window, blocking until it's closed.
 
@@ -177,13 +295,19 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
             raise RuntimeError(f"Web server did not start on {host}:{resolved_port}")
 
     try:
-        webview.create_window(
+        window = webview.create_window(
             "Braindump",
             url,
             width=_WINDOW_WIDTH,
             height=_WINDOW_HEIGHT,
             min_size=_WINDOW_MIN_SIZE,
+            # pywebview defaults this to False, which injects
+            # `body { user-select: none; cursor: default }` into the page on
+            # every backend — so nothing in the window could even be selected,
+            # let alone copied. Braindump is a reading app; text selects.
+            text_select=True,
         )
+        _enable_clipboard_on_show(window)
         webview.start(icon=str(_ICON_PATH) if _ICON_PATH.exists() else None)
     finally:
         if server is not None:

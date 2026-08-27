@@ -95,6 +95,22 @@ rather than starting a second one. Pages:
 
 Keyboard shortcuts: `g d` dashboard, `g j` journal, `g c` capture, `g e` entries, `g p` projects, `/` focus search, `⌘/ctrl+enter` parse (on the journal page), `?` help.
 
+### Selecting and copying out of the app
+
+pywebview windows default to `text_select=False`, which injects
+`body { user-select: none; cursor: default }` into the page — so nothing in
+`bd app` could be selected at all. `create_window` now passes
+`text_select=True`; that one flag is what makes ordinary select-and-copy work,
+and the rest is the way out for text you'd rather not select by hand.
+
+pywebview also gives a window no right-click menu and (on Qt) no JS clipboard
+access. Both halves of that fix travel together: `desktop.py` hands the native view a copy/cut/paste/select-all
+context menu and switches `JavascriptCanAccessClipboard` on, and
+`static/clipboard.js` adds `copy` buttons (`data-copy-from` reads an element,
+`data-copy-url` fetches one — both copy markdown source, not rendered HTML)
+plus a `⌘/ctrl+C` fallback that only fires when the webview's own `copy` event
+doesn't. Everything degrades to a working browser tab if the native half fails.
+
 ### Journal parse pipeline
 
 `✳ parse` on the running doc turns free-form journal writing into structured

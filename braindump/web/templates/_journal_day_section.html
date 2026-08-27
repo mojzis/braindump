@@ -3,6 +3,9 @@
   <div class="day-sep"><span>{{ entry.day.strftime("%A, %B %d, %Y") }}</span></div>
   <div class="day-body">
     <a class="day-permalink muted" href="/journal/{{ entry.day.isoformat() }}">#</a>
+    <button type="button" class="copy-btn"
+            data-copy-url="/api/journal/{{ entry.day.isoformat() }}/body"
+            title="copy this day's markdown">copy</button>
     {{ entry.body | journal_markdown }}
   </div>
 </div>

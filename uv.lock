@@ -95,6 +95,7 @@ app = [
     { name = "markupsafe" },
     { name = "python-multipart" },
     { name = "pywebview", extra = ["qt"] },
+    { name = "qtpy" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "watchfiles" },
 ]
@@ -135,6 +136,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "python-multipart", marker = "extra == 'web'", specifier = ">=0.0.32" },
     { name = "pywebview", extras = ["qt"], marker = "extra == 'app'", specifier = ">=6.2.1" },
+    { name = "qtpy", marker = "extra == 'app'", specifier = ">=2.4.3" },
     { name = "typer", specifier = ">=0.27.1" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.52.4" },
     { name = "watchfiles", marker = "extra == 'web'", specifier = ">=1.2.0" },

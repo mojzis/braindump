@@ -13,6 +13,27 @@ bd app                           # same UI in a native pywebview window ([app] e
 [pywebview](https://pywebview.flet.dev/) window at it — a convenience wrapper,
 not a packaged build.
 
+## Selecting and copying text
+
+pywebview windows are built for kiosk-style apps: by default they inject
+`user-select: none` into the page, so text can't even be selected. `bd app`
+turns that off (`text_select=True`), so selection behaves like a browser tab.
+
+On top of that, the window has no browser chrome and no native right-click
+menu, so the UI brings its own copy affordances:
+
+- **`copy` buttons** on an entry, on today's journal editor, and on every past
+  day — they copy the **markdown source**, not the rendered HTML, so what you
+  paste round-trips back into braindump.
+- **Selection + `⌘/Ctrl + C`** works as usual; in a webview whose own copy
+  handler never fires, the page copies the selection itself.
+- **Right-click** in the `bd app` window gives copy / cut / paste / select-all.
+
+The window also has to grant JavaScript clipboard access on the Qt backend,
+which `bd app` does when the window is created. If that fails (an unfamiliar
+backend, say), the log at `~/braindump/.bd-app.log` says so and everything but
+the right-click menu still works.
+
 ## Pages
 
 | Route | What it is |
@@ -37,6 +58,7 @@ not a packaged build.
 | `g p` | Projects |
 | `/` | Focus search |
 | `⌘ / Ctrl + Enter` | Parse (on the journal page) |
+| `⌘ / Ctrl + C` | Copy the selection |
 | `?` | Help |
 
 ## The journal parse pipeline
