@@ -113,3 +113,50 @@ def test_fulltext_finds_body_match(cfg):
     assert len(hits) == 1
     assert hits[0].source == "fulltext"
     assert hits[0].entry.title == "Ship deploy pipeline"
+
+
+def test_search_filters_settled_and_typed_relations(cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body")
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "I",
+        "body",
+        type_fields={"project_ids": [project.entry.id]},
+    )
+    entries.create_entry(
+        cfg,
+        "todo",
+        "open linked",
+        "body",
+        type_fields={"initiative_id": initiative.entry.id, "status": "in-progress"},
+    )
+    entries.create_entry(
+        cfg,
+        "todo",
+        "cancelled linked",
+        "body",
+        type_fields={"initiative_id": initiative.entry.id, "status": "cancelled"},
+    )
+    linked = query.search(
+        cfg, query.SearchFilters(initiative_id=initiative.entry.id, status="open")
+    )
+    assert [hit.entry.title for hit in linked] == ["open linked"]
+    settled = query.search(
+        cfg, query.SearchFilters(status="settled", initiative_id=initiative.entry.id)
+    )
+    assert [hit.entry.title for hit in settled] == ["cancelled linked"]
+
+
+def test_related_entries_keeps_stale_numeric_links(cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body")
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "I",
+        "body",
+        type_fields={"project_ids": [project.entry.id]},
+    )
+    entries.delete_entry(cfg, project.entry.id)
+    hits = query.related_entries(cfg, "project", project.entry.id)
+    assert [hit.entry.id for hit in hits] == [initiative.entry.id]

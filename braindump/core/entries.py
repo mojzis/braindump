@@ -16,10 +16,23 @@ from braindump.core.config import Config
 from braindump.core.errors import EntryNotFoundError
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
+    LEGACY_TODO_STATUSES,
+    PLANNING_STATUSES,
+    PROJECT_STATES,
+    TODO_STATUSES,
     Entry,
     dir_to_type,
     type_to_dir,
 )
+
+# Relationships are deliberately explicit.  Keeping this table small prevents
+# the permissive Entry model from quietly turning arbitrary fields into graph
+# edges.
+RELATION_TARGET_TYPES: dict[str, dict[str, str]] = {
+    "todo": {"initiative_id": "initiative", "pitch_id": "pitch"},
+    "initiative": {"project_ids": "project"},
+    "pitch": {"project_ids": "project", "initiative_ids": "initiative"},
+}
 
 # --- details block ---------------------------------------------------------
 
@@ -154,10 +167,7 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
     rel_file_path = f"{rel_dir}/{stem}.md"
     full_path = store.full_path_for(cfg, type_dir, rel_file_path)
 
-    entry_id = store.next_id(cfg)
-
     entry_fields: dict[str, Any] = {
-        "id": entry_id,
         "type": canonical_type,
         "title": title,
         "file_path": rel_file_path,
@@ -173,6 +183,8 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
     if type_fields:
         entry_fields.update({k: v for k, v in type_fields.items() if v is not None})
 
+    _validate_canonical_fields(cfg, canonical_type, entry_fields)
+    entry_fields["id"] = store.next_id(cfg)
     entry = Entry.model_validate(entry_fields)
 
     frontmatter = _frontmatter_from_entry(entry)
@@ -203,6 +215,100 @@ def find_by_id(cfg: Config, entry_id: int) -> tuple[str, Entry] | None:
     return None
 
 
+def resolve_entry(
+    cfg: Config, entry_id: int, expected_type: str | None = None
+) -> Entry | None:
+    """Resolve an ID without making missing or deleted targets exceptional."""
+    found = find_by_id(cfg, entry_id)
+    if found is None:
+        return None
+    type_dir, entry = found
+    if expected_type is not None and dir_to_type(type_dir) != dir_to_type(
+        type_to_dir(expected_type)
+    ):
+        return None
+    return entry
+
+
+def resolve_relation(
+    cfg: Config, entry_id: int, expected_type: str
+) -> Entry | None:
+    """Resolve one typed relation, returning None for stale or wrong links."""
+    return resolve_entry(cfg, entry_id, expected_type)
+
+
+def resolve_relations(
+    cfg: Config, entry: Entry, field: str
+) -> list[Entry | None]:
+    """Resolve all IDs in a canonical relation, retaining missing slots.
+
+    Retaining a None slot lets callers render a useful missing-reference
+    warning while preserving the source entry's stable numeric link.
+    """
+    expected_type = RELATION_TARGET_TYPES.get(entry.type, {}).get(field)
+    if expected_type is None:
+        raise ValueError(f"unknown relation field {field!r} for {entry.type}")
+    raw_ids = getattr(entry, field, None)
+    if raw_ids is None:
+        return []
+    ids = raw_ids if isinstance(raw_ids, list) else [raw_ids]
+    return [resolve_relation(cfg, relation_id, expected_type) for relation_id in ids]
+
+
+def relation_target_ids(entry: Entry, field: str) -> list[int]:
+    """Return a canonical relation as a list, regardless of scalar shape."""
+    if field not in RELATION_TARGET_TYPES.get(entry.type, {}):
+        raise ValueError(f"unknown relation field {field!r} for {entry.type}")
+    value = getattr(entry, field, None)
+    if value is None:
+        return []
+    return value if isinstance(value, list) else [value]
+
+
+def _validate_canonical_fields(
+    cfg: Config,
+    entry_type: str,
+    fields: dict[str, Any],
+    *,
+    relation_fields: set[str] | None = None,
+) -> None:
+    """Validate lifecycle values and typed numeric links before any write."""
+    status = fields.get("status")
+    if status is not None:
+        if entry_type == "todo" and status not in (
+            *TODO_STATUSES,
+            *LEGACY_TODO_STATUSES,
+        ):
+            raise ValueError(f"todo status must be one of {list(TODO_STATUSES)}")
+        if entry_type in {"initiative", "pitch"} and status not in PLANNING_STATUSES:
+            raise ValueError(
+                f"{entry_type} status must be one of {list(PLANNING_STATUSES)}"
+            )
+    state = fields.get("state")
+    if entry_type == "project" and state is not None and state not in PROJECT_STATES:
+        raise ValueError(f"project state must be one of {list(PROJECT_STATES)}")
+
+    for field, target_type in RELATION_TARGET_TYPES.get(entry_type, {}).items():
+        if relation_fields is not None and field not in relation_fields:
+            continue
+        if field not in fields or fields[field] is None:
+            continue
+        value = fields[field]
+        values = value if isinstance(value, list) else [value]
+        if field.endswith("_ids") and not isinstance(value, list):
+            raise ValueError(f"{field} must be a list of numeric IDs")
+        for relation_id in values:
+            if isinstance(relation_id, bool) or not isinstance(relation_id, int):
+                raise ValueError(  # noqa: TRY004 - mutation API uses one error type
+                    f"{field} must contain numeric IDs"
+                )
+            target = resolve_entry(cfg, relation_id, target_type)
+            if target is None:
+                raise ValueError(
+                    f"{field} target #{relation_id} is not an existing {target_type}"
+                )
+
+
 def find_by_file_path(
     cfg: Config, file_path: str, type_or_dir: str | None = None
 ) -> tuple[str, Entry] | None:
@@ -230,6 +336,10 @@ _MUTABLE_FIELDS = {
     "source",
     "mood",
     "related_to",
+    "initiative_id",
+    "pitch_id",
+    "project_ids",
+    "initiative_ids",
     "prompt_type",
     "model_target",
     "description",
@@ -237,6 +347,10 @@ _MUTABLE_FIELDS = {
     "area",
     "local_dir",
     "tech_stack",
+    "qa_result",
+    "qa_verified_at",
+    "qa_run_ref",
+    "source_path",
 }
 
 
@@ -263,7 +377,15 @@ def update_entry(
     if bad:
         raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
 
-    updated = entry.model_copy(update=patch)
+    merged = entry.model_dump()
+    merged.update(patch)
+    _validate_canonical_fields(
+        cfg,
+        entry.type,
+        merged,
+        relation_fields=set(patch) & set(RELATION_TARGET_TYPES.get(entry.type, {})),
+    )
+    updated = Entry.model_validate(merged)
     updated.tags = drop_self_project_tag(updated.tags, updated.project)
     updated.updated_at = store.utcnow_iso()
 

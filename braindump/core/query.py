@@ -20,9 +20,9 @@ from typing import Literal
 
 from braindump.core import store
 from braindump.core.config import Config
-from braindump.core.schema import ALL_TYPE_DIRS, Entry, type_to_dir
+from braindump.core.schema import ALL_TYPE_DIRS, SETTLED_STATUSES, Entry, type_to_dir
 
-StatusFilter = Literal["open", "done", "all"]
+StatusFilter = Literal["open", "done", "settled", "all"]
 
 
 @dataclass
@@ -30,6 +30,11 @@ class SearchFilters:
     q: str | None = None
     types: list[str] = field(default_factory=list)
     project: str | None = None
+    project_id: int | None = None
+    initiative_id: int | None = None
+    pitch_id: int | None = None
+    related_id: int | None = None
+    related_type: str | None = None
     status: StatusFilter = "all"
     tags: list[str] = field(default_factory=list)
     since: date | None = None
@@ -52,12 +57,28 @@ def _created_date(entry: Entry) -> date | None:
         return None
 
 
-def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
+def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:  # noqa: PLR0911, PLR0912
     if f.project is not None and entry.project != f.project:
         return False
-    if f.status == "open" and entry.status == "done":
+    if f.project_id is not None and f.project_id not in (entry.project_ids or []):
+        return False
+    if (
+        f.initiative_id is not None
+        and entry.initiative_id != f.initiative_id
+        and f.initiative_id not in (entry.initiative_ids or [])
+    ):
+        return False
+    if f.pitch_id is not None and entry.pitch_id != f.pitch_id:
+        return False
+    if f.related_id is not None and not _has_relation(
+        entry, f.related_type, f.related_id
+    ):
+        return False
+    if f.status == "open" and entry.status in SETTLED_STATUSES:
         return False
     if f.status == "done" and entry.status != "done":
+        return False
+    if f.status == "settled" and entry.status not in SETTLED_STATUSES:
         return False
     if f.tags:
         entry_tags = set(entry.tags or [])
@@ -72,6 +93,29 @@ def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
         if f.until and d > f.until:
             return False
     return True
+
+
+def _has_relation(entry: Entry, relation_type: str | None, relation_id: int) -> bool:
+    """Match a typed graph relation without dereferencing its target."""
+    if relation_type == "project":
+        return relation_id in (entry.project_ids or [])
+    if relation_type == "initiative":
+        return relation_id == entry.initiative_id or relation_id in (
+            entry.initiative_ids or []
+        )
+    if relation_type == "pitch":
+        return relation_id == entry.pitch_id
+    # A generic relation filter is useful to callers that already know the
+    # entry shape; no type means any canonical relation.
+    return any(
+        relation_id in values
+        for values in (
+            [entry.initiative_id] if entry.initiative_id is not None else [],
+            [entry.pitch_id] if entry.pitch_id is not None else [],
+            entry.project_ids or [],
+            entry.initiative_ids or [],
+        )
+    )
 
 
 def _words(q: str) -> list[str]:
@@ -179,6 +223,26 @@ def _lookup_by_file_path(cfg: Config, type_dir: str, file_path: str) -> Entry | 
         if entry.file_path == file_path:
             return entry
     return None
+
+
+def related_entries(
+    cfg: Config,
+    relation_type: str,
+    relation_id: int,
+    *,
+    types: Iterable[str] = (),
+) -> list[Hit]:
+    """List entries carrying a typed relation, including links to missing IDs."""
+    type_dirs = _normalize_types(types)
+    hits: list[Hit] = []
+    for type_dir in type_dirs:
+        hits.extend(
+            Hit(entry=entry, source="index", type_dir=type_dir)
+            for entry in store.read_index(cfg, type_dir)
+            if _has_relation(entry, relation_type, relation_id)
+        )
+    hits.sort(key=lambda h: h.entry.created_at or "", reverse=True)
+    return hits
 
 
 # --- listings --------------------------------------------------------------

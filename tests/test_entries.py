@@ -224,3 +224,102 @@ def test_update_drops_the_tag_when_the_project_moves(cfg):
     )
     updated = entries.update_entry(cfg, r.entry.id, {"project": "parser"})
     assert updated.tags == []
+
+
+def test_planning_graph_round_trip_and_typed_relations(cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "Launch initiative",
+        "body",
+        type_fields={"status": "active", "project_ids": [project.entry.id]},
+        now=_fake_now(),
+    )
+    pitch = entries.create_entry(
+        cfg,
+        "pitch",
+        "Launch pitch",
+        "body",
+        type_fields={
+            "status": "active",
+            "project_ids": [project.entry.id],
+            "initiative_ids": [initiative.entry.id],
+            "source_path": "/tmp/source.md",
+        },
+        now=_fake_now(),
+    )
+    todo = entries.create_entry(
+        cfg,
+        "todo",
+        "Implement launch",
+        "body",
+        type_fields={
+            "initiative_id": initiative.entry.id,
+            "pitch_id": pitch.entry.id,
+            "qa_result": "pass",
+            "qa_verified_at": "2026-04-11T14:15:00Z",
+            "qa_run_ref": "run-1",
+        },
+        now=_fake_now(),
+    )
+
+    persisted = store.read_index(cfg, "pitches")[0]
+    assert persisted.project_ids == [project.entry.id]
+    assert persisted.initiative_ids == [initiative.entry.id]
+    assert "project_ids: [1]" in pitch.full_path.read_text()
+    assert store.read_index(cfg, "todos")[0].qa_run_ref == "run-1"
+    assert (
+        entries.resolve_relations(cfg, persisted, "initiative_ids")[0].id
+        == initiative.entry.id
+    )
+    assert (
+        entries.resolve_relations(cfg, todo.entry, "initiative_id")[0].id
+        == initiative.entry.id
+    )
+
+
+def test_typed_relation_validation_rejects_wrong_type_and_missing(cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
+    with pytest.raises(ValueError, match="existing initiative"):
+        entries.create_entry(
+            cfg,
+            "todo",
+            "bad",
+            "body",
+            type_fields={"initiative_id": project.entry.id},
+            now=_fake_now(),
+        )
+    with pytest.raises(ValueError, match="existing project"):
+        entries.create_entry(
+            cfg,
+            "initiative",
+            "bad",
+            "body",
+            type_fields={"project_ids": [999]},
+            now=_fake_now(),
+        )
+    todo = entries.create_entry(cfg, "todo", "needs link", "body", now=_fake_now())
+    with pytest.raises(ValueError, match="existing initiative"):
+        entries.update_entry(cfg, todo.entry.id, {"initiative_id": project.entry.id})
+    # Rejected writes do not consume a global ID.
+    assert store.next_id(cfg) == 3
+
+
+def test_relation_survives_project_rename_and_deleted_target_resolves_missing(cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "I",
+        "body",
+        type_fields={"project_ids": [project.entry.id]},
+        now=_fake_now(),
+    )
+    entries.update_entry(cfg, project.entry.id, {"title": "Renamed"})
+    current = store.read_index(cfg, "initiatives")[0]
+    assert entries.resolve_relations(cfg, current, "project_ids")[0].title == "Renamed"
+    entries.delete_entry(cfg, project.entry.id)
+    assert entries.resolve_relations(cfg, current, "project_ids") == [None]
+    updated = entries.update_entry(cfg, initiative.entry.id, {"title": "I renamed"})
+    assert updated.title == "I renamed"

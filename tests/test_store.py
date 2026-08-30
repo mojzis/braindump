@@ -47,6 +47,22 @@ def test_frontmatter_preserves_unknown_keys():
     assert parsed["foo"] == "bar"
 
 
+def test_frontmatter_round_trips_graph_receipt_and_provenance_fields():
+    data = {
+        "type": "pitch",
+        "title": "A pitch",
+        "project_ids": [3, 8],
+        "initiative_ids": [13],
+        "qa_result": "pass",
+        "qa_verified_at": "2026-04-11T14:15:00Z",
+        "qa_run_ref": "run-7",
+        "source_path": "/tmp/pitch.md",
+    }
+    rendered = store.render_frontmatter(data)
+    parsed, _ = store.parse_frontmatter(rendered)
+    assert parsed == data
+
+
 def test_next_id_increments(cfg):
     a = store.next_id(cfg)
     b = store.next_id(cfg)

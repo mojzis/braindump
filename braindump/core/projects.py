@@ -32,7 +32,10 @@ class ProjectStats:
 
 
 def _non_project_type_dirs() -> list[str]:
-    return [d for d in ALL_TYPE_DIRS if d != "projects"]
+    # `project` is still the single-name ownership field for ordinary
+    # entries. Initiatives and pitches use numeric links and are exposed via
+    # related_work instead of being folded into the legacy project dashboard.
+    return [d for d in ALL_TYPE_DIRS if d not in {"projects", "initiatives", "pitches"}]
 
 
 def _hydrate_from_project_entry(bucket: ProjectStats, entry: Entry) -> None:
@@ -91,6 +94,27 @@ def find_project_entry(cfg: Config, title: str) -> Entry | None:
     return None
 
 
+def related_work(cfg: Config, project_id: int) -> list[Entry]:
+    """Return initiatives and pitches linked to a project ID.
+
+    This intentionally remains separate from project ownership aggregation:
+    renaming a project never rewrites numeric links, and stale links simply
+    produce no related work after the target is soft-deleted.
+    """
+    related: list[Entry] = []
+    for type_dir in ("initiatives", "pitches"):
+        related.extend(
+            entry
+            for entry in store.read_index(cfg, type_dir)
+            if project_id in (entry.project_ids or [])
+        )
+    related.sort(key=lambda entry: entry.created_at or "", reverse=True)
+    return related
+
+
+project_related_work = related_work
+
+
 def _accumulate(bucket: ProjectStats, entry: Entry) -> None:
     # Defense-in-depth: callers exclude the "projects" type_dir, but guard
     # here too so a project entry can never pollute its own related-item stats.
@@ -115,6 +139,8 @@ __all__ = [
     "find_project_entry",
     "get_active_project",
     "list_projects",
+    "project_related_work",
     "project_stats",
+    "related_work",
     "set_active_project",
 ]

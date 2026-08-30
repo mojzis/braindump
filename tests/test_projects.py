@@ -120,3 +120,27 @@ def test_active_project_round_trip(cfg):
     assert projects.get_active_project(cfg) == "alpha"
     projects.set_active_project(cfg, None)
     assert projects.get_active_project(cfg) is None
+
+
+def test_related_work_uses_numeric_project_links_separately(cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body")
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "I",
+        "body",
+        type_fields={"project_ids": [project.entry.id]},
+    )
+    entries.create_entry(
+        cfg,
+        "todo",
+        "legacy owner",
+        "body",
+        project="Alpha",
+        type_fields={"status": "pending"},
+    )
+    stats = projects.project_stats(cfg, "Alpha")
+    assert stats.entry_count == 1
+    assert [entry.id for entry in projects.related_work(cfg, project.entry.id)] == [
+        initiative.entry.id
+    ]
