@@ -667,18 +667,6 @@ async def test_run_parse_reports_unanchored_when_duplicate_line_across_sections(
     assert body.count("[→todo#") == 1
 
 
-def test_parse_source_document_tracks_headings_and_checked_items():
-    items = digest.parse_source_document(
-        "- [ ] first\n## Alpha\n* second\n- [x] finished\n"
-    )
-
-    assert [(item.text, item.heading, item.checked) for item in items] == [
-        ("first", None, False),
-        ("second", "Alpha", False),
-        ("finished", "Alpha", True),
-    ]
-
-
 def test_parse_initiative_routes_todos_and_is_idempotent(cfg):
     alpha = entries.create_entry(cfg, "project", "Alpha", "body")
     beta = entries.create_entry(cfg, "project", "Beta", "body")

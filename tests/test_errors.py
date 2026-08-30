@@ -283,3 +283,17 @@ async def test_web_unknown_entry_answers_404(cfg, monkeypatch):
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
     r = await _post("/api/entries/9999/done", {})
     assert r.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_web_update_rejects_unsupported_relation_as_bad_request(cfg, monkeypatch):
+    result = _todo(cfg)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    r = await _post(
+        f"/api/entries/{result.entry.id}",
+        {"project_ids": "999"},
+    )
+
+    assert r.status_code == 400
+    assert "not valid for todo" in r.text

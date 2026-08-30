@@ -312,10 +312,6 @@ class Annotation:
     entry_id: int
 
 
-SourceItem = entries.SourceItem
-parse_source_document = entries.parse_source_document
-
-
 def apply_annotations(
     body: str, annotations: Sequence[Annotation]
 ) -> tuple[str, list[Annotation]]:
@@ -779,7 +775,7 @@ def parse_initiative(cfg: Config, initiative_id: int) -> InitiativeParseResult:
     type_dir, initiative = found
     body = _authored_entry_body(cfg, type_dir, initiative)
     result = InitiativeParseResult(initiative_id=initiative.id)
-    items = parse_source_document(body)
+    items = entries.parse_source_document(body)
     result.skipped_checked = sum(1 for item in items if item.checked)
 
     project_names = [
@@ -827,7 +823,3 @@ def parse_initiative(cfg: Config, initiative_id: int) -> InitiativeParseResult:
         if new_body != body:
             entries.update_entry(cfg, initiative.id, {}, body=new_body)
     return result
-
-
-# Descriptive alias for callers that treat the initiative body as a source doc.
-parse_initiative_body = parse_initiative

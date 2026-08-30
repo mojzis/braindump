@@ -44,6 +44,18 @@ def test_create_todo_round_trip(cfg):
     assert stored[0].status == "pending"
 
 
+def test_parse_source_document_tracks_headings_and_checked_items():
+    items = entries.parse_source_document(
+        "- [ ] first\n## Alpha\n* second\n- [x] finished\n"
+    )
+
+    assert [(item.text, item.heading, item.checked) for item in items] == [
+        ("first", None, False),
+        ("second", "Alpha", False),
+        ("finished", "Alpha", True),
+    ]
+
+
 def test_create_til_sets_category(cfg):
     r = entries.create_entry(
         cfg,

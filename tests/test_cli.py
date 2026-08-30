@@ -178,6 +178,18 @@ def test_done_and_update_echo_the_id(tmp_path, monkeypatch):
     assert res.output.startswith(f"done: #{eid} ")
 
 
+def test_update_rejects_unsupported_relation_without_traceback(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    eid = _create_todo(cfg).entry.id
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(app, ["update", str(eid), "--project-id", "999"])
+
+    assert res.exit_code == 2
+    assert "Traceback" not in res.output
+    assert "not valid for todo" in res.output
+
+
 def test_qa_result_records_receipt_and_marks_done(tmp_path, monkeypatch):
     cfg = _make_cfg(tmp_path)
     todo = _create_todo(cfg, type_fields={"status": "in-qa"})

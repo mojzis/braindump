@@ -112,9 +112,6 @@ def related_work(cfg: Config, project_id: int) -> list[Entry]:
     return related
 
 
-project_related_work = related_work
-
-
 def _accumulate(bucket: ProjectStats, entry: Entry) -> None:
     # Defense-in-depth: callers exclude the "projects" type_dir, but guard
     # here too so a project entry can never pollute its own related-item stats.
@@ -139,7 +136,6 @@ __all__ = [
     "find_project_entry",
     "get_active_project",
     "list_projects",
-    "project_related_work",
     "project_stats",
     "related_work",
     "set_active_project",

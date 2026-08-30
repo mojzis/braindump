@@ -648,7 +648,10 @@ def update(
         except ValueError as exc:
             raise typer.BadParameter("initiative IDs must be integers") from exc
     body = _read_stdin_if_piped() if body_from_stdin else None
-    updated = entries.update_entry(cfg, entry_id, patch, body=body)
+    try:
+        updated = entries.update_entry(cfg, entry_id, patch, body=body)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"updated: #{updated.id} {updated.file_path}")
 
 

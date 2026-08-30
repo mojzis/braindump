@@ -931,7 +931,10 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
                 raise HTTPException(
                     status_code=400, detail="relation IDs must be integers"
                 ) from exc
-    entries.update_entry(cfg, entry_id, patch, body=body)
+    try:
+        entries.update_entry(cfg, entry_id, patch, body=body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return HTMLResponse(headers={"HX-Redirect": f"/entries/{entry_id}"}, content="")
 
 
