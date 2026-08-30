@@ -8,6 +8,9 @@ argument-hint: <id or query>
 
 Mark a todo as done by ID, file path, or search query.
 
+When Cockpit verified the work, prefer bd qa ID pass --run-ref REF: it records
+the durable QA receipt and transitions the todo atomically to done.
+
 ## Input
 
 $ARGUMENTS

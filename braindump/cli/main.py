@@ -73,11 +73,13 @@ journal_app = typer.Typer(help="Daily journal commands.", no_args_is_help=True)
 project_app = typer.Typer(help="Project commands.", no_args_is_help=True)
 tags_app = typer.Typer(help="Tag analytics.", no_args_is_help=True)
 initiative_app = typer.Typer(help="Initiative commands.", no_args_is_help=True)
+pitch_app = typer.Typer(help="Pitch commands.", no_args_is_help=True)
 
 app.add_typer(journal_app, name="journal")
 app.add_typer(project_app, name="project")
 app.add_typer(tags_app, name="tags")
 app.add_typer(initiative_app, name="initiative")
+app.add_typer(pitch_app, name="pitch")
 
 
 # --- helpers ---------------------------------------------------------------
@@ -753,6 +755,129 @@ def initiative_parse(initiative_id: int = typer.Argument(..., metavar="ID")):
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"parsed: initiative #{initiative_id} created {result.created} todo(s)")
+
+
+@pitch_app.command("import")
+def pitch_import(
+    source_paths: list[Path] = typer.Argument(
+        ..., metavar="SOURCE...", help="Explicit Markdown pitch path(s)"
+    ),
+    project_id: list[int] = typer.Option(
+        [], "--project-id", help="Related project ID (repeatable)"
+    ),
+    project_ids: str | None = typer.Option(
+        None, "--project-ids", help="Comma-separated related project IDs"
+    ),
+    initiative_id: list[int] = typer.Option(
+        [], "--initiative-id", help="Related initiative ID (repeatable)"
+    ),
+    initiative_ids: str | None = typer.Option(
+        None, "--initiative-ids", help="Comma-separated related initiative IDs"
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Preview and validate without writing"
+    ),
+    verify: bool = typer.Option(
+        True, "--verify/--no-verify", help="Verify persisted body and metadata"
+    ),
+    remove_source: bool = typer.Option(
+        False,
+        "--remove-source",
+        help="Remove each source after a verified import (requires confirmation)",
+    ),
+    confirm_source_removal: bool = typer.Option(
+        False,
+        "--confirm-source-removal",
+        "--confirm",
+        help="Confirm explicit source removal",
+    ),
+    as_json: bool = typer.Option(False, "--json"),
+):
+    """Import only the Markdown paths explicitly supplied by the user."""
+    cfg = load_config()
+    store.ensure_type_dirs(cfg)
+    try:
+        all_project_ids = list(project_id)
+        all_initiative_ids = list(initiative_id)
+        if project_ids is not None:
+            all_project_ids.extend(int(value) for value in _split_csv(project_ids))
+        if initiative_ids is not None:
+            all_initiative_ids.extend(
+                int(value) for value in _split_csv(initiative_ids)
+            )
+        explicit_projects = all_project_ids or None
+        explicit_initiatives = all_initiative_ids or None
+        if remove_source and not confirm_source_removal:
+            raise ValueError(  # noqa: TRY301
+                "--remove-source requires --confirm-source-removal (or --confirm)"
+            )
+        results = [
+            entries.import_pitch(
+                cfg,
+                source_path,
+                project_ids=explicit_projects,
+                initiative_ids=explicit_initiatives,
+                dry_run=dry_run,
+                verify=verify,
+            )
+            for source_path in source_paths
+        ]
+        if remove_source and not dry_run:
+            for result in results:
+                if not result.verified:
+                    raise ValueError(  # noqa: TRY301
+                        "source removal requires a verified import"
+                    )
+                entries.remove_pitch_source(
+                    cfg, result.source.path, confirmed=confirm_source_removal
+                )
+    except (TypeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+    for result in results:
+        if as_json:
+            data: dict[str, Any] = {
+                "source_path": str(result.source.path),
+                "title": result.source.title,
+                "dry_run": result.entry is None,
+                "verified": result.verified,
+            }
+            if result.entry is not None:
+                data.update(
+                    {
+                        "id": result.entry.id,
+                        "file_path": result.entry.file_path,
+                    }
+                )
+            typer.echo(json.dumps(data, ensure_ascii=False))
+            continue
+        if result.entry is None:
+            typer.echo(f"dry-run: {result.source.path} -> pitch {result.source.title}")
+        else:
+            verification = " verified" if result.verified else ""
+            typer.echo(
+                f"imported: #{result.entry.id} {result.entry.file_path}"
+                f" from {result.source.path}{verification}"
+            )
+
+
+@pitch_app.command("remove-source")
+def pitch_remove_source(
+    source_path: Path = typer.Argument(..., metavar="SOURCE"),
+    confirm: bool = typer.Option(
+        False,
+        "--confirm-source-removal",
+        "--confirm",
+        help="Confirm removal of this imported source",
+    ),
+):
+    """Remove one imported source after reviewing its pitch entry."""
+    cfg = load_config()
+    try:
+        removed = entries.remove_pitch_source(cfg, source_path, confirmed=confirm)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"removed-source: {removed}")
 
 
 def _project_counts(s: projects.ProjectStats) -> str:

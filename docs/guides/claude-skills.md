@@ -24,6 +24,18 @@ session after installing so they're picked up.
 | `/bd-done <id or query>` | Mark a todo as done |
 | `/bd-digest [date]` | Digest a journal day into structured per-project entries |
 
+For a selected pitch file, use the CLI directly:
+
+    bd pitch import /path/to/pitch.md --dry-run
+    bd pitch import /path/to/pitch.md --project-id 7 --initiative-id 12
+
+This is a curated workflow: paths are explicit, source frontmatter and body
+intent are preserved, relation IDs are supplied rather than inferred, and
+source_path provenance is recorded. Removal requires a separate explicit
+confirmation command. Skills must use the current lifecycle vocabulary:
+pending, in-progress, in-qa, done, and cancelled; done should carry a compact
+QA receipt when Cockpit verified it.
+
 ## Conventions the creation skills follow
 
 Creation skills load a shared `braindump` skill for conventions and surface both

@@ -222,3 +222,34 @@ The `braindump.core` package has no I/O except through `store.py`, and every mut
 - **Projects are first class** — `project` is indexed, filterable everywhere, and has its own dashboards; the active-project focus is persisted so every query stays scoped
 - **Journal with a sane day cutoff** — late-night writes go to the previous day's file by default; "finish the day" button seals today manually
 - **Soft delete** — removing an entry moves it to `.trash/` so nothing is ever lost accidentally
+
+## Curated pitch import
+
+Import only Markdown paths explicitly selected by the user:
+
+    bd pitch import path/to/pitch.md --project-id 7 --initiative-id 12 --dry-run
+
+The command preserves meaningful source frontmatter and the authored body,
+records the resolved source_path, accepts typed relation IDs, and verifies the
+persisted entry by default. Source files are not removed implicitly. After
+review, remove one imported source explicitly with:
+
+    bd pitch remove-source path/to/pitch.md --confirm-source-removal
+
+The import command also supports remove-source together with the confirmation
+flag, but never removes a source without both explicit opt-ins.
+
+## Cockpit local contract
+
+Cockpit is a separate execution layer. It may move a todo into QA and record a
+compact receipt through the CLI:
+
+    bd update 42 --status in-qa
+    bd qa 42 pass --run-ref cockpit-run-123
+    bd qa 42 fail --run-ref cockpit-run-123
+
+The qa command performs one shared mutation. pass stores qa_result, the UTC
+qa_verified_at timestamp, and optional qa_run_ref, then sets status to done.
+fail stores the receipt and returns the todo to in-progress. Detailed session
+logs remain Cockpit-owned. bd show --json 42 is the local receipt readback; no
+merge or session-log state is mirrored into braindump.

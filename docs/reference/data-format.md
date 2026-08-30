@@ -78,6 +78,36 @@ title. Journal files are the exception: one file per day at
 | **journal** | `date` (YYYY-MM-DD), `word_count` |
 | **project** | `description`, `state` (active / paused / archived), `area` (free-form grouping, reused like a tag — e.g. `dev-tools`, `cad-3d`), `local_dir`, `tech_stack` |
 
+## Planning entries and imported pitches
+
+Initiatives live in initiatives/ and use status active or done plus
+project_ids, a list of numeric IDs that must point to project entries. Pitches
+live in pitches/ and use status active or done, project_ids, initiative_ids,
+and source_path for an imported source's absolute resolved path. Todos may
+carry one initiative_id and one pitch_id. Relations are IDs, not titles or
+tags, so renames do not break them.
+
+Pitch import reads optional source frontmatter. The source title field wins;
+otherwise the first level-one heading wins, then the filename stem. The
+generated entry owns the title heading, while the rest of the body is retained
+verbatim. Meaningful fields (title, summary, tags, status, project_ids, and
+initiative_ids) are preserved; command-line relation IDs override source
+values. Source identity fields and timestamps are generated locally.
+
+The import workflow is explicit and bounded:
+
+    bd pitch import selected/pitch.md --dry-run
+    bd pitch import selected/pitch.md --project-id 7 --initiative-id 12
+    bd pitch remove-source selected/pitch.md --confirm-source-removal
+
+There is no directory scan, relationship inference, or implicit source
+deletion. Verification compares the persisted body, title, frontmatter, and
+source_path before a requested removal.
+
+QA receipts on todos contain qa_result (pass or fail), UTC qa_verified_at, and
+optional qa_run_ref. pass transitions in-qa to done; fail transitions it to
+in-progress. Detailed run history stays outside braindump.
+
 ## Key conventions
 
 - All timestamps are **UTC ISO 8601**.

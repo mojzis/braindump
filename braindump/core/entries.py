@@ -161,6 +161,189 @@ class CreateResult:
     full_path: Path
 
 
+@dataclass(frozen=True)
+class PitchImportSource:
+    """The preserved intent extracted from one explicitly selected source."""
+
+    path: Path
+    title: str
+    body: str
+    frontmatter: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class PitchImportResult:
+    entry: Entry | None
+    full_path: Path | None
+    source: PitchImportSource
+    verified: bool = False
+
+
+_IMPORT_RESERVED_FIELDS = frozenset(
+    {"id", "type", "title", "file_path", "created_at", "updated_at", "input"}
+)
+
+
+def read_pitch_source(path: str | Path) -> PitchImportSource:
+    """Read one user-selected Markdown pitch without changing its contents."""
+    source_path = Path(path).expanduser().resolve()
+    if not source_path.is_file():
+        raise ValueError(f"pitch source is not a file: {source_path}")
+    try:
+        text = source_path.read_text()
+    except OSError as exc:
+        raise ValueError(f"cannot read pitch source {source_path}: {exc}") from exc
+
+    frontmatter, body = store.parse_frontmatter(text)
+    source_type = frontmatter.get("type")
+    if source_type is not None and source_type != "pitch":
+        raise ValueError(
+            f"pitch source {source_path} declares type {source_type!r}, "
+            "expected 'pitch'"
+        )
+
+    title = frontmatter.get("title")
+    if not isinstance(title, str) or not title.strip():
+        for line in body.splitlines():
+            if line.startswith("# "):
+                title = line[2:].strip()
+                break
+    if not isinstance(title, str) or not title.strip():
+        title = source_path.stem
+
+    # The generated entry owns its title heading. Remove only that heading;
+    # every other source line remains authored content, including blank lines
+    # and any source-specific details block.
+    lines = body.splitlines(keepends=True)
+    heading_index = None
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        if line.startswith("# "):
+            heading_index = i
+        break
+    if heading_index is not None:
+        body = "".join(lines[:heading_index] + lines[heading_index + 1 :])
+        body = body.removeprefix("\n")
+
+    return PitchImportSource(
+        path=source_path,
+        title=title.strip(),
+        body=body.rstrip("\n"),
+        frontmatter=frontmatter,
+    )
+
+
+def _pitch_import_fields(source: PitchImportSource) -> dict[str, Any]:
+    """Keep source frontmatter intent while excluding store-owned identity."""
+    fields = {
+        key: value
+        for key, value in source.frontmatter.items()
+        if key not in _IMPORT_RESERVED_FIELDS and value is not None
+    }
+    tags = fields.get("tags")
+    if tags is not None and not isinstance(tags, list):
+        raise ValueError("pitch source frontmatter 'tags' must be a list")
+    return fields
+
+
+def verify_pitch_import(
+    cfg: Config, result: PitchImportResult
+) -> list[str]:
+    """Return discrepancies between an imported entry and its source."""
+    if result.entry is None or result.full_path is None:
+        return ["dry-run has no persisted entry to verify"]
+    issues: list[str] = []
+    found = find_by_id(cfg, result.entry.id)
+    if found is None:
+        return [f"imported entry #{result.entry.id} is not indexed"]
+    _, current = found
+    if current.type != "pitch":
+        issues.append("imported entry is not a pitch")
+    if current.title != result.source.title:
+        issues.append("title differs from source")
+    if current.source_path != str(result.source.path):
+        issues.append("source_path provenance differs from selected path")
+    _, markdown = store.read_markdown(result.full_path)
+    _, authored, _ = split_body(markdown)
+    if authored != result.source.body:
+        issues.append("authored body differs from source")
+    for key, value in _pitch_import_fields(result.source).items():
+        if getattr(current, key, None) != value:
+            issues.append(f"frontmatter field differs: {key}")
+    return issues
+
+
+def import_pitch(  # noqa: PLR0913 -- import options map directly to the contract
+    cfg: Config,
+    path: str | Path,
+    *,
+    project_ids: list[int] | None = None,
+    initiative_ids: list[int] | None = None,
+    dry_run: bool = False,
+    verify: bool = True,
+) -> PitchImportResult:
+    """Import one explicitly selected pitch source through the normal mutation path."""
+    source = read_pitch_source(path)
+    type_fields = _pitch_import_fields(source)
+    if project_ids is not None:
+        type_fields["project_ids"] = list(project_ids)
+    if initiative_ids is not None:
+        type_fields["initiative_ids"] = list(initiative_ids)
+    type_fields["source_path"] = str(source.path)
+    type_fields.setdefault("status", "active")
+
+    if dry_run:
+        # Validate all supplied links without allocating an ID or touching disk.
+        _validate_canonical_fields(cfg, "pitch", type_fields)
+        return PitchImportResult(None, None, source)
+
+    created = create_entry(
+        cfg,
+        "pitch",
+        source.title,
+        source.body,
+        tags=type_fields.pop("tags", None),
+        summary=type_fields.pop("summary", None),
+        type_fields=type_fields,
+    )
+    result = PitchImportResult(created.entry, created.full_path, source)
+    if verify:
+        issues = verify_pitch_import(cfg, result)
+        if issues:
+            raise ValueError("pitch import verification failed: " + "; ".join(issues))
+        result = PitchImportResult(
+            result.entry, result.full_path, result.source, verified=True
+        )
+    return result
+
+
+def remove_pitch_source(
+    cfg: Config, path: str | Path, *, confirmed: bool = False
+) -> Path:
+    """Remove exactly one imported source, only after an explicit confirmation."""
+    source_path = Path(path).expanduser().resolve()
+    if not confirmed:
+        raise ValueError(
+            "source removal requires explicit confirmation (--confirm-source-removal)"
+        )
+    matches = [
+        entry
+        for entry in store.read_index(cfg, "pitches")
+        if entry.source_path
+        and Path(entry.source_path).expanduser().resolve() == source_path
+    ]
+    if not matches:
+        raise ValueError(f"no imported pitch records source path: {source_path}")
+    if not source_path.is_file():
+        raise ValueError(f"pitch source is not a file: {source_path}")
+    try:
+        source_path.unlink()
+    except OSError as exc:
+        raise ValueError(f"cannot remove pitch source {source_path}: {exc}") from exc
+    return source_path
+
+
 def drop_self_project_tag(tags: list[str] | None, project: str | None) -> list[str]:
     """Strip a tag that just repeats the entry's own project name.
 

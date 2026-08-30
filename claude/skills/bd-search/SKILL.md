@@ -10,6 +10,10 @@ Search across all braindump entries.
 
 > For data format details, load the `braindump` skill.
 
+Planning filters are ID-based: use --initiative-id, --pitch-id, or
+--related-id/--related-type. Use --status open for unsettled entries and
+--status settled for done/cancelled todos.
+
 ## Input
 
 $ARGUMENTS

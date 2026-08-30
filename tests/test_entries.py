@@ -394,3 +394,75 @@ def test_record_qa_result_can_omit_run_reference(cfg):
     assert updated.status == "done"
     assert updated.qa_verified_at
     assert updated.qa_run_ref is None
+
+
+def test_pitch_import_preserves_source_intent_and_verifies(cfg, tmp_path):
+    project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
+    initiative = entries.create_entry(
+        cfg, "initiative", "Launch", "body", now=_fake_now()
+    )
+    source = tmp_path / "launch.md"
+    source.write_text(
+        """---
+type: pitch
+title: Launch proposal
+summary: A durable proposal
+tags: ["planning", "launch"]
+status: active
+---
+# Launch proposal
+
+Keep this authored body exactly.
+
+## Decision
+
+Preserve this heading too.
+"""
+    )
+
+    result = entries.import_pitch(
+        cfg,
+        source,
+        project_ids=[project.entry.id],
+        initiative_ids=[initiative.entry.id],
+    )
+
+    assert result.verified
+    assert result.entry is not None
+    assert result.entry.title == "Launch proposal"
+    assert result.entry.source_path == str(source.resolve())
+    assert result.entry.project_ids == [project.entry.id]
+    assert result.entry.initiative_ids == [initiative.entry.id]
+    assert "Keep this authored body exactly." in result.full_path.read_text()
+    assert "type: pitch" in result.full_path.read_text()
+    assert "summary: A durable proposal" not in result.full_path.read_text()
+    assert entries.verify_pitch_import(cfg, result) == []
+
+
+def test_pitch_import_dry_run_writes_nothing_and_validates_relations(cfg, tmp_path):
+    project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
+    source = tmp_path / "draft.md"
+    source.write_text("# Draft\n\nBody\n")
+
+    result = entries.import_pitch(
+        cfg, source, project_ids=[project.entry.id], dry_run=True
+    )
+
+    assert result.entry is None
+    assert store.read_index(cfg, "pitches") == []
+    assert not (cfg.home / "pitches" / "index.jsonl").read_text().strip()
+    assert store.next_id(cfg) == 2
+
+
+def test_pitch_source_removal_requires_confirmation_and_provenance(cfg, tmp_path):
+    source = tmp_path / "draft.md"
+    source.write_text("# Draft\n\nBody\n")
+    entries.import_pitch(cfg, source)
+
+    with pytest.raises(ValueError, match="explicit confirmation"):
+        entries.remove_pitch_source(cfg, source)
+    assert source.exists()
+
+    removed = entries.remove_pitch_source(cfg, source, confirmed=True)
+    assert removed == source.resolve()
+    assert not source.exists()

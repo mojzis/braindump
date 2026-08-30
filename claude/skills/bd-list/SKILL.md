@@ -10,6 +10,9 @@ List recent braindump entries.
 
 > For data format details, load the `braindump` skill.
 
+The available planning types are initiative and pitch. Their active records
+use the same list command; use --status all or --status settled for history.
+
 ## Input
 
 $ARGUMENTS

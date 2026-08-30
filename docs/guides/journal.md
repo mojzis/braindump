@@ -21,6 +21,15 @@ with autosave, the last ~7 days rendered below (older days lazy-load as you
 scroll), an `✳ parse` button, and a **"finish the day"** button that seals today
 and opens tomorrow immediately.
 
+## Initiative notes
+
+An initiative uses the same safe, idempotent line parser. Unmarked Markdown
+list items become linked todos and receive a todo backref. The nearest
+level-two heading is an owning project only when it matches the intended
+project name; otherwise the todo remains unowned but still links to the
+initiative. Existing backrefs are skipped, and no title or tag guessing is
+used.
+
 ## The day cutoff
 
 Journaling honors a configurable **daily cutoff hour** (default `04:00` local).

@@ -24,6 +24,9 @@ argument-hint: <task>
 !`bd project list 2>/dev/null || echo "(no projects yet)"`
 </existing-projects>
 
+Todo lifecycle vocabulary is pending, in-progress, in-qa, done, and cancelled.
+Done is settled; use the QA command when Cockpit verified the work.
+
 ## Input
 
 $ARGUMENTS

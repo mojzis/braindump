@@ -287,3 +287,63 @@ def test_cli_graph_create_show_list_and_search(tmp_path, monkeypatch):
         pitch_id,
         todo_id,
     }
+
+
+def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
+    tmp_path, monkeypatch
+):
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    project = entries.create_entry(cfg, "project", "Alpha", "body")
+    initiative = entries.create_entry(cfg, "initiative", "Launch", "body")
+    source = tmp_path / "selected-pitch.md"
+    source.write_text(
+        '---\ntitle: Selected pitch\ntags: ["launch"]\n---\n'
+        '# Selected pitch\n\nPreserve this body.\n'
+    )
+
+    preview = runner.invoke(
+        app,
+        [
+            "pitch",
+            "import",
+            str(source),
+            "--project-id",
+            str(project.entry.id),
+            "--initiative-id",
+            str(initiative.entry.id),
+            "--dry-run",
+        ],
+    )
+    assert preview.exit_code == 0
+    assert "dry-run:" in preview.output
+    assert entries.store.read_index(cfg, "pitches") == []
+    assert source.exists()
+
+    imported = runner.invoke(
+        app,
+        [
+            "pitch",
+            "import",
+            str(source),
+            "--project-id",
+            str(project.entry.id),
+            "--initiative-id",
+            str(initiative.entry.id),
+        ],
+    )
+    assert imported.exit_code == 0
+    assert "verified" in imported.output
+    pitch = entries.store.read_index(cfg, "pitches")[0]
+    assert pitch.source_path == str(source.resolve())
+    assert pitch.project_ids == [project.entry.id]
+    assert pitch.initiative_ids == [initiative.entry.id]
+    assert source.exists()
+
+    removed = runner.invoke(
+        app,
+        ["pitch", "remove-source", str(source), "--confirm-source-removal"],
+    )
+    assert removed.exit_code == 0
+    assert "removed-source:" in removed.output
+    assert not source.exists()

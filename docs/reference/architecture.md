@@ -63,6 +63,12 @@ traceback. The web UI answers 403 with the same message. Reads are untouched,
 so `bd list`, `bd search`, and `bd show` keep working; `bd doctor` probe-writes
 the directory up front and reports `NOT WRITABLE` before anything else.
 
+Planning imports are deliberately curated: entries.import_pitch accepts only
+paths supplied by the caller, preserves source intent through the normal
+entries mutation path, verifies the persisted result, and records source_path
+provenance. Source removal is a separate confirmed operation. No source
+scanner or relationship inference belongs in the core.
+
 ## The three surfaces
 
 | Surface | Entry point | Notes |

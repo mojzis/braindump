@@ -37,6 +37,17 @@ Braindump captures todos, TILs (Today I Learned), thoughts, prompts, projects, a
 
 All of these invoke the `bd` CLI under the hood.
 
+Initiatives are living notes with active/done status and typed project_ids.
+Pitches are durable proposals with active/done status, typed project_ids and
+initiative_ids, and optional source_path provenance when curated-imported.
+Import only explicit source paths with bd pitch import; use --dry-run and
+verification before any separately confirmed source removal. Never infer links
+from titles or tags.
+
+Cockpit writes only through the local CLI contract: bd update ID --status in-qa
+followed by bd qa ID pass|fail --run-ref REF. A pass stores a compact receipt
+and sets done; a fail stores it and returns the todo to in-progress.
+
 ## Content Processing Levels
 
 Three modes based on input prefix or context:

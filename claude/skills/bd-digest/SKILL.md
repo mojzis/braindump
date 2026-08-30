@@ -8,6 +8,11 @@ argument-hint: [YYYY-MM-DD]
 
 Sweep a day's journal, group lines by their heading/label, turn each unmarked actionable line into a structured entry (todo / til / thought / prompt), then annotate the journal line in place with a backref like `[→todo#42]` so it's clear that line has already been digested.
 
+Initiative parsing uses the same semantics: bd initiative parse ID turns
+unmarked Markdown list items into linked todos, preserves heading-based project
+intent, and annotates each created line idempotently. It never guesses a
+project from current focus, title, or tags.
+
 ## Conventions
 
 !`awk '/^---$/{n++;next}n>1' ~/.claude/skills/braindump/SKILL.md`

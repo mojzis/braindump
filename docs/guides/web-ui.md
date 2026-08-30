@@ -53,6 +53,17 @@ the right-click menu still works.
 | `/projects`, `/projects/<name>` | Project inventory and per-project dashboards |
 | `/tags` | Tag analytics |
 
+Initiative and pitch entries are available through the same entries list and
+detail routes. Their relations render as ID-backed links; stale links remain
+visible as missing-reference warnings. The web UI does not import or remove
+external pitch files: curated import and its separate source-removal
+confirmation are CLI operations.
+
+Cockpit-facing state remains local and minimal. A todo in in-qa can receive a
+pass/fail receipt through bd qa; the durable fields are qa_result,
+qa_verified_at, and optional qa_run_ref. Detailed execution history is not
+copied into braindump.
+
 ## Keyboard shortcuts
 
 | Keys | Action |

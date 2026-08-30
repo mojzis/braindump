@@ -108,6 +108,41 @@ bd update 42 --body              # replace the body from stdin
 bd delete 42                     # soft-delete → moves to ~/braindump/.trash/
 ```
 
+## Curated pitch import
+
+Select each source path explicitly. A dry run reads and validates it without
+allocating an ID or writing an index:
+
+    bd pitch import ~/notes/launch-pitch.md --dry-run
+    bd pitch import ~/notes/launch-pitch.md --project-id 7 --initiative-id 12
+
+The importer uses source frontmatter title, summary, tags, status, and
+relations when present, with explicit relation flags taking precedence. It
+removes only the source's own top-level title heading; the remaining authored
+body is preserved. The new pitch records an absolute source_path and verifies
+body and metadata by default. No directory is scanned and no relationship is
+inferred.
+
+Import never deletes a source by default. After reviewing the verified pitch,
+confirm removal explicitly and only for that path:
+
+    bd pitch remove-source ~/notes/launch-pitch.md --confirm-source-removal
+
+The import command also accepts remove-source together with the confirmation
+flag.
+
+## Cockpit receipt contract
+
+Cockpit may use the local CLI as its write boundary:
+
+    bd update <todo-id> --status in-qa
+    bd qa <todo-id> pass --run-ref <cockpit-run-ref>
+
+The qa command accepts pass or fail and performs one shared core mutation. It
+records qa_result, UTC qa_verified_at, and optional qa_run_ref; pass sets status
+to done, fail sets it to in-progress. Read back the durable local receipt with
+bd show --json <todo-id>. Cockpit retains detailed session logs and merge state.
+
 ## Projects
 
 `project` is a first-class field. Project **entries** (type `project`) carry
