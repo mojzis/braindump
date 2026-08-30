@@ -116,31 +116,6 @@ def _effective_project(explicit: str | None, cfg) -> str | None:
     return projects.get_active_project(cfg)
 
 
-def _filter_status(hits: list[query.Hit], status: str) -> list[query.Hit]:
-    """Apply exact lifecycle statuses not represented by query's task buckets."""
-    if status in {
-        "active",
-        "pending",
-        "in-progress",
-        "in-qa",
-        "postponed",
-        "cancelled",
-    }:
-        return [h for h in hits if h.entry.status == status]
-    return hits
-
-
-def _exact_status(status: str) -> bool:
-    return status in {
-        "active",
-        "pending",
-        "in-progress",
-        "in-qa",
-        "postponed",
-        "cancelled",
-    }
-
-
 # --- create ----------------------------------------------------------------
 
 
@@ -338,13 +313,10 @@ def list_cmd(
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
-            limit=0 if _exact_status(status) else limit,
+            limit=limit,
             fulltext=False,
         ),
     )
-    hits = _filter_status(hits, status)
-    if _exact_status(status) and limit:
-        hits = hits[:limit]
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -415,13 +387,10 @@ def search(
         related_type=related_type,
         since=_parse_date(since),
         until=_parse_date(until),
-        limit=0 if _exact_status(status) else limit,
+        limit=limit,
         fulltext=not no_fulltext,
     )
     hits = query.search(cfg, filters)
-    hits = _filter_status(hits, status)
-    if _exact_status(status) and limit:
-        hits = hits[:limit]
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -665,9 +634,17 @@ def update(
         }
     )
     if project_ids is not None:
-        patch["project_ids"] = [int(value) for value in _split_csv(project_ids)]
+        try:
+            patch["project_ids"] = [int(value) for value in _split_csv(project_ids)]
+        except ValueError as exc:
+            raise typer.BadParameter("project IDs must be integers") from exc
     if initiative_ids is not None:
-        patch["initiative_ids"] = [int(value) for value in _split_csv(initiative_ids)]
+        try:
+            patch["initiative_ids"] = [
+                int(value) for value in _split_csv(initiative_ids)
+            ]
+        except ValueError as exc:
+            raise typer.BadParameter("initiative IDs must be integers") from exc
     body = _read_stdin_if_piped() if body_from_stdin else None
     updated = entries.update_entry(cfg, entry_id, patch, body=body)
     typer.echo(f"updated: #{updated.id} {updated.file_path}")

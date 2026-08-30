@@ -44,6 +44,7 @@ from braindump.core.schema import (
     SETTLED_STATUSES,
     TODO_STATUSES,
     Entry,
+    type_to_dir,
 )
 
 BASE_DIR = Path(__file__).parent
@@ -142,12 +143,39 @@ _REF_CHIP_RE = re.compile(
 )
 
 
-def _ref_chip_sub(m: re.Match[str]) -> str:
+def _journal_ref_targets(cfg: Config, html: str) -> dict[tuple[str, int], Entry]:
+    planning_types = {"project", "initiative", "pitch"}
+    wanted = {
+        (match.group(1), int(match.group(2)))
+        for match in _REF_CHIP_RE.finditer(html)
+        if match.group(1) in planning_types
+    }
+    targets: dict[tuple[str, int], Entry] = {}
+    for entry_type in planning_types:
+        ids = {entry_id for ref_type, entry_id in wanted if ref_type == entry_type}
+        if not ids:
+            continue
+        targets.update(
+            {
+                (entry_type, entry.id): entry
+                for entry in store.read_index(cfg, type_to_dir(entry_type))
+                if entry.id in ids
+            }
+        )
+    return targets
+
+
+def _ref_chip_sub(m: re.Match[str], targets: dict[tuple[str, int], Entry]) -> str:
     entry_type, entry_id = m.group(1), m.group(2)
-    if entry_type in {"project", "initiative", "pitch"}:
-        target = entries.resolve_relation(load_config(), int(entry_id), entry_type)
-        if target is None:
-            return f'<span class="missing-ref">missing {entry_type} #{entry_id}</span>'
+    if (
+        entry_type in {"project", "initiative", "pitch"}
+        and (
+            entry_type,
+            int(entry_id),
+        )
+        not in targets
+    ):
+        return f'<span class="missing-ref">missing {entry_type} #{entry_id}</span>'
     return f'<a class="ref-chip" href="/entries/{entry_id}">{entry_type}#{entry_id}</a>'
 
 
@@ -159,9 +187,12 @@ def _journal_markdown(text: str) -> Markup:
     before sanitizing would come out unstyled.
     """
     html = _render_markdown(text)
+    targets = _journal_ref_targets(load_config(), str(html))
     # `html` is already nh3-sanitized by `_render_markdown`; the regex only
     # rewrites `[→type#id]` marks into anchors, so re-wrapping is safe.
-    return Markup(_REF_CHIP_RE.sub(_ref_chip_sub, str(html)))  # noqa: S704
+    return Markup(  # noqa: S704
+        _REF_CHIP_RE.sub(lambda match: _ref_chip_sub(match, targets), str(html))
+    )
 
 
 class _SuppressShutdownCancel(logging.Filter):
@@ -698,30 +729,10 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         pitch_id=pitch_id,
         related_id=related_id,
         related_type=related_type,
-        limit=0
-        if status
-        in {
-            "active",
-            "pending",
-            "in-progress",
-            "in-qa",
-            "postponed",
-            "cancelled",
-        }
-        else 100,
+        limit=100,
     )
 
     hits = query.search(cfg, filters)
-    if status in {
-        "active",
-        "pending",
-        "in-progress",
-        "in-qa",
-        "postponed",
-        "cancelled",
-    }:
-        hits = [h for h in hits if h.entry.status == status]
-        hits = hits[:100]
     all_projects_list = [
         p.name for p in projects.list_projects(cfg) if p.name != "(none)"
     ]
