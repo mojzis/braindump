@@ -9,18 +9,45 @@
     <label>title <input type="text" name="title" value="{{ entry.title }}" /></label>
     <label>summary <input type="text" name="summary" value="{{ entry.summary or '' }}" /></label>
     <label>tags (csv) <input type="text" name="tags" value="{{ entry.tags | join(', ') }}" /></label>
-    <label>project <input type="text" name="project" value="{{ entry.project or '' }}" /></label>
-    {% if entry.type == "project" %}
-      <label>area <input type="text" name="area" value="{{ entry.area or '' }}" placeholder="e.g. dev-tools" /></label>
+    {% if entry.type not in ("initiative", "pitch") %}
+      <label>project <input type="text" name="project" value="{{ entry.project or '' }}" list="project-datalist" /></label>
     {% endif %}
     {% if entry.type == "todo" %}
       <label>status
         <select name="status">
-          {% for s in ("pending", "in-progress", "postponed", "done") %}
+          {% for s in ("pending", "in-progress", "in-qa", "postponed", "done", "cancelled") %}
             <option value="{{ s }}" {% if entry.status == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
         </select>
       </label>
+    {% elif entry.type in ("initiative", "pitch") %}
+      <label>status
+        <select name="status">
+          {% for s in ("active", "done") %}
+            <option value="{{ s }}" {% if entry.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% endif %}
+    {% if entry.type == "project" %}
+      <label>area <input type="text" name="area" value="{{ entry.area or '' }}" placeholder="e.g. dev-tools" /></label>
+    {% endif %}
+    {% if entry.type == "todo" %}
+      <label>initiative ID <input type="number" name="initiative_id" value="{{ entry.initiative_id or '' }}" list="initiative-id-datalist" /></label>
+      <label>pitch ID <input type="number" name="pitch_id" value="{{ entry.pitch_id or '' }}" list="pitch-id-datalist" /></label>
+    {% elif entry.type == "initiative" %}
+      <label>project IDs (csv) <input type="text" name="project_ids" value="{{ entry.project_ids | join(', ') if entry.project_ids else '' }}" list="project-id-datalist" /></label>
+    {% elif entry.type == "pitch" %}
+      <label>project IDs (csv) <input type="text" name="project_ids" value="{{ entry.project_ids | join(', ') if entry.project_ids else '' }}" list="project-id-datalist" /></label>
+      <label>initiative IDs (csv) <input type="text" name="initiative_ids" value="{{ entry.initiative_ids | join(', ') if entry.initiative_ids else '' }}" list="initiative-id-datalist" /></label>
+    {% endif %}
+    {% if entry.type in ("todo", "pitch") %}
+      <fieldset><legend>QA receipt / provenance</legend>
+        <label>QA result <input type="text" name="qa_result" value="{{ entry.qa_result or '' }}" /></label>
+        <label>QA verified at <input type="text" name="qa_verified_at" value="{{ entry.qa_verified_at or '' }}" /></label>
+        <label>QA run ref <input type="text" name="qa_run_ref" value="{{ entry.qa_run_ref or '' }}" /></label>
+        {% if entry.type == "pitch" %}<label>source path <input type="text" name="source_path" value="{{ entry.source_path or '' }}" /></label>{% endif %}
+      </fieldset>
     {% endif %}
     <label>body
       <textarea name="body" rows="20">{{ body }}</textarea>
@@ -35,5 +62,17 @@
               class="danger">delete</button>
     </div>
   </form>
+  <datalist id="project-datalist">
+    {% for p in registered_projects %}<option value="{{ p.title }}">{{ p.title }}</option>{% endfor %}
+  </datalist>
+  <datalist id="project-id-datalist">
+    {% for p in registered_projects %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}
+  </datalist>
+  <datalist id="initiative-id-datalist">
+    {% for i in active_initiatives %}<option value="{{ i.id }}">{{ i.title }}</option>{% endfor %}
+  </datalist>
+  <datalist id="pitch-id-datalist">
+    {% for p in active_pitches %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}
+  </datalist>
 </div>
 {% endblock %}

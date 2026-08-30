@@ -94,6 +94,23 @@
         <p class="muted">no tags.</p>
       {% endif %}
     </section>
+
+    <section class="card">
+      <h3>related initiatives and pitches</h3>
+      {% if related_work %}
+        <ul class="recent-list">
+          {% for entry in related_work %}
+            <li>
+              <span class="type-chip">{{ entry.type }}</span>
+              {% if entry.status %}<span class="state-pill state-{{ entry.status }}">{{ entry.status }}</span>{% endif %}
+              <a href="/entries/{{ entry.id }}">#{{ entry.id }} {{ entry.title }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">none.</p>
+      {% endif %}
+    </section>
   </div>
 </div>
 {% endblock %}

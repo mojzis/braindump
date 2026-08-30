@@ -11,6 +11,8 @@
         <option value="til" {% if preset_type == "til" %}selected{% endif %}>til</option>
         <option value="prompt" {% if preset_type == "prompt" %}selected{% endif %}>prompt</option>
         <option value="project" {% if preset_type == "project" %}selected{% endif %}>project</option>
+        <option value="initiative" {% if preset_type == "initiative" %}selected{% endif %}>initiative</option>
+        <option value="pitch" {% if preset_type == "pitch" %}selected{% endif %}>pitch</option>
       </select>
     </label>
 
@@ -33,6 +35,40 @@
     <label id="field-project">project
       <input type="text" name="project" value="{{ active_project or '' }}" list="project-datalist" />
     </label>
+
+    <label id="field-status">status
+      <select name="status">
+        <option value="">(unspecified)</option>
+        <option value="pending">pending</option><option value="in-progress">in-progress</option>
+        <option value="in-qa">in-qa</option><option value="postponed">postponed</option>
+        <option value="active">active</option><option value="done">done</option>
+        <option value="cancelled">cancelled</option>
+      </select>
+    </label>
+
+    <fieldset id="relation-fields">
+      <legend>relations</legend>
+      <label>related projects (IDs, comma-separated)
+        <input type="text" name="project_ids" list="project-id-datalist" />
+      </label>
+      <label>related initiatives (IDs, comma-separated)
+        <input type="text" name="initiative_ids" list="initiative-id-datalist" />
+      </label>
+      <label>initiative ID
+        <input type="text" name="initiative_id" list="initiative-id-datalist" />
+      </label>
+      <label>pitch ID
+        <input type="text" name="pitch_id" list="pitch-id-datalist" />
+      </label>
+    </fieldset>
+
+    <fieldset id="qa-fields">
+      <legend>QA receipt / provenance</legend>
+      <label>QA result <input type="text" name="qa_result" /></label>
+      <label>QA verified at <input type="text" name="qa_verified_at" /></label>
+      <label>QA run ref <input type="text" name="qa_run_ref" /></label>
+      <label>source path <input type="text" name="source_path" /></label>
+    </fieldset>
 
     <fieldset id="project-fields" class="project-fields">
       <legend>project metadata</legend>
@@ -69,18 +105,33 @@
   <datalist id="project-datalist">
     {% for p in all_projects %}<option value="{{ p }}">{% endfor %}
   </datalist>
+  <datalist id="project-id-datalist">
+    {% for p in registered_projects %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}
+  </datalist>
+  <datalist id="initiative-id-datalist">
+    {% for i in active_initiatives %}<option value="{{ i.id }}">{{ i.title }}</option>{% endfor %}
+  </datalist>
+  <datalist id="pitch-id-datalist">
+    {% for p in active_pitches %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}
+  </datalist>
 </div>
 
 <script>
 (function () {
   var sel = document.getElementById("entry-type-select");
   var projFields = document.getElementById("project-fields");
-  var projRef = document.getElementById("field-project");
+    var projRef = document.getElementById("field-project");
+  var status = document.getElementById("field-status");
+  var relationFields = document.getElementById("relation-fields");
+  var qaFields = document.getElementById("qa-fields");
   function sync() {
     var isProject = sel.value === "project";
     projFields.style.display = isProject ? "" : "none";
     // A project entry does not belong to itself — hide the "project" reference field.
     projRef.style.display = isProject ? "none" : "";
+    status.style.display = isProject ? "none" : "";
+    relationFields.style.display = (sel.value === "initiative" || sel.value === "pitch" || sel.value === "todo") ? "" : "none";
+    qaFields.style.display = (sel.value === "todo" || sel.value === "pitch") ? "" : "none";
   }
   sel.addEventListener("change", sync);
   sync();

@@ -21,7 +21,12 @@ from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
 from braindump.core.errors import BraindumpError, storage_error
 from braindump.core.query import StatusFilter
-from braindump.core.schema import ALL_TYPE_DIRS, PROJECT_STATES, Entry, type_to_dir
+from braindump.core.schema import (
+    ALL_TYPE_DIRS,
+    PROJECT_STATES,
+    Entry,
+    type_to_dir,
+)
 
 
 def _fail(exc: BraindumpError) -> NoReturn:
@@ -111,13 +116,40 @@ def _effective_project(explicit: str | None, cfg) -> str | None:
     return projects.get_active_project(cfg)
 
 
+def _filter_status(hits: list[query.Hit], status: str) -> list[query.Hit]:
+    """Apply exact lifecycle statuses not represented by query's task buckets."""
+    if status in {
+        "active",
+        "pending",
+        "in-progress",
+        "in-qa",
+        "postponed",
+        "cancelled",
+    }:
+        return [h for h in hits if h.entry.status == status]
+    return hits
+
+
+def _exact_status(status: str) -> bool:
+    return status in {
+        "active",
+        "pending",
+        "in-progress",
+        "in-qa",
+        "postponed",
+        "cancelled",
+    }
+
+
 # --- create ----------------------------------------------------------------
 
 
 @app.command()
-def create(
+def create(  # noqa: PLR0912 -- one option per supported entry field
     entry_type: str = typer.Argument(
-        ..., metavar="TYPE", help="todo, til, thought, prompt, project"
+        ...,
+        metavar="TYPE",
+        help="todo, til, thought, prompt, project, initiative, pitch",
     ),
     title: str = typer.Argument(..., help="Entry title"),
     tag: list[str] = typer.Option([], "--tag", "-t", help="Tag (repeatable)"),
@@ -145,6 +177,23 @@ def create(
     original_input: str | None = typer.Option(None, "--original-input"),
     original_input_file: Path | None = typer.Option(None, "--original-input-file"),
     body_file: Path | None = typer.Option(None, "--body-file"),
+    initiative_id: list[int] = typer.Option(
+        [], "--initiative-id", help="Related initiative ID (repeatable for pitches)"
+    ),
+    pitch_id: list[int] = typer.Option([], "--pitch-id", help="Related pitch ID"),
+    project_id: list[int] = typer.Option(
+        [], "--project-id", help="Related project ID (repeatable)"
+    ),
+    project_ids: str | None = typer.Option(
+        None, "--project-ids", help="Comma-separated related project IDs"
+    ),
+    initiative_ids: str | None = typer.Option(
+        None, "--initiative-ids", help="Comma-separated related initiative IDs"
+    ),
+    qa_result: str | None = typer.Option(None, "--qa-result"),
+    qa_verified_at: str | None = typer.Option(None, "--qa-verified-at"),
+    qa_run_ref: str | None = typer.Option(None, "--qa-run-ref"),
+    source_path: str | None = typer.Option(None, "--source-path"),
 ):
     """Create a new entry. Body is read from stdin unless --body-file is given."""
     cfg = load_config()
@@ -182,6 +231,56 @@ def create(
     }
     if tech:
         type_fields["tech_stack"] = list(tech)
+    all_project_ids = list(project_id)
+    if project_ids is not None:
+        try:
+            all_project_ids.extend(int(value) for value in _split_csv(project_ids))
+        except ValueError as exc:
+            raise typer.BadParameter("project IDs must be integers") from exc
+    if all_project_ids and entry_type not in {"initiative", "pitch"}:
+        raise typer.BadParameter(
+            "--project-id(s) are only valid for initiatives and pitches"
+        )
+    if all_project_ids:
+        type_fields["project_ids"] = all_project_ids
+    all_initiative_ids = list(initiative_id)
+    if initiative_ids is not None:
+        try:
+            all_initiative_ids.extend(
+                int(value) for value in _split_csv(initiative_ids)
+            )
+        except ValueError as exc:
+            raise typer.BadParameter("initiative IDs must be integers") from exc
+    if all_initiative_ids and entry_type not in {"todo", "pitch"}:
+        raise typer.BadParameter(
+            "--initiative-id(s) are only valid for todos and pitches"
+        )
+    if all_initiative_ids:
+        type_fields["initiative_ids" if entry_type == "pitch" else "initiative_id"] = (
+            list(all_initiative_ids) if entry_type == "pitch" else all_initiative_ids[0]
+        )
+        if entry_type != "pitch" and len(all_initiative_ids) > 1:
+            raise typer.BadParameter("--initiative-id may be repeated only for pitches")
+    if entry_type in {"initiative", "pitch"} and "status" not in type_fields:
+        type_fields["status"] = "active"
+    if pitch_id and entry_type != "todo":
+        raise typer.BadParameter("--pitch-id is only valid for todos")
+    if pitch_id:
+        if len(pitch_id) > 1:
+            raise typer.BadParameter("--pitch-id may be specified only once")
+        type_fields["pitch_id"] = pitch_id[0]
+    type_fields.update(
+        {
+            key: value
+            for key, value in {
+                "qa_result": qa_result,
+                "qa_verified_at": qa_verified_at,
+                "qa_run_ref": qa_run_ref,
+                "source_path": source_path,
+            }.items()
+            if value is not None
+        }
+    )
 
     try:
         result = entries.create_entry(
@@ -190,7 +289,7 @@ def create(
             title,
             body,
             tags=tag,
-            project=project,
+            project=None if entry_type in {"initiative", "pitch"} else project,
             summary=summary,
             original_input=original_input,
             type_fields=type_fields,
@@ -210,12 +309,33 @@ def list_cmd(
     project: str | None = typer.Option(None, "--project", "-p"),
     all_projects: bool = typer.Option(False, "--all", help="Ignore active project"),
     as_json: bool = typer.Option(False, "--json"),
+    status: str = typer.Option(
+        "all", "--status", help="active, open, done, settled, or all"
+    ),
+    project_id: int | None = typer.Option(None, "--project-id"),
+    initiative_id: int | None = typer.Option(None, "--initiative-id"),
+    pitch_id: int | None = typer.Option(None, "--pitch-id"),
 ):
     """List recent entries (newest first)."""
     cfg = load_config()
     types: list[str] = [type_to_dir(entry_type)] if entry_type else []
     proj = None if all_projects else _effective_project(project, cfg)
-    hits = query.list_recent(cfg, types=types, project=proj, limit=limit)
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            types=types,
+            project=proj,
+            status=cast(StatusFilter, status),
+            project_id=project_id,
+            initiative_id=initiative_id,
+            pitch_id=pitch_id,
+            limit=0 if _exact_status(status) else limit,
+            fulltext=False,
+        ),
+    )
+    hits = _filter_status(hits, status)
+    if _exact_status(status) and limit:
+        hits = hits[:limit]
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -224,11 +344,18 @@ def list_cmd(
         date_str = (h.entry.created_at or "")[:10]
         proj_str = f" ({h.entry.project})" if h.entry.project else ""
         status_str = ""
-        if h.entry.type == "todo":
+        if h.entry.type in {"todo", "initiative", "pitch"} and h.entry.status:
             status_str = f" [{h.entry.status or 'pending'}]"
+        relation_parts = []
+        for field in ("initiative_id", "pitch_id", "project_ids", "initiative_ids"):
+            value = getattr(h.entry, field, None)
+            if value is not None:
+                values = value if isinstance(value, list) else [value]
+                relation_parts.append(f"{field}={','.join(str(v) for v in values)}")
+        relation_str = f" {{{'; '.join(relation_parts)}}}" if relation_parts else ""
         typer.echo(
             f"#{h.entry.id} {date_str} [{h.entry.type}]{status_str} "
-            f"{h.entry.title}{proj_str}"
+            f"{h.entry.title}{proj_str}{relation_str}"
         )
 
 
@@ -241,13 +368,20 @@ def search(
     entry_type: str | None = typer.Option(None, "--type"),
     project: str | None = typer.Option(None, "--project", "-p"),
     all_projects: bool = typer.Option(False, "--all"),
-    status: str = typer.Option("all", "--status", help="open, done, or all"),
+    status: str = typer.Option(
+        "all", "--status", help="active, open, done, settled, or all"
+    ),
     tag: list[str] = typer.Option([], "--tag", "-t"),
     since: str | None = typer.Option(None, "--since", help="YYYY-MM-DD"),
     until: str | None = typer.Option(None, "--until", help="YYYY-MM-DD"),
     limit: int = typer.Option(50, "--limit", "-n"),
     no_fulltext: bool = typer.Option(False, "--no-fulltext"),
     as_json: bool = typer.Option(True, "--json/--human"),
+    project_id: int | None = typer.Option(None, "--project-id"),
+    initiative_id: int | None = typer.Option(None, "--initiative-id"),
+    pitch_id: int | None = typer.Option(None, "--pitch-id"),
+    related_id: int | None = typer.Option(None, "--related-id"),
+    related_type: str | None = typer.Option(None, "--related-type"),
 ):
     """Search across braindump entries."""
     cfg = load_config()
@@ -260,12 +394,20 @@ def search(
         project=proj,
         status=cast(StatusFilter, status),
         tags=tag,
+        project_id=project_id,
+        initiative_id=initiative_id,
+        pitch_id=pitch_id,
+        related_id=related_id,
+        related_type=related_type,
         since=_parse_date(since),
         until=_parse_date(until),
-        limit=limit,
+        limit=0 if _exact_status(status) else limit,
         fulltext=not no_fulltext,
     )
     hits = query.search(cfg, filters)
+    hits = _filter_status(hits, status)
+    if _exact_status(status) and limit:
+        hits = hits[:limit]
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -273,8 +415,10 @@ def search(
     for h in hits:
         date_str = (h.entry.created_at or "")[:10]
         proj_str = f" ({h.entry.project})" if h.entry.project else ""
+        status_str = f" [{h.entry.status}]" if h.entry.status else ""
         typer.echo(
-            f"#{h.entry.id} {date_str} [{h.entry.type}] {h.entry.title}{proj_str}"
+            f"#{h.entry.id} {date_str} [{h.entry.type}]{status_str} "
+            f"{h.entry.title}{proj_str}"
         )
 
 
@@ -282,12 +426,32 @@ def search(
 
 # Keep in sync with type-specific fields in schema.py (Entry model).
 _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
-    "todo": ["status", "subtype", "priority", "due_date"],
+    "todo": [
+        "status",
+        "subtype",
+        "priority",
+        "due_date",
+        "initiative_id",
+        "pitch_id",
+        "qa_result",
+        "qa_verified_at",
+        "qa_run_ref",
+    ],
     "til": ["category", "source"],
     "thought": ["mood", "related_to"],
     "prompt": ["prompt_type", "model_target"],
     "journal": ["date", "word_count"],
     "project": ["description", "state", "area", "local_dir", "tech_stack"],
+    "initiative": ["status", "project_ids"],
+    "pitch": [
+        "status",
+        "project_ids",
+        "initiative_ids",
+        "source_path",
+        "qa_result",
+        "qa_verified_at",
+        "qa_run_ref",
+    ],
 }
 
 
@@ -410,6 +574,21 @@ def update(
     body_from_stdin: bool = typer.Option(
         False, "--body", help="Replace body with stdin"
     ),
+    initiative_id: int | None = typer.Option(None, "--initiative-id"),
+    pitch_id: int | None = typer.Option(None, "--pitch-id"),
+    project_ids: str | None = typer.Option(
+        None,
+        "--project-ids",
+        "--project-id",
+        help="Comma-separated related project IDs",
+    ),
+    initiative_ids: str | None = typer.Option(
+        None, "--initiative-ids", help="Comma-separated related initiative IDs"
+    ),
+    qa_result: str | None = typer.Option(None, "--qa-result"),
+    qa_verified_at: str | None = typer.Option(None, "--qa-verified-at"),
+    qa_run_ref: str | None = typer.Option(None, "--qa-run-ref"),
+    source_path: str | None = typer.Option(None, "--source-path"),
 ):
     """Patch an entry's metadata and (optionally) its body."""
     cfg = load_config()
@@ -428,6 +607,24 @@ def update(
         patch["priority"] = priority
     if area is not None:
         patch["area"] = area
+    patch.update(
+        {
+            key: value
+            for key, value in {
+                "initiative_id": initiative_id,
+                "pitch_id": pitch_id,
+                "qa_result": qa_result,
+                "qa_verified_at": qa_verified_at,
+                "qa_run_ref": qa_run_ref,
+                "source_path": source_path,
+            }.items()
+            if value is not None
+        }
+    )
+    if project_ids is not None:
+        patch["project_ids"] = [int(value) for value in _split_csv(project_ids)]
+    if initiative_ids is not None:
+        patch["initiative_ids"] = [int(value) for value in _split_csv(initiative_ids)]
     body = _read_stdin_if_piped() if body_from_stdin else None
     updated = entries.update_entry(cfg, entry_id, patch, body=body)
     typer.echo(f"updated: #{updated.id} {updated.file_path}")

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% block title %}entries{% endblock %}
+{% block title %}{{ index_title or "entries" }}{% endblock %}
 {% block body %}
 <div class="entries-page">
+  <h2>{{ index_title or "entries" }}</h2>
   <form method="get" action="/entries" class="filters">
     <input type="text" name="q" value="{{ q }}" placeholder="search…" />
     <select name="type">
@@ -14,9 +15,17 @@
       <option value="all" {% if status == "all" %}selected{% endif %}>all</option>
       <option value="open" {% if status == "open" %}selected{% endif %}>open</option>
       <option value="done" {% if status == "done" %}selected{% endif %}>done</option>
+      <option value="settled" {% if status == "settled" %}selected{% endif %}>settled</option>
+      <option value="active" {% if status == "active" %}selected{% endif %}>active</option>
+      <option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>cancelled</option>
     </select>
     <input type="text" name="project" value="{{ project }}" list="project-datalist" placeholder="project" />
     <input type="text" name="tag" value="{{ tag }}" placeholder="tag" />
+    <input type="number" name="project_id" value="{{ project_id or '' }}" placeholder="project ID" />
+    <input type="number" name="initiative_id" value="{{ initiative_id or '' }}" placeholder="initiative ID" />
+    <input type="number" name="pitch_id" value="{{ pitch_id or '' }}" placeholder="pitch ID" />
+    <input type="number" name="related_id" value="{{ related_id or '' }}" placeholder="related ID" />
+    <input type="text" name="related_type" value="{{ related_type }}" placeholder="relation type" />
     <label><input type="checkbox" name="all" value="1" {% if all_projects_flag %}checked{% endif %} /> all projects</label>
     <button type="submit">filter</button>
   </form>

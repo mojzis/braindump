@@ -37,7 +37,7 @@ from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
 from braindump.core.errors import BraindumpError, EntryNotFoundError, ReadOnlyStoreError
 from braindump.core.query import StatusFilter
-from braindump.core.schema import ALL_TYPES, PROJECT_STATES
+from braindump.core.schema import ALL_TYPES, PROJECT_STATES, Entry
 
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -130,16 +130,22 @@ def _render_markdown(text: str) -> Markup:
     return Markup(nh3.clean(html))  # noqa: S704
 
 
-_REF_CHIP_RE = re.compile(r"\[→(todo|til|thought|prompt)#(\d+)\]")
+_REF_CHIP_RE = re.compile(
+    r"\[→(todo|til|thought|prompt|project|initiative|pitch)#(\d+)\]"
+)
 
 
 def _ref_chip_sub(m: re.Match[str]) -> str:
     entry_type, entry_id = m.group(1), m.group(2)
+    if entry_type in {"project", "initiative", "pitch"}:
+        target = entries.resolve_relation(load_config(), int(entry_id), entry_type)
+        if target is None:
+            return f'<span class="missing-ref">missing {entry_type} #{entry_id}</span>'
     return f'<a class="ref-chip" href="/entries/{entry_id}">{entry_type}#{entry_id}</a>'
 
 
 def _journal_markdown(text: str) -> Markup:
-    """Render journal body markdown, then re-link `[→todo#87]` marks as ref chips.
+    """Render journal body markdown, then re-link typed reference marks as chips.
 
     The chip-linking regex runs *after* `_render_markdown`'s nh3 pass because
     nh3 strips `class` attributes — a `class="ref-chip"` anchor injected
@@ -230,6 +236,38 @@ def _csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [v.strip() for v in value.split(",") if v.strip()]
+
+
+def _csv_ints(value: str | None) -> list[int]:
+    return [int(v) for v in _csv(value)]
+
+
+def _active_planning_entries(cfg: Config, type_dir: str) -> list[Entry]:
+    return [
+        entry for entry in store.read_index(cfg, type_dir) if entry.status == "active"
+    ]
+
+
+def _relation_groups(cfg: Config, entry: Entry) -> list[dict]:
+    labels = {
+        "project_ids": "projects",
+        "initiative_id": "initiative",
+        "initiative_ids": "initiatives",
+        "pitch_id": "pitch",
+    }
+    groups = []
+    for relation_field in entries.RELATION_TARGET_TYPES.get(entry.type, {}):
+        relations = [
+            {"id": relation_id, "entry": target}
+            for relation_id, target in zip(
+                entries.relation_target_ids(entry, relation_field),
+                entries.resolve_relations(cfg, entry, relation_field),
+                strict=True,
+            )
+        ]
+        if relations:
+            groups.append({"label": labels[relation_field], "relations": relations})
+    return groups
 
 
 def _context(request: Request, **extra) -> dict:
@@ -493,6 +531,9 @@ def capture_get(
     project_stats = projects.list_projects(cfg)
     all_projects = [p.name for p in project_stats if p.name != "(none)"]
     all_areas = sorted({p.area for p in project_stats if p.area})
+    registered_projects = [
+        p for p in store.read_index(cfg, "projects") if p.state != "archived"
+    ]
     return templates.TemplateResponse(
         request,
         "capture.html",
@@ -504,12 +545,15 @@ def capture_get(
             preset_type=type or "",
             preset_title=title or "",
             project_states=list(PROJECT_STATES),
+            registered_projects=registered_projects,
+            active_initiatives=_active_planning_entries(cfg, "initiatives"),
+            active_pitches=_active_planning_entries(cfg, "pitches"),
         ),
     )
 
 
 @app.post("/capture")
-def capture_post(  # noqa: PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
+def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -521,6 +565,15 @@ def capture_post(  # noqa: PLR0913, PLR0917 -- one Form field per entry attribut
     area: str = Form(""),
     local_dir: str = Form(""),
     tech_stack: str = Form(""),
+    status: str = Form(""),
+    project_ids: str = Form(""),
+    initiative_ids: str = Form(""),
+    initiative_id: str = Form(""),
+    pitch_id: str = Form(""),
+    qa_result: str = Form(""),
+    qa_verified_at: str = Form(""),
+    qa_run_ref: str = Form(""),
+    source_path: str = Form(""),
 ):
     cfg = load_config()
     active = projects.get_active_project(cfg)
@@ -543,6 +596,53 @@ def capture_post(  # noqa: PLR0913, PLR0917 -- one Form field per entry attribut
             type_fields["tech_stack"] = tech_list
     else:
         effective_project = project.strip() or active or None
+        if entry_type in {"initiative", "pitch"}:
+            effective_project = None
+    if status.strip():
+        type_fields["status"] = status.strip()
+    elif entry_type in {"initiative", "pitch"}:
+        type_fields["status"] = "active"
+    try:
+        project_id_values = _csv_ints(project_ids)
+        initiative_id_values = _csv_ints(initiative_ids)
+        if project_id_values and entry_type not in {"initiative", "pitch"}:
+            raise ValueError(  # noqa: TRY301
+                "related project IDs are only valid for initiatives and pitches"
+            )
+        if initiative_id_values and entry_type != "pitch":
+            raise ValueError(  # noqa: TRY301
+                "related initiative IDs are only valid for pitches"
+            )
+        if project_id_values:
+            type_fields["project_ids"] = project_id_values
+        if initiative_id_values:
+            type_fields["initiative_ids"] = initiative_id_values
+        if initiative_id.strip():
+            initiative_value = int(initiative_id.strip())
+            if entry_type == "pitch":
+                type_fields.setdefault("initiative_ids", []).append(initiative_value)
+            elif entry_type == "todo":
+                type_fields["initiative_id"] = initiative_value
+            else:
+                raise ValueError(  # noqa: TRY301
+                    "initiative ID is only valid for todos and pitches"
+                )
+        if pitch_id.strip():
+            if entry_type != "todo":
+                raise ValueError(  # noqa: TRY301
+                    "pitch ID is only valid for todos"
+                )
+            type_fields["pitch_id"] = int(pitch_id.strip())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for key, value in {
+        "qa_result": qa_result,
+        "qa_verified_at": qa_verified_at,
+        "qa_run_ref": qa_run_ref,
+        "source_path": source_path,
+    }.items():
+        if value.strip():
+            type_fields[key] = value.strip()
     try:
         result = entries.create_entry(
             cfg,
@@ -571,6 +671,11 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     status: str = "all",
     tag: str | None = None,
     all_projects: bool = Query(False, alias="all"),
+    project_id: int | None = None,
+    initiative_id: int | None = None,
+    pitch_id: int | None = None,
+    related_id: int | None = None,
+    related_type: str | None = None,
 ):
     cfg = load_config()
     active = projects.get_active_project(cfg)
@@ -581,9 +686,35 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         project=proj_filter,
         status=cast(StatusFilter, status),
         tags=[tag] if tag else [],
-        limit=100,
+        project_id=project_id,
+        initiative_id=initiative_id,
+        pitch_id=pitch_id,
+        related_id=related_id,
+        related_type=related_type,
+        limit=0
+        if status
+        in {
+            "active",
+            "pending",
+            "in-progress",
+            "in-qa",
+            "postponed",
+            "cancelled",
+        }
+        else 100,
     )
+
     hits = query.search(cfg, filters)
+    if status in {
+        "active",
+        "pending",
+        "in-progress",
+        "in-qa",
+        "postponed",
+        "cancelled",
+    }:
+        hits = [h for h in hits if h.entry.status == status]
+        hits = hits[:100]
     all_projects_list = [
         p.name for p in projects.list_projects(cfg) if p.name != "(none)"
     ]
@@ -600,6 +731,57 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
             tag=tag or "",
             all_projects_flag=all_projects,
             all_projects_list=all_projects_list,
+            project_id=project_id,
+            initiative_id=initiative_id,
+            pitch_id=pitch_id,
+            related_id=related_id,
+            related_type=related_type or "",
+        ),
+    )
+
+
+@app.get("/initiatives", response_class=HTMLResponse)
+def initiatives_list(request: Request):
+    return _planning_list(request, "initiative", "initiatives")
+
+
+@app.get("/pitches", response_class=HTMLResponse)
+def pitches_list(request: Request):
+    return _planning_list(request, "pitch", "pitches")
+
+
+def _planning_list(request: Request, entry_type: str, title: str):
+    cfg = load_config()
+    hits = [
+        hit
+        for hit in query.search(
+            cfg,
+            query.SearchFilters(types=[entry_type], status="all", limit=100),
+        )
+        if hit.entry.status == "active"
+    ]
+    all_projects_list = [
+        p.name for p in projects.list_projects(cfg) if p.name != "(none)"
+    ]
+    return templates.TemplateResponse(
+        request,
+        "entries.html",
+        _context(
+            request,
+            hits=hits,
+            q="",
+            type=entry_type,
+            project="",
+            status="all",
+            tag="",
+            all_projects_flag=True,
+            all_projects_list=all_projects_list,
+            index_title=title,
+            project_id=None,
+            initiative_id=None,
+            pitch_id=None,
+            related_id=None,
+            related_type="",
         ),
     )
 
@@ -614,6 +796,12 @@ def entry_view(request: Request, entry_id: int):
     full_path = store.full_path_for(cfg, type_dir, entry.file_path)
     _, md_body = store.read_markdown(full_path)
     _heading, authored, _ = entries.split_body(md_body)
+    relation_groups = _relation_groups(cfg, entry)
+    backlinks = (
+        query.related_entries(cfg, entry.type, entry.id)
+        if entry.type in {"initiative", "pitch"}
+        else []
+    )
     return templates.TemplateResponse(
         request,
         "entry_view.html",
@@ -622,6 +810,8 @@ def entry_view(request: Request, entry_id: int):
             entry=entry,
             body=authored,
             type_dir=type_dir,
+            relation_groups=relation_groups,
+            backlinks=backlinks,
         ),
     )
 
@@ -636,15 +826,29 @@ def entry_edit(request: Request, entry_id: int):
     full_path = store.full_path_for(cfg, type_dir, entry.file_path)
     _, md_body = store.read_markdown(full_path)
     _, authored, _ = entries.split_body(md_body)
+    planning = {
+        "initiatives": _active_planning_entries(cfg, "initiatives"),
+        "pitches": _active_planning_entries(cfg, "pitches"),
+    }
     return templates.TemplateResponse(
         request,
         "entry_edit.html",
-        _context(request, entry=entry, body=authored, type_dir=type_dir),
+        _context(
+            request,
+            entry=entry,
+            body=authored,
+            type_dir=type_dir,
+            registered_projects=[
+                p for p in store.read_index(cfg, "projects") if p.state != "archived"
+            ],
+            active_initiatives=planning["initiatives"],
+            active_pitches=planning["pitches"],
+        ),
     )
 
 
 @app.post("/api/entries/{entry_id}", response_class=HTMLResponse)
-def api_entry_update(  # noqa: PLR0913, PLR0917 -- one Form field per editable attribute; splitting adds indirection
+async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per editable attribute; splitting adds indirection
     request: Request,
     entry_id: int,
     title: str | None = Form(None),
@@ -654,7 +858,16 @@ def api_entry_update(  # noqa: PLR0913, PLR0917 -- one Form field per editable a
     status: str | None = Form(None),
     area: str | None = Form(None),
     body: str | None = Form(None),
+    initiative_id: str | None = Form(None),
+    pitch_id: str | None = Form(None),
+    project_ids: str | None = Form(None),
+    initiative_ids: str | None = Form(None),
+    qa_result: str | None = Form(None),
+    qa_verified_at: str | None = Form(None),
+    qa_run_ref: str | None = Form(None),
+    source_path: str | None = Form(None),
 ):
+    form = await request.form()
     cfg = load_config()
     patch: dict = {}
     if title is not None:
@@ -669,6 +882,35 @@ def api_entry_update(  # noqa: PLR0913, PLR0917 -- one Form field per editable a
         patch["status"] = status
     if area is not None:
         patch["area"] = area.strip() or None
+    for key, raw in {
+        "initiative_id": initiative_id,
+        "pitch_id": pitch_id,
+        "qa_result": qa_result,
+        "qa_verified_at": qa_verified_at,
+        "qa_run_ref": qa_run_ref,
+        "source_path": source_path,
+    }.items():
+        if raw is not None or key in form:
+            if key in {"initiative_id", "pitch_id"}:
+                try:
+                    patch[key] = int(raw) if raw and raw.strip() else None
+                except ValueError as exc:
+                    raise HTTPException(
+                        status_code=400, detail="relation IDs must be integers"
+                    ) from exc
+            else:
+                patch[key] = raw.strip() or None if raw else None
+    for key, raw in {
+        "project_ids": project_ids,
+        "initiative_ids": initiative_ids,
+    }.items():
+        if raw is not None or key in form:
+            try:
+                patch[key] = _csv_ints(raw)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="relation IDs must be integers"
+                ) from exc
     entries.update_entry(cfg, entry_id, patch, body=body)
     return HTMLResponse(headers={"HX-Redirect": f"/entries/{entry_id}"}, content="")
 
@@ -781,6 +1023,7 @@ def project_detail(request: Request, name: str):
         query.SearchFilters(types=["todos"], project=name, status="open", limit=50),
     )
     recent = query.list_recent(cfg, project=name, limit=20)
+    related = projects.related_work(cfg, project_entry.id) if project_entry else []
     # list_recent / search already scope to project by title match, and project
     # entries have project=None so they naturally drop out — no extra filtering.
     return templates.TemplateResponse(
@@ -792,6 +1035,7 @@ def project_detail(request: Request, name: str):
             project_entry=project_entry,
             open_todos=open_todos,
             recent=recent,
+            related_work=related,
         ),
     )
 

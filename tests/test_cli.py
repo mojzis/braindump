@@ -1,4 +1,5 @@
 """Tests for the bd CLI commands."""
+
 from __future__ import annotations
 
 import json
@@ -175,3 +176,76 @@ def test_done_and_update_echo_the_id(tmp_path, monkeypatch):
     res = runner.invoke(app, ["done", str(eid)])
     assert res.exit_code == 0
     assert res.output.startswith(f"done: #{eid} ")
+
+
+def test_cli_graph_create_show_list_and_search(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    project = entries.create_entry(cfg, "project", "Alpha", "project")
+
+    initiative_res = runner.invoke(
+        app,
+        [
+            "create",
+            "initiative",
+            "Launch",
+            "--status",
+            "active",
+            "--project-id",
+            str(project.entry.id),
+        ],
+    )
+    assert initiative_res.exit_code == 0
+    initiative_id = int(initiative_res.output.split("#", 1)[1].split()[0])
+
+    pitch_res = runner.invoke(
+        app,
+        [
+            "create",
+            "pitch",
+            "Launch pitch",
+            "--status",
+            "active",
+            "--project-id",
+            str(project.entry.id),
+            "--initiative-id",
+            str(initiative_id),
+            "--source-path",
+            "pitch.md",
+        ],
+    )
+    assert pitch_res.exit_code == 0
+    pitch_id = int(pitch_res.output.split("#", 1)[1].split()[0])
+
+    todo_res = runner.invoke(
+        app,
+        [
+            "create",
+            "todo",
+            "Implement",
+            "--initiative-id",
+            str(initiative_id),
+            "--pitch-id",
+            str(pitch_id),
+            "--status",
+            "in-progress",
+        ],
+    )
+    assert todo_res.exit_code == 0
+    todo_id = int(todo_res.output.split("#", 1)[1].split()[0])
+
+    shown = runner.invoke(app, ["show", str(pitch_id)])
+    assert shown.exit_code == 0
+    assert "status: active" in shown.output
+    assert f"initiative_ids: {initiative_id}" in shown.output
+    assert "source_path: pitch.md" in shown.output
+
+    listed = runner.invoke(app, ["list", "initiative", "--status", "active"])
+    assert listed.exit_code == 0
+    assert "Launch" in listed.output
+    searched = runner.invoke(app, ["search", "--initiative-id", str(initiative_id)])
+    assert searched.exit_code == 0
+    assert {json.loads(line)["id"] for line in searched.output.splitlines()} == {
+        pitch_id,
+        todo_id,
+    }

@@ -19,7 +19,7 @@
     <span>·</span>
     <span>{{ (entry.created_at or '')[:10] }}</span>
     {% if entry.updated_at %}<span>·</span><span>updated {{ entry.updated_at[:10] }}</span>{% endif %}
-    {% if entry.type == "todo" and entry.status %}
+    {% if entry.type in ("todo", "initiative", "pitch") and entry.status %}
       <span class="state-pill {% if entry.status == 'done' %}state-archived{% elif entry.status == 'in-progress' %}state-active{% endif %}">{{ entry.status }}</span>
     {% endif %}
     {% if entry.project %}
@@ -34,6 +34,31 @@
   {% endif %}
 
   {% if entry.summary %}<p class="entry-summary">{{ entry.summary }}</p>{% endif %}
+
+  {% if relation_groups %}
+    <section class="entry-relations">
+      <h3>related work</h3>
+      {% for group in relation_groups %}
+        <p><strong>{{ group.label }}:</strong>
+        {% for relation in group.relations %}
+          {% if relation.entry %}
+            <a class="ref-chip" href="/entries/{{ relation.entry.id }}">{{ relation.entry.type }}#{{ relation.entry.id }} {{ relation.entry.title }}</a>
+          {% else %}
+            <span class="missing-ref">missing {{ group.label[:-1] if group.label.endswith('s') else group.label }} #{{ relation.id }}</span>
+          {% endif %}
+        {% endfor %}</p>
+      {% endfor %}
+    </section>
+  {% endif %}
+
+  {% if backlinks %}
+    <section class="entry-relations">
+      <h3>linked entries</h3>
+      {% for h in backlinks %}
+        <a class="ref-chip" href="/entries/{{ h.entry.id }}">{{ h.entry.type }}#{{ h.entry.id }} {{ h.entry.title }}</a>
+      {% endfor %}
+    </section>
+  {% endif %}
 
   <div class="prose">{{ body | markdown }}</div>
   {# the markdown behind the rendered body, for the copy button #}
