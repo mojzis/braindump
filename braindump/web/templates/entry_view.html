@@ -10,6 +10,11 @@
     <div class="entry-head-actions">
       <button type="button" class="ghost-btn" data-copy-from="#entry-source"
               title="copy this entry's markdown">copy</button>
+      {% if entry.type == "initiative" %}
+        <button type="button" class="ghost-btn"
+                hx-post="/api/initiatives/{{ entry.id }}/parse"
+                hx-swap="none">parse todos</button>
+      {% endif %}
       <a class="edit-link" href="/entries/{{ entry.id }}/edit">edit</a>
     </div>
   </header>

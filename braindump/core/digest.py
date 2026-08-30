@@ -21,6 +21,7 @@ Idempotency: `validate_pass1` drops any line already containing `[→` before
 it ever reaches entry creation, and `apply_annotations` writes the `[→type#id]`
 mark back per section.
 """
+
 from __future__ import annotations
 
 import json
@@ -309,6 +310,10 @@ class Annotation:
     line_text: str
     type: str
     entry_id: int
+
+
+SourceItem = entries.SourceItem
+parse_source_document = entries.parse_source_document
 
 
 def apply_annotations(
@@ -731,3 +736,98 @@ async def run_parse(
         _report(section.project, "done")
 
     return result
+
+
+@dataclass
+class InitiativeParseResult:
+    """Outcome of importing unchecked list items from an initiative."""
+
+    initiative_id: int
+    todo_ids: list[int] = field(default_factory=list)
+    skipped_checked: int = 0
+    unanchored: list[Annotation] = field(default_factory=list)
+
+    @property
+    def created(self) -> int:
+        return len(self.todo_ids)
+
+
+def _authored_entry_body(cfg: Config, type_dir: str, entry: entries.Entry) -> str:
+    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
+    _, markdown_body = store.read_markdown(full_path)
+    _, authored, _ = entries.split_body(markdown_body)
+    return authored
+
+
+def _project_heading_matches(heading: str | None, project: str) -> bool:
+    if not heading:
+        return False
+    return store.slugify(heading) == store.slugify(project)
+
+
+def parse_initiative(cfg: Config, initiative_id: int) -> InitiativeParseResult:
+    """Create todos for unchecked list items in an initiative body.
+
+    Existing ``[→todo#id]`` marks are the idempotency key.  Project ownership
+    is intentionally conservative: one linked project owns every todo; with
+    multiple linked projects only a matching ``## project`` heading assigns
+    ownership, and all other todos remain unlabelled.
+    """
+    found = entries.find_by_id(cfg, initiative_id)
+    if found is None or found[1].type != "initiative":
+        raise ValueError(f"entry #{initiative_id} is not an initiative")
+    type_dir, initiative = found
+    body = _authored_entry_body(cfg, type_dir, initiative)
+    result = InitiativeParseResult(initiative_id=initiative.id)
+    items = parse_source_document(body)
+    result.skipped_checked = sum(1 for item in items if item.checked)
+
+    project_names = [
+        project.title
+        for project in entries.resolve_relations(cfg, initiative, "project_ids")
+        if project is not None
+    ]
+    sole_project = project_names[0] if len(project_names) == 1 else None
+    annotations: list[Annotation] = []
+    for item in items:
+        if item.checked:
+            continue
+        project = sole_project
+        if project is None and len(project_names) > 1:
+            matching = next(
+                (
+                    name
+                    for name in project_names
+                    if _project_heading_matches(item.heading, name)
+                ),
+                None,
+            )
+            project = matching
+        created = entries.create_entry(
+            cfg,
+            "todo",
+            item.text,
+            item.text,
+            project=project,
+            original_input=item.line_text,
+            type_fields={"initiative_id": initiative.id},
+        )
+        result.todo_ids.append(created.entry.id)
+        annotations.append(
+            Annotation(
+                line=item.line,
+                line_text=item.line_text,
+                type="todo",
+                entry_id=created.entry.id,
+            )
+        )
+
+    if annotations:
+        new_body, result.unanchored = apply_annotations(body, annotations)
+        if new_body != body:
+            entries.update_entry(cfg, initiative.id, {}, body=new_body)
+    return result
+
+
+# Descriptive alias for callers that treat the initiative body as a source doc.
+parse_initiative_body = parse_initiative

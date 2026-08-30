@@ -5,7 +5,7 @@ from datetime import datetime
 import httpx
 import pytest
 
-from braindump.core import entries
+from braindump.core import entries, store
 from braindump.web.app import app
 
 
@@ -129,3 +129,36 @@ async def test_graph_missing_relation_is_a_warning(monkeypatch, cfg):
     assert detail.status_code == 200
     assert "missing initiative #999" in detail.text
     assert "/entries/999" not in detail.text
+
+
+@pytest.mark.anyio
+async def test_initiative_parse_route_creates_linked_todos_once(monkeypatch, cfg):
+    project = entries.create_entry(cfg, "project", "Alpha", "body")
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "Launch",
+        "- [ ] ship it",
+        type_fields={"project_ids": [project.entry.id]},
+    )
+
+    detail = await _request(monkeypatch, cfg, "GET", f"/entries/{initiative.entry.id}")
+    assert "parse todos" in detail.text
+
+    parsed = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/initiatives/{initiative.entry.id}/parse",
+    )
+    assert parsed.status_code == 200
+    assert parsed.headers["hx-redirect"] == f"/entries/{initiative.entry.id}"
+    assert len(store.read_index(cfg, "todos")) == 1
+
+    await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/initiatives/{initiative.entry.id}/parse",
+    )
+    assert len(store.read_index(cfg, "todos")) == 1

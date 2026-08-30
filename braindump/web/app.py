@@ -942,6 +942,18 @@ def api_entry_done(entry_id: int):
     return HTMLResponse(headers={"HX-Refresh": "true"}, content="")
 
 
+@app.post("/api/initiatives/{initiative_id}/parse", response_class=HTMLResponse)
+def api_initiative_parse(initiative_id: int):
+    cfg = load_config()
+    try:
+        digest.parse_initiative(cfg, initiative_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return HTMLResponse(
+        headers={"HX-Redirect": f"/entries/{initiative_id}"}, content=""
+    )
+
+
 @app.delete("/api/entries/{entry_id}", response_class=HTMLResponse)
 def api_entry_delete(entry_id: int):
     cfg = load_config()

@@ -16,7 +16,7 @@ from typing import Any, NoReturn, cast
 import typer
 from typer.core import TyperGroup
 
-from braindump.core import entries, journal, projects, query, store
+from braindump.core import digest, entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
 from braindump.core.errors import BraindumpError, storage_error
@@ -72,10 +72,12 @@ app = typer.Typer(
 journal_app = typer.Typer(help="Daily journal commands.", no_args_is_help=True)
 project_app = typer.Typer(help="Project commands.", no_args_is_help=True)
 tags_app = typer.Typer(help="Tag analytics.", no_args_is_help=True)
+initiative_app = typer.Typer(help="Initiative commands.", no_args_is_help=True)
 
 app.add_typer(journal_app, name="journal")
 app.add_typer(project_app, name="project")
 app.add_typer(tags_app, name="tags")
+app.add_typer(initiative_app, name="initiative")
 
 
 # --- helpers ---------------------------------------------------------------
@@ -737,6 +739,17 @@ def journal_show(day: str = typer.Argument(..., help="YYYY-MM-DD")):
 
 
 # --- projects --------------------------------------------------------------
+
+
+@initiative_app.command("parse")
+def initiative_parse(initiative_id: int = typer.Argument(..., metavar="ID")):
+    """Create linked todos from an initiative's Markdown list items."""
+    cfg = load_config()
+    try:
+        result = digest.parse_initiative(cfg, initiative_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"parsed: initiative #{initiative_id} created {result.created} todo(s)")
 
 
 def _project_counts(s: projects.ProjectStats) -> str:

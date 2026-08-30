@@ -665,3 +665,48 @@ async def test_run_parse_reports_unanchored_when_duplicate_line_across_sections(
     # only one annotation actually landed in the journal body
     body = journal.read_body(cfg, day)
     assert body.count("[→todo#") == 1
+
+
+def test_parse_source_document_tracks_headings_and_checked_items():
+    items = digest.parse_source_document(
+        "- [ ] first\n## Alpha\n* second\n- [x] finished\n"
+    )
+
+    assert [(item.text, item.heading, item.checked) for item in items] == [
+        ("first", None, False),
+        ("second", "Alpha", False),
+        ("finished", "Alpha", True),
+    ]
+
+
+def test_parse_initiative_routes_todos_and_is_idempotent(cfg):
+    alpha = entries.create_entry(cfg, "project", "Alpha", "body")
+    beta = entries.create_entry(cfg, "project", "Beta", "body")
+    initiative = entries.create_entry(
+        cfg,
+        "initiative",
+        "Launch",
+        "- [ ] unlabelled\n"
+        "## Alpha\n"
+        "- [ ] alpha task\n"
+        "## Beta\n"
+        "- [ ] beta task\n"
+        "- [x] already done\n",
+        type_fields={"project_ids": [alpha.entry.id, beta.entry.id]},
+    )
+
+    result = digest.parse_initiative(cfg, initiative.entry.id)
+    assert result.created == 3
+    todos = store.read_index(cfg, "todos")
+    assert {todo.title: todo.project for todo in todos} == {
+        "unlabelled": None,
+        "alpha task": "Alpha",
+        "beta task": "Beta",
+    }
+    assert all(todo.initiative_id == initiative.entry.id for todo in todos)
+
+    again = digest.parse_initiative(cfg, initiative.entry.id)
+    assert again.created == 0
+    assert len(store.read_index(cfg, "todos")) == 3
+    body = (cfg.home / "initiatives" / initiative.entry.file_path).read_text()
+    assert body.count("[→todo#") == 3

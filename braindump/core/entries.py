@@ -101,6 +101,57 @@ def join_body(heading: str, authored: str, details: str) -> str:
     return "\n".join(parts).rstrip("\n") + "\n"
 
 
+@dataclass(frozen=True)
+class SourceItem:
+    """One actionable Markdown list item in a source document."""
+
+    line: int
+    line_text: str
+    text: str
+    heading: str | None = None
+    checked: bool = False
+
+
+_SOURCE_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
+_SOURCE_ITEM_RE = re.compile(
+    r"^\s*(?:[-*+]|\d+[.)])\s+"
+    r"(?:\[(?P<state>[ xX])\]\s+)?(?P<text>.+?)\s*$"
+)
+
+
+def parse_source_document(body: str) -> list[SourceItem]:
+    """Extract Markdown list items and their nearest level-two heading.
+
+    Existing reference marks make an item already imported, so they are left
+    out of the result. Both ordinary list items and task-list items are
+    supported; a checked task is returned with ``checked=True`` for callers
+    that want to preserve its completed state.
+    """
+    heading: str | None = None
+    items: list[SourceItem] = []
+    for line, line_text in enumerate(body.splitlines()):
+        heading_match = _SOURCE_HEADING_RE.match(line_text)
+        if heading_match:
+            heading = heading_match.group(1).strip()
+            continue
+        item_match = _SOURCE_ITEM_RE.match(line_text)
+        if item_match is None or "[→" in line_text:
+            continue
+        text = item_match.group("text").strip()
+        if not text:
+            continue
+        items.append(
+            SourceItem(
+                line=line,
+                line_text=line_text,
+                text=text,
+                heading=heading,
+                checked=bool((item_match.group("state") or "").strip()),
+            )
+        )
+    return items
+
+
 # --- create ----------------------------------------------------------------
 
 
