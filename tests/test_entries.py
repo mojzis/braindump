@@ -306,6 +306,16 @@ def test_typed_relation_validation_rejects_wrong_type_and_missing(cfg):
     assert store.next_id(cfg) == 3
 
 
+def test_update_rejects_relations_unsupported_by_entry_type(cfg):
+    todo = entries.create_entry(cfg, "todo", "needs link", "body", now=_fake_now())
+
+    with pytest.raises(ValueError, match="not valid for todo"):
+        entries.update_entry(cfg, todo.entry.id, {"project_ids": [999]})
+
+    persisted = store.read_index(cfg, "todos")[0]
+    assert persisted.project_ids is None
+
+
 def test_relation_survives_project_rename_and_deleted_target_resolves_missing(cfg):
     project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
     initiative = entries.create_entry(

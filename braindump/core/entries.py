@@ -33,6 +33,9 @@ RELATION_TARGET_TYPES: dict[str, dict[str, str]] = {
     "initiative": {"project_ids": "project"},
     "pitch": {"project_ids": "project", "initiative_ids": "initiative"},
 }
+_ALL_RELATION_FIELDS = frozenset(
+    field for fields in RELATION_TARGET_TYPES.values() for field in fields
+)
 
 # --- details block ---------------------------------------------------------
 
@@ -389,13 +392,23 @@ def update_entry(
     if bad:
         raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
 
+    relation_fields_for_type = set(RELATION_TARGET_TYPES.get(entry.type, {}))
+    unsupported_relations = (
+        set(patch) & _ALL_RELATION_FIELDS
+    ) - relation_fields_for_type
+    if unsupported_relations:
+        raise ValueError(
+            f"relation fields {sorted(unsupported_relations)} are not valid for "
+            f"{entry.type}"
+        )
+
     merged = entry.model_dump()
     merged.update(patch)
     _validate_canonical_fields(
         cfg,
         entry.type,
         merged,
-        relation_fields=set(patch) & set(RELATION_TARGET_TYPES.get(entry.type, {})),
+        relation_fields=set(patch) & relation_fields_for_type,
     )
     updated = Entry.model_validate(merged)
     updated.tags = drop_self_project_tag(updated.tags, updated.project)
