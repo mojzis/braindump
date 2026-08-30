@@ -8,6 +8,7 @@ Two-stage strategy mirroring the legacy search.sh:
    entries whose metadata doesn't contain the query word. Still respects the
    structural filters we already have in the index.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,9 +21,27 @@ from typing import Literal
 
 from braindump.core import store
 from braindump.core.config import Config
-from braindump.core.schema import ALL_TYPE_DIRS, SETTLED_STATUSES, Entry, type_to_dir
+from braindump.core.schema import (
+    ALL_TYPE_DIRS,
+    LEGACY_TODO_STATUSES,
+    SETTLED_STATUSES,
+    TODO_STATUSES,
+    Entry,
+    type_to_dir,
+)
 
-StatusFilter = Literal["open", "done", "settled", "all"]
+StatusFilter = Literal[
+    "open",
+    "done",
+    "settled",
+    "all",
+    "pending",
+    "in-progress",
+    "in-qa",
+    "cancelled",
+    "postponed",
+    "active",
+]
 
 
 @dataclass
@@ -98,6 +117,8 @@ def _entry_matches_status(entry: Entry, f: SearchFilters) -> bool:
         return entry.status == "done"
     if f.status == "settled":
         return entry.status in SETTLED_STATUSES
+    if f.status in (*TODO_STATUSES, *LEGACY_TODO_STATUSES, "active"):
+        return entry.status == f.status
     return True
 
 

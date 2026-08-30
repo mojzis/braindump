@@ -23,7 +23,7 @@
     <input type="hidden" name="dir" value="{{ dir }}" />
     <button type="submit">search</button>
     <label><input type="checkbox" name="all" value="1" {% if show_all %}checked{% endif %}
-      onchange="this.form.submit()" /> show done too</label>
+      onchange="this.form.submit()" /> show done/cancelled too</label>
     <label><input type="checkbox" name="postponed" value="1" {% if show_postponed %}checked{% endif %}
       onchange="this.form.submit()" /> show postponed</label>
     <span class="muted">{{ total }} {{ "todo" if total == 1 else "todos" }}</span>
@@ -73,7 +73,7 @@
       </thead>
       <tbody>
       {% for h in rows %}
-        <tr class="{% if h.entry.status == 'done' %}done{% endif %}">
+        <tr class="{% if h.entry.status in settled_statuses %}done{% endif %}">
           <td><a href="/entries/{{ h.entry.id }}">#{{ h.entry.id }}</a></td>
           <td>{{ (h.entry.created_at or "")[:10] }}</td>
           <td>{{ h.entry.status or "" }}</td>

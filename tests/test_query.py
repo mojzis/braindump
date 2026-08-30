@@ -69,6 +69,22 @@ def test_search_filter_by_status_done(cfg):
     assert hits[0].entry.title == "Fix auth bug"
 
 
+def test_search_filter_by_lifecycle_status(cfg):
+    _seed(cfg)
+    entries.create_entry(
+        cfg,
+        "todo",
+        "QA item",
+        "body",
+        type_fields={"status": "in-qa"},
+        now=datetime(2026, 4, 6, 9),
+    )
+
+    hits = query.search(cfg, query.SearchFilters(types=["todos"], status="in-qa"))
+
+    assert [hit.entry.title for hit in hits] == ["QA item"]
+
+
 def test_search_filter_by_tags_and_type(cfg):
     _seed(cfg)
     hits = query.search(cfg, query.SearchFilters(types=["til"], tags=["rg"]))
@@ -108,6 +124,7 @@ def test_fulltext_finds_body_match(cfg):
     if not hits:
         # ripgrep may not be available on CI — skip gracefully
         import shutil
+
         assert shutil.which("rg") is None
         return
     assert len(hits) == 1

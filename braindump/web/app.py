@@ -37,7 +37,14 @@ from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
 from braindump.core.errors import BraindumpError, EntryNotFoundError, ReadOnlyStoreError
 from braindump.core.query import StatusFilter
-from braindump.core.schema import ALL_TYPES, PROJECT_STATES, Entry
+from braindump.core.schema import (
+    ALL_TYPES,
+    LEGACY_TODO_STATUSES,
+    PROJECT_STATES,
+    SETTLED_STATUSES,
+    TODO_STATUSES,
+    Entry,
+)
 
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -843,6 +850,8 @@ def entry_edit(request: Request, entry_id: int):
             ],
             active_initiatives=planning["initiatives"],
             active_pitches=planning["pitches"],
+            todo_statuses=TODO_STATUSES,
+            legacy_todo_statuses=LEGACY_TODO_STATUSES,
         ),
     )
 
@@ -997,6 +1006,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
             dir="desc" if descending else "asc",
             show_all=show_all,
             show_postponed=show_postponed,
+            settled_statuses=SETTLED_STATUSES,
         ),
     )
 

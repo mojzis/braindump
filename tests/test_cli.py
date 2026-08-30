@@ -178,6 +178,32 @@ def test_done_and_update_echo_the_id(tmp_path, monkeypatch):
     assert res.output.startswith(f"done: #{eid} ")
 
 
+def test_qa_result_records_receipt_and_marks_done(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    todo = _create_todo(cfg, type_fields={"status": "in-qa"})
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(app, ["qa", str(todo.entry.id), "pass", "--run-ref", "run-7"])
+
+    assert res.exit_code == 0
+    assert res.output.startswith(f"qa: #{todo.entry.id} pass -> done ")
+    stored = entries.find_by_id(cfg, todo.entry.id)
+    assert stored is not None
+    assert stored[1].qa_run_ref == "run-7"
+    assert stored[1].qa_verified_at
+
+
+def test_qa_result_failure_returns_todo_to_progress(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    todo = _create_todo(cfg, type_fields={"status": "in-qa"})
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(app, ["qa-result", str(todo.entry.id), "fail"])
+
+    assert res.exit_code == 0
+    assert "fail -> in-progress" in res.output
+
+
 def test_cli_graph_create_show_list_and_search(tmp_path, monkeypatch):
     cfg = _make_cfg(tmp_path)
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))

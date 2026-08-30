@@ -333,3 +333,52 @@ def test_relation_survives_project_rename_and_deleted_target_resolves_missing(cf
     assert entries.resolve_relations(cfg, current, "project_ids") == [None]
     updated = entries.update_entry(cfg, initiative.entry.id, {"title": "I renamed"})
     assert updated.title == "I renamed"
+
+
+def test_new_todos_default_to_pending(cfg):
+    result = entries.create_entry(cfg, "todo", "New work", "body", now=_fake_now())
+
+    assert result.entry.status == "pending"
+    assert store.read_index(cfg, "todos")[0].status == "pending"
+
+
+@pytest.mark.parametrize(
+    ("result", "status"), [("pass", "done"), ("FAIL", "in-progress")]
+)
+def test_record_qa_result_stores_receipt_and_transitions_todo(cfg, result, status):
+    todo = entries.create_entry(
+        cfg,
+        "todo",
+        "QA me",
+        "body",
+        type_fields={"status": "in-qa"},
+        now=_fake_now(),
+    )
+
+    updated = entries.record_qa_result(
+        cfg,
+        todo.entry.id,
+        result,
+        run_ref="run-42",
+        now=datetime(2026, 4, 11, 15, 16),
+    )
+
+    assert updated.qa_result == result.lower()
+    assert updated.qa_verified_at == "2026-04-11T15:16:00Z"
+    assert updated.qa_run_ref == "run-42"
+    assert updated.status == status
+    persisted = store.read_index(cfg, "todos")[0]
+    assert persisted.qa_result == result.lower()
+    assert persisted.status == status
+
+
+def test_record_qa_result_can_omit_run_reference(cfg):
+    todo = entries.create_entry(
+        cfg, "todo", "QA me", "body", type_fields={"status": "in-qa"}
+    )
+
+    updated = entries.record_qa_result(cfg, todo.entry.id, "pass")
+
+    assert updated.status == "done"
+    assert updated.qa_verified_at
+    assert updated.qa_run_ref is None

@@ -20,7 +20,7 @@
     <span>{{ (entry.created_at or '')[:10] }}</span>
     {% if entry.updated_at %}<span>·</span><span>updated {{ entry.updated_at[:10] }}</span>{% endif %}
     {% if entry.type in ("todo", "initiative", "pitch") and entry.status %}
-      <span class="state-pill {% if entry.status == 'done' %}state-archived{% elif entry.status == 'in-progress' %}state-active{% endif %}">{{ entry.status }}</span>
+      <span class="state-pill {% if entry.status in ('done', 'cancelled') %}state-archived{% elif entry.status in ('pending', 'in-progress', 'in-qa') %}state-active{% endif %}">{{ entry.status }}</span>
     {% endif %}
     {% if entry.project %}
       <span>·</span><a href="/projects/{{ entry.project }}">{{ entry.project }}</a>
@@ -64,9 +64,15 @@
   {# the markdown behind the rendered body, for the copy button #}
   <script type="application/json" id="entry-source">{{ body | tojson }}</script>
 
+  {% if entry.type == "todo" and entry.qa_result %}
+    <p class="entry-meta muted qa-receipt">
+      QA: {{ entry.qa_result }}{% if entry.qa_verified_at %} · {{ entry.qa_verified_at }}{% endif %}{% if entry.qa_run_ref %} · run {{ entry.qa_run_ref }}{% endif %}
+    </p>
+  {% endif %}
+
   <div class="entry-foot">
     <a href="/entries">← all entries</a>
-    {% if entry.type == "todo" and entry.status != "done" %}
+    {% if entry.type == "todo" and entry.status not in ("done", "cancelled") %}
       <button type="button" class="ghost-btn" hx-post="/api/entries/{{ entry.id }}/done" hx-swap="none">mark done</button>
     {% endif %}
   </div>

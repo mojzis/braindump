@@ -17,6 +17,7 @@ EntryType = Literal[
 
 TODO_STATUSES = ("pending", "in-progress", "in-qa", "done", "cancelled")
 LEGACY_TODO_STATUSES = ("postponed",)
+QA_RESULTS = ("pass", "fail")
 PLANNING_STATUSES = ("active", "done")
 SETTLED_STATUSES = ("done", "cancelled")
 

@@ -3,11 +3,12 @@
 All mutations go through here; callers should never touch JSONL or markdown
 files directly. This is the module the CLI and web server both import.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from braindump.core.schema import (
     LEGACY_TODO_STATUSES,
     PLANNING_STATUSES,
     PROJECT_STATES,
+    QA_RESULTS,
     TODO_STATUSES,
     Entry,
     dir_to_type,
@@ -185,6 +187,10 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
         entry_fields["input"] = original_input
     if type_fields:
         entry_fields.update({k: v for k, v in type_fields.items() if v is not None})
+    if canonical_type == "todo" and not entry_fields.get("status"):
+        # New todos always enter the actionable lifecycle.  Keep accepting the
+        # legacy postponed value when it is explicitly supplied for imports.
+        entry_fields["status"] = "pending"
 
     _validate_canonical_fields(cfg, canonical_type, entry_fields)
     entry_fields["id"] = store.next_id(cfg)
@@ -233,16 +239,12 @@ def resolve_entry(
     return entry
 
 
-def resolve_relation(
-    cfg: Config, entry_id: int, expected_type: str
-) -> Entry | None:
+def resolve_relation(cfg: Config, entry_id: int, expected_type: str) -> Entry | None:
     """Resolve one typed relation, returning None for stale or wrong links."""
     return resolve_entry(cfg, entry_id, expected_type)
 
 
-def resolve_relations(
-    cfg: Config, entry: Entry, field: str
-) -> list[Entry | None]:
+def resolve_relations(cfg: Config, entry: Entry, field: str) -> list[Entry | None]:
     """Resolve all IDs in a canonical relation, retaining missing slots.
 
     Retaining a None slot lets callers render a useful missing-reference
@@ -443,6 +445,49 @@ def set_status(cfg: Config, entry_id: int, status: str) -> Entry:
 
 def mark_done(cfg: Config, entry_id: int) -> Entry:
     return set_status(cfg, entry_id, "done")
+
+
+def record_qa_result(
+    cfg: Config,
+    entry_id: int,
+    result: str,
+    *,
+    run_ref: str | None = None,
+    now: datetime | None = None,
+) -> Entry:
+    """Store one QA receipt and advance the todo in the same mutation.
+
+    A passing receipt settles the todo; a failing receipt puts it back in
+    progress.  ``update_entry`` is deliberately called once so the receipt's
+    result, timestamp, run reference, and lifecycle transition share one
+    index/markdown update.
+    """
+    found = find_by_id(cfg, entry_id)
+    if found is None:
+        raise EntryNotFoundError(entry_id)
+    _, entry = found
+    if entry.type != "todo":
+        raise ValueError("QA results can only be recorded for todos")
+
+    normalized = result.strip().lower()
+    if normalized not in QA_RESULTS:
+        raise ValueError(f"QA result must be one of {list(QA_RESULTS)}")
+
+    if now is None:
+        verified_at = store.utcnow_iso()
+    else:
+        clock = now.replace(tzinfo=UTC) if now.tzinfo is None else now
+        verified_at = clock.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return update_entry(
+        cfg,
+        entry_id,
+        {
+            "qa_result": normalized,
+            "qa_verified_at": verified_at,
+            "qa_run_ref": run_ref,
+            "status": "done" if normalized == "pass" else "in-progress",
+        },
+    )
 
 
 # --- delete ----------------------------------------------------------------

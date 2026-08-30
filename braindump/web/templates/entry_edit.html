@@ -15,9 +15,12 @@
     {% if entry.type == "todo" %}
       <label>status
         <select name="status">
-          {% for s in ("pending", "in-progress", "in-qa", "postponed", "done", "cancelled") %}
+          {% for s in todo_statuses %}
             <option value="{{ s }}" {% if entry.status == s %}selected{% endif %}>{{ s }}</option>
           {% endfor %}
+          {% if entry.status in legacy_todo_statuses %}
+            <option value="{{ entry.status }}" selected>{{ entry.status }} (legacy)</option>
+          {% endif %}
         </select>
       </label>
     {% elif entry.type in ("initiative", "pitch") %}

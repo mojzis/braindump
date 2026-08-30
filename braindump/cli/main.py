@@ -155,7 +155,11 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
     tag: list[str] = typer.Option([], "--tag", "-t", help="Tag (repeatable)"),
     project: str | None = typer.Option(None, "--project", "-p"),
     summary: str | None = typer.Option(None, "--summary", "-s"),
-    status: str | None = typer.Option(None, "--status"),
+    status: str | None = typer.Option(
+        None,
+        "--status",
+        help="Todo status: pending, in-progress, in-qa, done, or cancelled",
+    ),
     priority: str | None = typer.Option(None, "--priority"),
     subtype: str | None = typer.Option(None, "--subtype"),
     category: str | None = typer.Option(None, "--category"),
@@ -310,7 +314,12 @@ def list_cmd(
     all_projects: bool = typer.Option(False, "--all", help="Ignore active project"),
     as_json: bool = typer.Option(False, "--json"),
     status: str = typer.Option(
-        "all", "--status", help="active, open, done, settled, or all"
+        "all",
+        "--status",
+        help=(
+            "active, pending, in-progress, in-qa, done, cancelled, "
+            "open, settled, or all"
+        ),
     ),
     project_id: int | None = typer.Option(None, "--project-id"),
     initiative_id: int | None = typer.Option(None, "--initiative-id"),
@@ -369,7 +378,12 @@ def search(
     project: str | None = typer.Option(None, "--project", "-p"),
     all_projects: bool = typer.Option(False, "--all"),
     status: str = typer.Option(
-        "all", "--status", help="active, open, done, settled, or all"
+        "all",
+        "--status",
+        help=(
+            "active, pending, in-progress, in-qa, done, cancelled, "
+            "open, settled, or all"
+        ),
     ),
     tag: list[str] = typer.Option([], "--tag", "-t"),
     since: str | None = typer.Option(None, "--since", help="YYYY-MM-DD"),
@@ -557,6 +571,31 @@ def done(arg: str = typer.Argument(...)):
     typer.echo(f"done: #{updated.id} {updated.file_path}")
 
 
+def _record_qa_result(arg: str, result: str, run_ref: str | None) -> None:
+    cfg = load_config()
+    entry_id = _resolve_todo(cfg, arg)
+    try:
+        updated = entries.record_qa_result(cfg, entry_id, result, run_ref=run_ref)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(
+        f"qa: #{updated.id} {updated.qa_result} -> {updated.status} {updated.file_path}"
+    )
+
+
+@app.command("qa")
+@app.command("qa-result", hidden=True)
+def qa_result(
+    arg: str = typer.Argument(..., metavar="ID|PATH|QUERY"),
+    result: str = typer.Argument(..., metavar="RESULT", help="pass or fail"),
+    run_ref: str | None = typer.Option(
+        None, "--run-ref", help="Optional external QA run reference"
+    ),
+):
+    """Record a todo QA result and update its lifecycle status."""
+    _record_qa_result(arg, result, run_ref)
+
+
 @app.command()
 def update(
     entry_id: int = typer.Argument(..., metavar="ID"),
@@ -566,7 +605,11 @@ def update(
         None, "--tags", help="Comma-separated — replaces existing tags"
     ),
     project: str | None = typer.Option(None, "--project", "-p"),
-    status: str | None = typer.Option(None, "--status"),
+    status: str | None = typer.Option(
+        None,
+        "--status",
+        help="Todo status: pending, in-progress, in-qa, done, or cancelled",
+    ),
     priority: str | None = typer.Option(None, "--priority"),
     area: str | None = typer.Option(
         None, "--area", help="Project grouping (project type)"

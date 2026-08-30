@@ -66,6 +66,15 @@ async def test_todos_all_includes_done(monkeypatch, cfg):
 
 
 @pytest.mark.anyio
+async def test_todos_hides_cancelled_by_default(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _todo(cfg, "cancelled item", status="cancelled")
+
+    assert "cancelled item" not in (await _get("/todos")).text
+    assert "cancelled item" in (await _get("/todos?all=1")).text
+
+
+@pytest.mark.anyio
 async def test_todos_hides_postponed_by_default(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
     _todo(cfg, "active one", minute=1)
