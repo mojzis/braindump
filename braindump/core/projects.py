@@ -10,7 +10,7 @@ from braindump.core.config import (
     get_active_project,
     set_active_project,
 )
-from braindump.core.schema import ALL_TYPE_DIRS, Entry
+from braindump.core.schema import ALL_TYPE_DIRS, SETTLED_STATUSES, Entry
 
 
 @dataclass
@@ -127,7 +127,7 @@ def _accumulate(bucket: ProjectStats, entry: Entry) -> None:
     if entry.type == "todo":
         if entry.status == "done":
             bucket.done_todos += 1
-        else:
+        elif entry.status not in SETTLED_STATUSES:
             bucket.open_todos += 1
     ts = entry.updated_at or entry.created_at
     if ts and (bucket.last_activity is None or ts > bucket.last_activity):

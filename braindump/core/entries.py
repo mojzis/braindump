@@ -273,6 +273,11 @@ def _validate_canonical_fields(
     relation_fields: set[str] | None = None,
 ) -> None:
     """Validate lifecycle values and typed numeric links before any write."""
+    _validate_status_and_state(entry_type, fields)
+    _validate_relation_fields(cfg, entry_type, fields, relation_fields)
+
+
+def _validate_status_and_state(entry_type: str, fields: dict[str, Any]) -> None:
     status = fields.get("status")
     if status is not None:
         if entry_type == "todo" and status not in (
@@ -288,6 +293,13 @@ def _validate_canonical_fields(
     if entry_type == "project" and state is not None and state not in PROJECT_STATES:
         raise ValueError(f"project state must be one of {list(PROJECT_STATES)}")
 
+
+def _validate_relation_fields(
+    cfg: Config,
+    entry_type: str,
+    fields: dict[str, Any],
+    relation_fields: set[str] | None,
+) -> None:
     for field, target_type in RELATION_TARGET_TYPES.get(entry_type, {}).items():
         if relation_fields is not None and field not in relation_fields:
             continue
