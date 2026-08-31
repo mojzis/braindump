@@ -30,7 +30,7 @@ app = [
     "qtpy>=2.4.3",
     # Same story on macOS: pywebview pulls pyobjc in there regardless, but
     # desktop.py imports Foundation itself to rename the app bundle.
-    "pyobjc-framework-Cocoa>=9.0; sys_platform=='darwin'",
+    "pyobjc-framework-Cocoa>=12.2.2; sys_platform=='darwin'",
 ]
 
 [dependency-groups]
