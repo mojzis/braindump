@@ -46,6 +46,7 @@ dev = [
     "ruff>=0.16.4",
     "ty>=0.0.74",
     "vulture",
+    "biston>=0.6.0",
     "deptry",
     "poethepoet>=0.48.0",
 ]
@@ -98,6 +99,9 @@ show_missing = true
 [tool.vulture]
 paths = ["braindump"]
 min_confidence = 80
+
+[tool.biston.scan]
+exclude = ["scripts/**", "tests/**", "**/conftest.py"]
 
 [tool.deptry]
 # Neither of these is importable under its package name, and both are

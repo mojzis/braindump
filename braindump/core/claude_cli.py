@@ -8,6 +8,7 @@ Binary and model are resolved from the environment so the digest engine can
 be pointed at a stub in tests: `BRAINDUMP_CLAUDE_BIN` (default `"claude"`)
 and `BRAINDUMP_CLAUDE_MODEL` (default `"sonnet"`).
 """
+
 from __future__ import annotations
 
 import asyncio

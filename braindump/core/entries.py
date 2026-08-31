@@ -247,9 +247,7 @@ def _pitch_import_fields(source: PitchImportSource) -> dict[str, Any]:
     return fields
 
 
-def verify_pitch_import(
-    cfg: Config, result: PitchImportResult
-) -> list[str]:
+def verify_pitch_import(cfg: Config, result: PitchImportResult) -> list[str]:
     """Return discrepancies between an imported entry and its source."""
     if result.entry is None or result.full_path is None:
         return ["dry-run has no persisted entry to verify"]

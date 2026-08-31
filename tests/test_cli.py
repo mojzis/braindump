@@ -299,7 +299,7 @@ def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
     source = tmp_path / "selected-pitch.md"
     source.write_text(
         '---\ntitle: Selected pitch\ntags: ["launch"]\n---\n'
-        '# Selected pitch\n\nPreserve this body.\n'
+        "# Selected pitch\n\nPreserve this body.\n"
     )
 
     preview = runner.invoke(

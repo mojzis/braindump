@@ -4,6 +4,7 @@ This is the only module in `braindump.core` that touches the filesystem. Every
 mutation goes through atomic_write_text or rewrite_index_atomic so we never
 leave index files in a half-written state on crash.
 """
+
 from __future__ import annotations
 
 import contextlib

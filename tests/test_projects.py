@@ -7,17 +7,32 @@ from braindump.core import entries, projects
 
 def _seed(cfg) -> None:
     entries.create_entry(
-        cfg, "todos", "a", "b", tags=["x"], project="alpha",
+        cfg,
+        "todos",
+        "a",
+        "b",
+        tags=["x"],
+        project="alpha",
         type_fields={"status": "pending"},
         now=datetime(2026, 4, 1),
     )
     entries.create_entry(
-        cfg, "todos", "b", "c", tags=["x", "y"], project="alpha",
+        cfg,
+        "todos",
+        "b",
+        "c",
+        tags=["x", "y"],
+        project="alpha",
         type_fields={"status": "done"},
         now=datetime(2026, 4, 5),
     )
     entries.create_entry(
-        cfg, "til", "learn", "d", tags=["z"], project="beta",
+        cfg,
+        "til",
+        "learn",
+        "d",
+        tags=["z"],
+        project="beta",
         now=datetime(2026, 4, 10),
     )
 
@@ -40,17 +55,32 @@ def _seed_with_registered(cfg) -> None:
         now=datetime(2026, 4, 2),
     )
     entries.create_entry(
-        cfg, "todos", "alpha todo open", "body", tags=["x"], project="Alpha",
+        cfg,
+        "todos",
+        "alpha todo open",
+        "body",
+        tags=["x"],
+        project="Alpha",
         type_fields={"status": "pending"},
         now=datetime(2026, 4, 3),
     )
     entries.create_entry(
-        cfg, "todos", "alpha todo done", "body", tags=["x", "y"], project="Alpha",
+        cfg,
+        "todos",
+        "alpha todo done",
+        "body",
+        tags=["x", "y"],
+        project="Alpha",
         type_fields={"status": "done"},
         now=datetime(2026, 4, 6),
     )
     entries.create_entry(
-        cfg, "til", "learn orphan", "body", tags=["z"], project="Orphan",
+        cfg,
+        "til",
+        "learn orphan",
+        "body",
+        tags=["z"],
+        project="Orphan",
         now=datetime(2026, 4, 9),
     )
 

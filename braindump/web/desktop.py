@@ -288,9 +288,10 @@ def _brand_macos_app() -> None:
     if sys.platform != "darwin":
         return
     try:
-        from Foundation import NSBundle  # noqa: PLC0415  # macOS-only, via pyobjc
+        import Foundation  # noqa: PLC0415  # macOS-only, via pyobjc
 
-        bundle = NSBundle.mainBundle()
+        # PyObjC does not publish a complete type stub for NSBundle.
+        bundle = getattr(Foundation, "NSBundle").mainBundle()  # noqa: B009
         # Same lookup order as macOS itself (and as pywebview's cocoa backend):
         # a localized dictionary, when there is one, is what gets read.
         info = bundle.localizedInfoDictionary() or bundle.infoDictionary()

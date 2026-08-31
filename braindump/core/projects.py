@@ -1,4 +1,5 @@
 """Project inventory and dashboards."""
+
 from __future__ import annotations
 
 from collections import Counter

@@ -21,6 +21,10 @@ help = "Run type checker"
 cmd = "pytest -q --tb=short"
 help = "Run tests"
 
+[tool.poe.tasks.setup]
+cmd = "bash scripts/install-hooks.sh"
+help = "Install the repository Git hooks"
+
 [tool.poe.tasks.vulns]
 shell = "uvx pysentry-rs . || true"
 interpreter = "bash"
@@ -29,6 +33,10 @@ help = "Dependency vulnerability scan"
 [tool.poe.tasks.dead-code]
 cmd = "vulture braindump"
 help = "Dead code detection"
+
+[tool.poe.tasks.biston]
+cmd = "biston scan ."
+help = "Check for duplicate code"
 
 [tool.poe.tasks.unused-deps]
 cmd = "deptry ."
@@ -39,6 +47,7 @@ shell = """
   ruff check . &
   ty check &
   vulture braindump &
+  biston scan . &
   deptry . &
   (uvx pysentry-rs . || true) &
   wait

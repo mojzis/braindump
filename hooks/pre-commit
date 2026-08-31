@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#
+# Agent-friendly pre-commit: fix+restage, parallel checks, one-line verdict.
+
+set -uo pipefail
+
+repo_root=$(git rev-parse --show-toplevel)
+
+# ---- default check registry: add a tool = add one line ----
+# Constraint: plain commands only (no pipes/quotes); staged files are appended.
+declare -a names cmds
+check() { names+=("$1"); cmds+=("$2"); }
+check "ruff check" "ruff check --quiet --"
+check "ty check" "ty check --"
+check "biston scan" "biston scan --focus-args --"
+
+# ---- personal overlay ----
+local_cfg="$repo_root/.git/hooks.local.sh"
+# shellcheck disable=SC1090
+[[ -f $local_cfg ]] && source "$local_cfg"
+
+# ---- one-off skips via env: comma-separated names ----
+if [[ -n "${PRECOMMIT_SKIP:-}" ]]; then
+  IFS=',' read -ra _skip <<<"$PRECOMMIT_SKIP"
+  keep_n=() keep_c=()
+  for i in "${!names[@]}"; do
+    hit=0
+    for s in "${_skip[@]}"; do [[ "${names[i]}" == "$s" ]] && hit=1; done
+    ((hit)) || { keep_n+=("${names[i]}"); keep_c+=("${cmds[i]}"); }
+  done
+  names=("${keep_n[@]:-}") cmds=("${keep_c[@]:-}")
+fi
+
+# ---- venv guard ----
+venv="$repo_root/.venv"
+env_note=""
+if [[ "$(command -v python || true)" != "$venv/bin/python" ]]; then
+  if [[ -f "$venv/bin/activate" ]]; then
+    # shellcheck disable=SC1091
+    source "$venv/bin/activate"
+    env_note=" (auto-activated .venv)"
+  else
+    echo "pre-commit: no venv active and $venv not found — run uv sync first" >&2
+    exit 1
+  fi
+fi
+if [[ "$(command -v python)" != "$venv/bin/python" ]]; then
+  echo "pre-commit: python resolves to $(command -v python), expected $venv/bin/python" >&2
+  exit 1
+fi
+
+# `mapfile` from the original script needs Bash 4; this loop is Bash 3.2-safe.
+files=()
+while IFS= read -r -d '' file; do
+  files+=("$file")
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.py' '*.pyi')
+((${#files[@]})) || exit 0
+
+# ---- fix phase ----
+ruff check --fix --quiet -- "${files[@]}" || true
+ruff format --quiet -- "${files[@]}"
+git add -- "${files[@]}"
+
+# ---- parallel check phase ----
+if [[ -z "${names[0]:-}" ]]; then
+  echo "pre-commit ok (${#files[@]} py files)$env_note: ruff fix+format applied & staged; all checks skipped"
+  exit 0
+fi
+
+declare -a outs pids rcs
+cleanup() { rm -f "${outs[@]}"; }
+trap cleanup EXIT
+
+for i in "${!names[@]}"; do
+  outs[i]=$(mktemp)
+  ${cmds[i]} "${files[@]}" >"${outs[i]}" 2>&1 & pids[i]=$!
+done
+for i in "${!names[@]}"; do
+  wait "${pids[i]}"; rcs[i]=$?
+done
+
+failed=()
+for i in "${!names[@]}"; do ((rcs[i])) && failed+=("$i"); done
+
+if ((${#failed[@]} == 0)); then
+  printf -v ran '%s, ' "${names[@]}"
+  echo "pre-commit ok (${#files[@]} py files)$env_note: ruff fix+format applied & staged; ${ran%, } passed"
+  exit 0
+fi
+
+for i in "${failed[@]}"; do
+  echo "== ${names[i]} failed =="
+  cat "${outs[i]}"
+done
+exit 1

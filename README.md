@@ -211,7 +211,15 @@ uv venv
 uv pip install -e ".[dev,web]"
 pytest                   # core test suite
 bd serve --reload        # local UI with autoreload
+uv run poe setup         # enable the repository pre-commit hook
 ```
+
+The agent-friendly pre-commit hook formats and re-stages staged Python files,
+then runs Ruff, ty, and Biston on those files. Use
+`PRECOMMIT_SKIP="ruff check,ty check,biston scan"` only for a one-off emergency
+bypass. `uv run poe biston` detects structural
+duplicate code; it is included in `uv run poe check` and checks staged Python
+files in the pre-commit hook.
 
 The `braindump.core` package has no I/O except through `store.py`, and every mutation is atomic (`fcntl.flock` + temp-file rename). See `tests/` for the round-trip coverage.
 

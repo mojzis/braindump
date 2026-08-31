@@ -69,6 +69,17 @@ wheels = [
 ]
 
 [[package]]
+name = "biston"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/68/2fb08c84b39986d58641b1ca4b337d24745a51418641dd054cf0e47d3b40/biston-0.7.0.tar.gz", hash = "sha256:63de1a10e8917a1718c0fe720bcfb97b73f7e4281e19a5261dc3bf9a51a806d8", size = 972724, upload-time = "2026-08-26T19:19:31.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/ee/8885852214fef38627f4c503336fa9122883c15f587d6ad2acea06afffff/biston-0.7.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:903658907101ebb37102f2a8dcd0490faca634f7ce7ee87ecdcd5fbb2303627c", size = 1504681, upload-time = "2026-08-26T19:19:26.032Z" },
+    { url = "https://files.pythonhosted.org/packages/4d/ad/5aa1b3a6d345b2249ac222402b3319792b6368f5464980b7bcaf93a20a42/biston-0.7.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:d40b3afc84ea74a95a588886184f39d0770cc2de8dd024519b798ad7f7d4ed38", size = 1739338, upload-time = "2026-08-26T19:19:27.936Z" },
+    { url = "https://files.pythonhosted.org/packages/fe/31/cb76ad8abb56a037286994acd229cafbc85e97c9134ded0f7bdba7bfaf1c/biston-0.7.0-py3-none-win_amd64.whl", hash = "sha256:92129519ce6a1de1883da8215d0934f1d157615c57756963ee824dccde2c54fa", size = 1594891, upload-time = "2026-08-26T19:19:29.759Z" },
+]
+
+[[package]]
 name = "bottle"
 version = "0.13.4"
 source = { registry = "https://pypi.org/simple" }
@@ -111,6 +122,7 @@ web = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "biston" },
     { name = "deptry" },
     { name = "freezegun" },
     { name = "httpx" },
@@ -147,6 +159,7 @@ provides-extras = ["web", "app"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "biston", specifier = ">=0.6.0" },
     { name = "deptry" },
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "httpx", specifier = ">=0.28.1" },

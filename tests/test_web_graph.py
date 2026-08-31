@@ -93,7 +93,9 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
         data={"initiative_id": str(initiative.entry.id), "pitch_id": ""},
     )
     assert updated.status_code == 200
-    assert entries.find_by_id(cfg, todo.entry.id)[1].pitch_id is None
+    updated_todo = entries.find_by_id(cfg, todo.entry.id)
+    assert updated_todo is not None
+    assert updated_todo[1].pitch_id is None
 
     initiative_index = await _request(monkeypatch, cfg, "GET", "/initiatives")
     assert "Launch" in initiative_index.text

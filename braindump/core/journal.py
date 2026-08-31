@@ -12,6 +12,7 @@ Day rollover semantics:
 - A manual "close day" action bypasses the cutoff: you can seal today at 11pm
   and start tomorrow's file immediately.
 """
+
 from __future__ import annotations
 
 import re

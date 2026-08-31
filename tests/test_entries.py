@@ -281,14 +281,12 @@ def test_planning_graph_round_trip_and_typed_relations(cfg):
     assert persisted.initiative_ids == [initiative.entry.id]
     assert "project_ids: [1]" in pitch.full_path.read_text()
     assert store.read_index(cfg, "todos")[0].qa_run_ref == "run-1"
-    assert (
-        entries.resolve_relations(cfg, persisted, "initiative_ids")[0].id
-        == initiative.entry.id
-    )
-    assert (
-        entries.resolve_relations(cfg, todo.entry, "initiative_id")[0].id
-        == initiative.entry.id
-    )
+    related_initiative = entries.resolve_relations(cfg, persisted, "initiative_ids")[0]
+    assert related_initiative is not None
+    assert related_initiative.id == initiative.entry.id
+    todo_initiative = entries.resolve_relations(cfg, todo.entry, "initiative_id")[0]
+    assert todo_initiative is not None
+    assert todo_initiative.id == initiative.entry.id
 
 
 def test_typed_relation_validation_rejects_wrong_type_and_missing(cfg):
@@ -340,7 +338,9 @@ def test_relation_survives_project_rename_and_deleted_target_resolves_missing(cf
     )
     entries.update_entry(cfg, project.entry.id, {"title": "Renamed"})
     current = store.read_index(cfg, "initiatives")[0]
-    assert entries.resolve_relations(cfg, current, "project_ids")[0].title == "Renamed"
+    related_project = entries.resolve_relations(cfg, current, "project_ids")[0]
+    assert related_project is not None
+    assert related_project.title == "Renamed"
     entries.delete_entry(cfg, project.entry.id)
     assert entries.resolve_relations(cfg, current, "project_ids") == [None]
     updated = entries.update_entry(cfg, initiative.entry.id, {"title": "I renamed"})
@@ -433,9 +433,11 @@ Preserve this heading too.
     assert result.entry.source_path == str(source.resolve())
     assert result.entry.project_ids == [project.entry.id]
     assert result.entry.initiative_ids == [initiative.entry.id]
-    assert "Keep this authored body exactly." in result.full_path.read_text()
-    assert "type: pitch" in result.full_path.read_text()
-    assert "summary: A durable proposal" not in result.full_path.read_text()
+    assert result.full_path is not None
+    imported_markdown = result.full_path.read_text()
+    assert "Keep this authored body exactly." in imported_markdown
+    assert "type: pitch" in imported_markdown
+    assert "summary: A durable proposal" not in imported_markdown
     assert entries.verify_pitch_import(cfg, result) == []
 
 

@@ -45,7 +45,7 @@ async def test_happy_path_uses_structured_output(tmp_path, monkeypatch):
 async def test_fenced_json_in_result_with_no_structured_output(tmp_path, monkeypatch):
     stub = _write_stub(
         tmp_path,
-        '''
+        """
         import json
         envelope = {
             "type": "result",
@@ -53,7 +53,7 @@ async def test_fenced_json_in_result_with_no_structured_output(tmp_path, monkeyp
             "result": "```json\\n{\\"answer\\": 9}\\n```",
         }
         print(json.dumps(envelope))
-        ''',
+        """,
     )
     monkeypatch.setenv("BRAINDUMP_CLAUDE_BIN", str(stub))
 

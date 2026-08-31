@@ -113,11 +113,7 @@ def test_validate_pass1_drops_text_mismatch():
 
 def test_validate_pass1_drops_already_digested_line():
     snapshot = ["did the thing [→todo#9]"]
-    data = {
-        "sections": [
-            _section("proj", line=0, line_text="did the thing [→todo#9]")
-        ]
-    }
+    data = {"sections": [_section("proj", line=0, line_text="did the thing [→todo#9]")]}
     result = digest.validate_pass1(snapshot, data, [])
     assert result == []
 
@@ -168,9 +164,7 @@ def test_validate_pass1_drops_unknown_type():
     snapshot = ["a real actionable line"]
     data = {
         "sections": [
-            _section(
-                "proj", line=0, line_text="a real actionable line", type="project"
-            )
+            _section("proj", line=0, line_text="a real actionable line", type="project")
         ]
     }
     result = digest.validate_pass1(snapshot, data, [])
@@ -363,7 +357,10 @@ def _seed_project(cfg, name: str, local_dir: Path | None = None):
     if local_dir is not None:
         type_fields["local_dir"] = str(local_dir)
     entries.create_entry(
-        cfg, "project", name, f"{name} project body.",
+        cfg,
+        "project",
+        name,
+        f"{name} project body.",
         type_fields=type_fields or None,
         now=datetime(2026, 4, 1),
     )
