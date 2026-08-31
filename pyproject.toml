@@ -44,7 +44,7 @@ dev = [
     "freezegun>=1.5.5",
     "httpx>=0.28.1",
     "ruff>=0.16.4",
-    "ty>=0.0.74",
+    "ty>=0.0.75",
     "vulture",
     "biston>=0.6.0",
     "deptry",
