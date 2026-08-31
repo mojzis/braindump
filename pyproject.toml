@@ -10,7 +10,7 @@ dependencies = [
     "markdown>=3.10.3",
     "nh3>=0.3.7",
     "pydantic>=2.13.4",
-    "typer>=0.27.1",
+    "typer>=0.27.2",
 ]
 
 [project.optional-dependencies]
