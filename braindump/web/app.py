@@ -11,11 +11,12 @@ import asyncio
 import contextlib
 import logging
 import re
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import markdown as md
 import nh3
@@ -964,17 +965,134 @@ def api_entry_delete(entry_id: int):
     return HTMLResponse(headers={"HX-Redirect": "/entries"}, content="")
 
 
-# --- todos ------------------------------------------------------------------
+# --- dedicated lists -------------------------------------------------------
 
 
-_TODO_SORT_KEYS = {
+@dataclass(frozen=True)
+class DedicatedListSpec:
+    path: str
+    types: tuple[str, ...]
+    sort_keys: dict[str, Callable[[query.Hit], Any]]
+    columns: tuple[tuple[str, str], ...]
+    search_placeholder: str
+    singular_label: str
+    plural_label: str
+    lifecycle_controls: tuple[str, ...] = ()
+    settled_statuses: tuple[str, ...] = ()
+
+
+_COMMON_SORT_KEYS = {
     "id": lambda h: h.entry.id,
     "date": lambda h: h.entry.created_at or "",
-    "status": lambda h: h.entry.status or "",
     "project": lambda h: (h.entry.project or "").lower(),
     "title": lambda h: (h.entry.title or "").lower(),
     "tags": lambda h: ", ".join(h.entry.tags).lower(),
 }
+
+
+_TODO_LIST = DedicatedListSpec(
+    path="/todos",
+    types=("todos",),
+    sort_keys={**_COMMON_SORT_KEYS, "status": lambda h: h.entry.status or ""},
+    columns=(
+        ("id", "#"),
+        ("date", "date"),
+        ("status", "status"),
+        ("project", "project"),
+        ("title", "title"),
+        ("tags", "tags"),
+    ),
+    search_placeholder="search todos…",
+    singular_label="todo",
+    plural_label="todos",
+    lifecycle_controls=("all", "postponed"),
+    settled_statuses=SETTLED_STATUSES,
+)
+
+
+_TIL_LIST = DedicatedListSpec(
+    path="/tils",
+    types=("til",),
+    sort_keys={
+        **_COMMON_SORT_KEYS,
+        "category": lambda h: (h.entry.category or "").lower(),
+        "source": lambda h: (h.entry.source or "").lower(),
+    },
+    columns=(
+        ("id", "#"),
+        ("date", "date"),
+        ("project", "project"),
+        ("title", "title"),
+        ("tags", "tags"),
+        ("category", "category"),
+        ("source", "source"),
+    ),
+    search_placeholder="search TILs…",
+    singular_label="TIL",
+    plural_label="TILs",
+)
+
+
+def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; routes stay explicit
+    request: Request,
+    *,
+    spec: DedicatedListSpec,
+    q: str | None,
+    project: str | None,
+    tag: str | None,
+    sort: str,
+    direction: str,
+    show_all: bool = False,
+    show_postponed: bool = False,
+) -> dict:
+    lifecycle = set(spec.lifecycle_controls)
+    status = "all"
+    if "all" in lifecycle:
+        status = "all" if show_all else "open"
+    cfg = load_config()
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            q=q or None,
+            types=list(spec.types),
+            project=project or None,
+            tags=[tag] if tag else [],
+            status=status,
+            limit=500,
+            fulltext=False,
+        ),
+    )
+    if "postponed" in lifecycle and not show_postponed:
+        hits = [h for h in hits if h.entry.status != "postponed"]
+    groups: dict[str, list[query.Hit]] = {}
+    for h in hits:
+        groups.setdefault(h.entry.project or "(none)", []).append(h)
+    grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
+
+    sort = sort if sort in spec.sort_keys else "date"
+    descending = direction != "asc"
+    rows = sorted(hits, key=spec.sort_keys[sort], reverse=descending)
+
+    return _context(
+        request,
+        list_path=spec.path,
+        columns=spec.columns,
+        search_placeholder=spec.search_placeholder,
+        singular_label=spec.singular_label,
+        plural_label=spec.plural_label,
+        lifecycle_controls=spec.lifecycle_controls,
+        grouped=grouped,
+        rows=rows,
+        total=len(hits),
+        q=q or "",
+        selected=project or "",
+        tag=tag or "",
+        sort=sort,
+        dir="desc" if descending else "asc",
+        show_all=show_all if "all" in lifecycle else False,
+        show_postponed=show_postponed if "postponed" in lifecycle else False,
+        settled_statuses=spec.settled_statuses,
+    )
 
 
 @app.get("/todos", response_class=HTMLResponse)
@@ -988,51 +1106,43 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
     show_all: bool = Query(False, alias="all"),
     show_postponed: bool = Query(False, alias="postponed"),
 ):
-    cfg = load_config()
-    # No active-project focus here: /todos is a cross-project view that
-    # defaults to the most recent todos regardless of project.
-    hits = query.search(
-        cfg,
-        query.SearchFilters(
-            q=q or None,
-            types=["todos"],
-            project=project or None,
-            tags=[tag] if tag else [],
-            status="all" if show_all else "open",
-            limit=500,
-            fulltext=False,
-        ),
-    )
-    # Postponed todos are hidden unless explicitly requested. "open" already
-    # keeps them (they're not done), so filter them out in Python.
-    if not show_postponed:
-        hits = [h for h in hits if h.entry.status != "postponed"]
-    groups: dict[str, list[query.Hit]] = {}
-    for h in hits:
-        groups.setdefault(h.entry.project or "(none)", []).append(h)
-    grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
-
-    sort = sort if sort in _TODO_SORT_KEYS else "date"
-    # Unrecognized dir falls back to the default (desc), matching the sort fallback.
-    descending = direction != "asc"
-    rows = sorted(hits, key=_TODO_SORT_KEYS[sort], reverse=descending)
-
     return templates.TemplateResponse(
         request,
-        "todos.html",
-        _context(
+        "dedicated_list.html",
+        _dedicated_list_context(
             request,
-            grouped=grouped,
-            rows=rows,
-            total=len(hits),
-            q=q or "",
-            selected=project or "",
-            tag=tag or "",
+            spec=_TODO_LIST,
+            q=q,
+            project=project,
+            tag=tag,
             sort=sort,
-            dir="desc" if descending else "asc",
+            direction=direction,
             show_all=show_all,
             show_postponed=show_postponed,
-            settled_statuses=SETTLED_STATUSES,
+        ),
+    )
+
+
+@app.get("/tils", response_class=HTMLResponse)
+def tils_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
+    request: Request,
+    q: str | None = None,
+    project: str | None = None,
+    tag: str | None = None,
+    sort: str = "date",
+    direction: str = Query("desc", alias="dir"),
+):
+    return templates.TemplateResponse(
+        request,
+        "dedicated_list.html",
+        _dedicated_list_context(
+            request,
+            spec=_TIL_LIST,
+            q=q,
+            project=project,
+            tag=tag,
+            sort=sort,
+            direction=direction,
         ),
     )
 
