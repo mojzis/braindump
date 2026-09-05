@@ -1,7 +1,7 @@
 ---
 description: Search braindump entries
 allowed-tools: Bash, Read
-argument-hint: <query...> [type] [--open|--done]
+argument-hint: <query...> [type] [--status open|--status done]
 ---
 
 # Braindump Search

@@ -223,7 +223,7 @@ All commands go through the `bd` CLI.
 
 3. **List recent:** `bd list [type] --limit 10`. Human-readable by default.
 
-4. **Read an entry:** Read the markdown file directly at `~/braindump/<type_dir>/<file_path>`.
+4. **Read an entry:** `bd show <id>` (use `bd show --json <id>` for structured output).
 
 5. **Mark a todo done:** `bd done <id|query|file_path>`.
 
@@ -256,5 +256,5 @@ No extra text, summaries, or commentary unless:
 - Summaries should be one line, under 100 chars
 - Every entry has a numeric `id` field, auto-assigned on creation
 - Use IDs to reference entries (e.g., `bd done 42`)
-- Search supports `--status open` / `--done` / `--all`
+- Search supports `--status open` / `--status done` / `--all`
 - Honor active project: if `bd project focus` is set, `bd list` and `bd search` scope to it unless you pass `--all`
