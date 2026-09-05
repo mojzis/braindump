@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from html import unescape
 
 import httpx
 import pytest
@@ -111,3 +112,32 @@ async def test_tils_ignores_active_project_focus(monkeypatch, cfg):
     r = await _get("/tils")
     assert "in alpha" in r.text
     assert "in beta" in r.text
+
+
+@pytest.mark.anyio
+async def test_tils_links_preserve_combined_filters(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _til(
+        cfg,
+        "python fact",
+        project="alpha",
+        tags=["urgent", "reference"],
+        category="python",
+    )
+
+    r = await _get("/tils?q=python+fact&project=alpha&tag=urgent&sort=category&dir=asc")
+    body = unescape(r.text)
+
+    assert 'href="/tils?q=python%20fact&sort=category&dir=asc"' in body
+    assert (
+        'href="/tils?q=python%20fact&project=alpha&tag=urgent&sort=category&dir=asc"'
+        in body
+    )
+    assert (
+        'href="/tils?q=python%20fact&project=alpha&tag=reference&sort=category&dir=asc"'
+        in body
+    )
+    assert (
+        'href="/tils?q=python%20fact&project=alpha&tag=urgent&sort=category&dir=desc"'
+        in body
+    )
