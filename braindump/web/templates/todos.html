@@ -29,12 +29,13 @@
     <span class="muted">{{ total }} {{ "todo" if total == 1 else "todos" }}</span>
   </form>
 
-  {% if selected or tag %}
+  {% if q or selected or tag or show_all or show_postponed %}
     <p class="muted active-filters">
+      {% if q %}search <strong>{{ q }}</strong>{% endif %}
       {% if selected %}project <strong>{{ selected }}</strong>{% endif %}
-      {% if selected and tag %} · {% endif %}
+      {% if (q or selected) and tag %} · {% endif %}
       {% if tag %}tag <strong>{{ tag }}</strong>{% endif %}
-      · <a href="{{ todos_url(sort=sort, dir=dir) }}">clear filters</a>
+      <a class="ghost-btn" href="/todos?sort={{ sort | urlencode }}&amp;dir={{ dir | urlencode }}">clear filters</a>
     </p>
   {% endif %}
 

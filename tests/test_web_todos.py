@@ -132,6 +132,29 @@ async def test_todos_tag_filter(monkeypatch, cfg):
 
 
 @pytest.mark.anyio
+async def test_todos_clear_filters_button_includes_search(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _todo(cfg, "matching todo")
+
+    r = await _get("/todos?q=matching")
+
+    assert 'class="ghost-btn"' in r.text
+    assert "clear filters" in r.text
+    assert "/todos?sort=date&amp;dir=desc" in r.text
+
+
+@pytest.mark.anyio
+async def test_todos_clear_filters_button_includes_view_filters(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _todo(cfg, "finished", status="done")
+
+    r = await _get("/todos?all=1")
+
+    assert 'class="ghost-btn"' in r.text
+    assert "clear filters" in r.text
+
+
+@pytest.mark.anyio
 async def test_todos_bad_sort_and_dir_fall_back(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
     _todo(cfg, "only one")
