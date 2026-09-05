@@ -186,6 +186,57 @@ async def test_parse_status_returns_286_and_trigger_header_when_done(monkeypatch
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    [
+        (
+            digest.ParseResult(day=date(2026, 6, 9), outcome="no_eligible"),
+            "no eligible entries",
+        ),
+        (
+            digest.ParseResult(
+                day=date(2026, 6, 9), eligible=1, outcome="no_candidates"
+            ),
+            "no proposed candidates",
+        ),
+        (
+            digest.ParseResult(
+                day=date(2026, 6, 9),
+                eligible=1,
+                proposed=1,
+                dropped=1,
+                outcome="validation_rejected",
+                validation_failures=Counter({"unknown_anchor": 1}),
+            ),
+            "all proposed candidates rejected during validation",
+        ),
+    ],
+)
+async def test_parse_status_explains_empty_parse_outcomes(
+    monkeypatch, cfg, result, expected
+):
+    _set_home(monkeypatch, cfg)
+    _stub_claude_available(monkeypatch)
+    day = result.day
+    journal.replace_body(cfg, day, "notes")
+
+    async def fake_run_parse(cfg_arg, day_arg, *, progress=None):
+        return result
+
+    monkeypatch.setattr(digest, "run_parse", fake_run_parse)
+
+    async with app.router.lifespan_context(app), _client() as client:
+        await client.post(
+            f"/api/journal/{day.isoformat()}/parse", data={"body": "notes"}
+        )
+        await app.state.parse_task
+        status_resp = await client.get(f"/journal/{day.isoformat()}/parse-status")
+
+    assert status_resp.status_code == 286
+    assert expected in status_resp.text
+
+
+@pytest.mark.anyio
 async def test_parse_status_stays_200_while_running(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
     _stub_claude_available(monkeypatch)

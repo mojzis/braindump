@@ -27,17 +27,28 @@
   {% else %}
     <div class="parse-status parse-done">
       {% if job.result %}
-        <p>
-          ✓ parsed —
-          {% for section in job.result.sections %}
-            <span class="parse-project">{{ section.project }}</span> {{ section.entry_ids | length }} entries{% if not loop.last %}, {% endif %}
+      <p>
+        ✓ parsed —
+          {% if job.result.total_entries %}
+            {% for section in job.result.sections %}
+              <span class="parse-project">{{ section.project }}</span> {{ section.entry_ids | length }} entries{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          {% elif job.result.outcome == "no_eligible" %}
+            no eligible entries
+          {% elif job.result.outcome == "no_candidates" %}
+            no proposed candidates
+          {% elif job.result.outcome == "validation_rejected" %}
+            all proposed candidates rejected during validation
           {% else %}
             no entries created
-          {% endfor %}
+          {% endif %}
           {% if job.result.total_entries %}({{ job.result.total_entries }} total){% endif %}
           {% if job.result.dropped %} · {{ job.result.dropped }} dropped{% endif %}
+          {% if job.result.retry_attempted %} · retry attempted{% endif %}
+          {% if job.result.retry_exhausted %} · retry exhausted{% endif %}
           {% if job.result.unanchored %} · {{ job.result.unanchored | length }} unanchored{% endif %}
           {% if job.result.errors %} · {{ job.result.errors | length }} errors{% endif %}
+          {% if job.result.warning %} · {{ job.result.warning }}{% endif %}
         </p>
       {% else %}
         <p>✓ parse finished</p>

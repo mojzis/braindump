@@ -58,9 +58,13 @@ def test_carry_forward_scratchpad_empty_when_no_block():
 
 def test_numbered_lines_excludes_scratchpad_with_true_indexes():
     body = "zero\none\n\nthree\n## Scratchpad\nfive\nsix"
-    rendered = digest.numbered_lines_for_prompt(body)
+    anchors: dict[str, tuple[int, str]] = {}
+    rendered = digest.numbered_lines_for_prompt(body, anchor_map=anchors)
     lines = rendered.splitlines()
-    assert lines == ["0: zero", "1: one", "2: ", "3: three"]
+    assert [line.split(": ", 1)[1] for line in lines] == ["zero", "one", "", "three"]
+    assert len(anchors) == 4
+    assert all(not anchor.removeprefix("a_").isdigit() for anchor in anchors)
+    assert {index for index, _ in anchors.values()} == {0, 1, 2, 3}
     # scratchpad lines (indexes 4-6) never appear
     assert "five" not in rendered
     assert "Scratchpad" not in rendered
@@ -69,15 +73,26 @@ def test_numbered_lines_excludes_scratchpad_with_true_indexes():
 def test_numbered_lines_flags_already_digested():
     body = "todo the thing [→todo#3]\nfresh line"
     rendered = digest.numbered_lines_for_prompt(body)
-    assert "0: todo the thing [→todo#3]  [already digested]" in rendered
-    assert "1: fresh line" in rendered
+    assert "todo the thing [→todo#3]  [already digested]" in rendered
+    assert "fresh line" in rendered
     assert "[already digested]" not in rendered.splitlines()[1]
 
 
 def test_numbered_lines_no_scratchpad_covers_everything():
     body = "a\nb\nc"
     rendered = digest.numbered_lines_for_prompt(body)
-    assert rendered == "0: a\n1: b\n2: c"
+    assert [line.split(": ", 1)[1] for line in rendered.splitlines()] == ["a", "b", "c"]
+
+
+def test_numbered_lines_assigns_distinct_opaque_anchors_to_duplicate_lines():
+    anchors: dict[str, tuple[int, str]] = {}
+    rendered = digest.numbered_lines_for_prompt("same\nsame", anchor_map=anchors)
+    anchor_lines = [line.split(": ", 1)[0] for line in rendered.splitlines()]
+
+    assert len(set(anchor_lines)) == 2
+    assert all(anchor.startswith("a_") for anchor in anchor_lines)
+    assert anchors[anchor_lines[0]] == (0, "same")
+    assert anchors[anchor_lines[1]] == (1, "same")
 
 
 # --- validate_pass1 -----------------------------------------------------------
@@ -169,6 +184,42 @@ def test_validate_pass1_drops_unknown_type():
     }
     result = digest.validate_pass1(snapshot, data, [])
     assert result == []
+
+
+def test_validate_pass1_reports_specific_validation_reasons():
+    snapshot = ["first", "second", "done [→todo#9]"]
+    anchors: dict[str, tuple[int, str]] = {}
+    digest.numbered_lines_for_prompt("\n".join(snapshot), anchor_map=anchors)
+    diagnostics = digest.Counter()
+    first_anchor = next(a for a, value in anchors.items() if value[0] == 0)
+    second_anchor = next(a for a, value in anchors.items() if value[0] == 1)
+    digested_anchor = next(a for a, value in anchors.items() if value[0] == 2)
+    data = {
+        "sections": [
+            {
+                "project": "proj",
+                "items": [
+                    {"anchor": "not-real", "type": "todo", "title": "T"},
+                    {"anchor": first_anchor, "type": "project", "title": "T"},
+                    {"anchor": second_anchor, "type": "todo", "title": "   "},
+                    {"anchor": digested_anchor, "type": "todo", "title": "T"},
+                ],
+            }
+        ]
+    }
+
+    assert (
+        digest.validate_pass1(
+            snapshot, data, [], anchor_map=anchors, diagnostics=diagnostics
+        )
+        == []
+    )
+    assert diagnostics == digest.Counter(
+        unknown_anchor=1,
+        invalid_type=1,
+        missing_title=1,
+        already_digested=1,
+    )
 
 
 def test_validate_pass1_coerces_non_list_tags_and_sub_lines_to_empty():
@@ -350,6 +401,81 @@ class FakeRunner:
             msg = f"pass2 boom for {dir_name}"
             raise RuntimeError(msg)
         return self.pass2_data_by_dir.get(dir_name, {"items": []})
+
+
+@pytest.mark.anyio
+async def test_run_parse_retries_wholly_rejected_pass1_once_and_uses_result(cfg):
+    day = date(2026, 5, 7)
+    _seed_journal(cfg, day, "capture this idea")
+
+    class RetryRunner:
+        def __init__(self):
+            self.pass1_prompts: list[str] = []
+
+        async def __call__(self, prompt, *, tools="", **kwargs):
+            if tools:
+                return {"items": []}
+            self.pass1_prompts.append(prompt)
+            anchor = next(
+                line.split(": ", 1)[0]
+                for line in prompt.splitlines()
+                if line.startswith("a_")
+            )
+            item = {
+                "anchor": anchor,
+                "type": "thought",
+                "title": "Capture idea",
+                "body": "Keep this idea.",
+            }
+            if len(self.pass1_prompts) == 1:
+                item["anchor"] = "a_missing"
+            return {"sections": [{"project": "ideas", "items": [item]}]}
+
+    runner = RetryRunner()
+    result = await digest.run_parse(cfg, day, runner=runner)
+
+    assert len(runner.pass1_prompts) == 2
+    assert result.retry_attempted is True
+    assert result.retry_succeeded is True
+    assert result.retry_exhausted is False
+    assert result.total_entries == 1
+    assert result.validation_failures["unknown_anchor"] == 1
+
+
+@pytest.mark.anyio
+async def test_run_parse_does_not_retry_when_all_journal_lines_are_digested(cfg):
+    day = date(2026, 5, 8)
+    _seed_journal(cfg, day, "done already [→todo#9]")
+
+    class CountingRunner:
+        def __init__(self):
+            self.calls = 0
+
+        async def __call__(self, *args, **kwargs):
+            self.calls += 1
+            return {
+                "sections": [
+                    {
+                        "project": "ideas",
+                        "items": [
+                            {
+                                "anchor": "a_missing",
+                                "type": "thought",
+                                "title": "Should not create",
+                            }
+                        ],
+                    }
+                ]
+            }
+
+    runner = CountingRunner()
+    result = await digest.run_parse(cfg, day, runner=runner)
+
+    assert runner.calls == 1
+    assert result.eligible == 0
+    assert result.outcome == "no_eligible"
+    assert result.retry_attempted is False
+    assert result.validation_failures["unknown_anchor"] == 1
 
 
 def _seed_project(cfg, name: str, local_dir: Path | None = None):
