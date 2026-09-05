@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -138,26 +138,7 @@ class BraindumpService:
 
     def list_entries(self, request: SearchRequest) -> list[query.Hit]:
         """List entries using the same filter contract as search."""
-        return self.search(
-            SearchRequest(
-                query=None,
-                types=request.types,
-                project=request.project,
-                all_projects=request.all_projects,
-                status=request.status,
-                tags=request.tags,
-                since=request.since,
-                until=request.until,
-                limit=request.limit,
-                offset=request.offset,
-                fulltext=False,
-                project_id=request.project_id,
-                initiative_id=request.initiative_id,
-                pitch_id=request.pitch_id,
-                related_id=request.related_id,
-                related_type=request.related_type,
-            )
-        )
+        return self.search(replace(request, query=None, fulltext=False))
 
     def get_entry(self, entry_id: int) -> EntryView | None:
         found = entries.find_by_id(self.cfg, entry_id)
