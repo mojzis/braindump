@@ -2,14 +2,15 @@
 {% block title %}todos{% endblock %}
 {% block body %}
 {# single source of truth for /todos links: always carry the active filters
-   (q/all/postponed), then whichever of project/tag/sort/dir the caller keeps #}
-{% macro todos_url(project=none, tag=none, sort=none, dir=none) %}
+   (q/all/postponed/priority), then whichever of project/tag/sort/dir the caller keeps #}
+{% macro todos_url(project=none, tag=none, priority=none, sort=none, dir=none) %}
   {%- set parts = [] -%}
   {%- if q %}{% set _ = parts.append("q=" ~ q | urlencode) %}{% endif -%}
   {%- if show_all %}{% set _ = parts.append("all=1") %}{% endif -%}
   {%- if show_postponed %}{% set _ = parts.append("postponed=1") %}{% endif -%}
   {%- if project %}{% set _ = parts.append("project=" ~ project | urlencode) %}{% endif -%}
   {%- if tag %}{% set _ = parts.append("tag=" ~ tag | urlencode) %}{% endif -%}
+  {%- if priority %}{% set _ = parts.append("priority=" ~ priority | urlencode) %}{% endif -%}
   {%- if sort %}{% set _ = parts.append("sort=" ~ sort) %}{% endif -%}
   {%- if dir %}{% set _ = parts.append("dir=" ~ dir) %}{% endif -%}
   /todos?{{ parts | join('&') }}
@@ -19,6 +20,12 @@
     <input type="text" name="q" value="{{ q }}" placeholder="search todos…" />
     {% if selected %}<input type="hidden" name="project" value="{{ selected }}" />{% endif %}
     {% if tag %}<input type="hidden" name="tag" value="{{ tag }}" />{% endif %}
+    <select name="priority">
+      <option value="">all priorities</option>
+      <option value="high" {% if priority == "high" %}selected{% endif %}>high</option>
+      <option value="medium" {% if priority == "medium" %}selected{% endif %}>medium</option>
+      <option value="low" {% if priority == "low" %}selected{% endif %}>low</option>
+    </select>
     <input type="hidden" name="sort" value="{{ sort }}" />
     <input type="hidden" name="dir" value="{{ dir }}" />
     <button type="submit">search</button>
@@ -29,11 +36,12 @@
     <span class="muted">{{ total }} {{ "todo" if total == 1 else "todos" }}</span>
   </form>
 
-  {% if selected or tag %}
+  {% if selected or tag or priority %}
     <p class="muted active-filters">
       {% if selected %}project <strong>{{ selected }}</strong>{% endif %}
       {% if selected and tag %} · {% endif %}
       {% if tag %}tag <strong>{{ tag }}</strong>{% endif %}
+      {% if priority %}{% if selected or tag %} · {% endif %}priority <strong>{{ priority }}</strong>{% endif %}
       · <a href="{{ todos_url(sort=sort, dir=dir) }}">clear filters</a>
     </p>
   {% endif %}
@@ -42,7 +50,7 @@
     <div class="todo-projects">
       {% for project, todos in grouped %}
         {% if project != "(none)" %}
-          <a href="{{ todos_url(project=project, tag=tag, sort=sort, dir=dir) }}"
+          <a href="{{ todos_url(project=project, tag=tag, priority=priority, sort=sort, dir=dir) }}"
              class="chip{% if project == selected %} active{% endif %}">{{ project }} <span class="count">{{ todos | length }}</span></a>
         {% else %}
           <span class="chip muted">(no project) <span class="count">{{ todos | length }}</span></span>
@@ -53,7 +61,7 @@
     {% macro th(key, label) %}
       {% set next_dir = "desc" if (sort == key and dir == "asc") else "asc" %}
       <th class="{% if sort == key %}sorted{% endif %}">
-        <a href="{{ todos_url(project=selected, tag=tag, sort=key, dir=next_dir) }}">
+        <a href="{{ todos_url(project=selected, tag=tag, priority=priority, sort=key, dir=next_dir) }}">
           {{ label }}{% if sort == key %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
         </a>
       </th>
@@ -65,6 +73,7 @@
           {{ th("id", "#") }}
           {{ th("date", "date") }}
           {{ th("status", "status") }}
+          {{ th("priority", "priority") }}
           {{ th("project", "project") }}
           {{ th("title", "title") }}
           {{ th("tags", "tags") }}
@@ -77,9 +86,10 @@
           <td><a href="/entries/{{ h.entry.id }}">#{{ h.entry.id }}</a></td>
           <td>{{ (h.entry.created_at or "")[:10] }}</td>
           <td>{{ h.entry.status or "" }}</td>
+          <td>{{ h.entry.priority or "" }}</td>
           <td>
             {% if h.entry.project %}
-              <a href="{{ todos_url(project=h.entry.project, tag=tag, sort=sort, dir=dir) }}" class="muted">{{ h.entry.project }}</a>
+              <a href="{{ todos_url(project=h.entry.project, tag=tag, priority=priority, sort=sort, dir=dir) }}" class="muted">{{ h.entry.project }}</a>
             {% else %}
               <span class="muted">—</span>
             {% endif %}
@@ -87,7 +97,7 @@
           <td><a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a></td>
           <td class="muted tags-cell">
             {% for t in h.entry.tags %}
-              <a href="{{ todos_url(project=selected, tag=t, sort=sort, dir=dir) }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
+              <a href="{{ todos_url(project=selected, tag=t, priority=priority, sort=sort, dir=dir) }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
             {% endfor %}
           </td>
           <td><a href="/entries/{{ h.entry.id }}/edit" class="muted" title="edit">✎</a></td>

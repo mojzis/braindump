@@ -44,6 +44,37 @@ def test_create_todo_round_trip(cfg):
     assert stored[0].status == "pending"
 
 
+def test_pitch_priority_and_coverage_round_trip_and_validation(cfg):
+    result = entries.create_entry(
+        cfg,
+        "pitch",
+        "Launch pitch",
+        "body",
+        type_fields={"priority": "high", "coverage": "partial"},
+        now=_fake_now(),
+    )
+
+    assert result.entry.priority == "high"
+    assert result.entry.coverage == "partial"
+    text = result.full_path.read_text()
+    assert "priority: high" in text
+    assert "coverage: partial" in text
+    assert store.read_index(cfg, "pitches")[0].coverage == "partial"
+
+    with pytest.raises(ValueError, match="pitch priority"):
+        entries.create_entry(
+            cfg, "pitch", "bad priority", "body", type_fields={"priority": "urgent"}
+        )
+    with pytest.raises(ValueError, match="pitch coverage"):
+        entries.create_entry(
+            cfg, "pitch", "bad coverage", "body", type_fields={"coverage": "unknown"}
+        )
+    with pytest.raises(ValueError, match="only valid for pitches"):
+        entries.create_entry(
+            cfg, "todo", "bad coverage", "body", type_fields={"coverage": "partial"}
+        )
+
+
 def test_parse_source_document_tracks_headings_and_checked_items():
     items = entries.parse_source_document(
         "- [ ] first\n## Alpha\n* second\n- [x] finished\n"

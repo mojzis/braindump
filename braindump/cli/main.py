@@ -140,6 +140,9 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(
+        None, "--coverage", help="Pitch coverage: uncovered, partial, or covered"
+    ),
     subtype: str | None = typer.Option(None, "--subtype"),
     category: str | None = typer.Option(None, "--category"),
     source: str | None = typer.Option(None, "--source"),
@@ -197,6 +200,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         for k, v in {
             "status": status,
             "priority": priority,
+            "coverage": coverage,
             "subtype": subtype,
             "category": category,
             "source": source,
@@ -303,6 +307,8 @@ def list_cmd(
     project_id: int | None = typer.Option(None, "--project-id"),
     initiative_id: int | None = typer.Option(None, "--initiative-id"),
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
+    priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(None, "--coverage"),
 ):
     """List recent entries (newest first)."""
     cfg = load_config()
@@ -317,6 +323,8 @@ def list_cmd(
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
+            priority=priority,
+            coverage=coverage,
             limit=limit,
             fulltext=False,
         ),
@@ -372,6 +380,8 @@ def search(
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
     related_id: int | None = typer.Option(None, "--related-id"),
     related_type: str | None = typer.Option(None, "--related-type"),
+    priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(None, "--coverage"),
 ):
     """Search across braindump entries."""
     cfg = load_config()
@@ -389,6 +399,8 @@ def search(
         pitch_id=pitch_id,
         related_id=related_id,
         related_type=related_type,
+        priority=priority,
+        coverage=coverage,
         since=_parse_date(since),
         until=_parse_date(until),
         limit=limit,
@@ -432,6 +444,8 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
     "initiative": ["status", "project_ids"],
     "pitch": [
         "status",
+        "priority",
+        "coverage",
         "project_ids",
         "initiative_ids",
         "source_path",
@@ -480,6 +494,8 @@ def _format_entry(cfg: Config, type_dir: str, entry: Entry) -> str:
 
     for field in _TYPE_SPECIFIC_FIELDS.get(entry.type, []):
         val = getattr(entry, field, None)
+        if entry.type == "pitch" and field == "coverage" and val is None:
+            val = "unaudited"
         if val is not None:
             if isinstance(val, list):
                 val = ", ".join(str(v) for v in val)
@@ -570,7 +586,7 @@ def qa_result(
 
 
 @app.command()
-def update(
+def update(  # noqa: PLR0912 -- one option per supported entry field
     entry_id: int = typer.Argument(..., metavar="ID"),
     title: str | None = typer.Option(None, "--title"),
     summary: str | None = typer.Option(None, "--summary"),
@@ -584,6 +600,7 @@ def update(
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(None, "--coverage"),
     area: str | None = typer.Option(
         None, "--area", help="Project grouping (project type)"
     ),
@@ -621,6 +638,8 @@ def update(
         patch["status"] = status
     if priority is not None:
         patch["priority"] = priority
+    if coverage is not None:
+        patch["coverage"] = coverage
     if area is not None:
         patch["area"] = area
     patch.update(

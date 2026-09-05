@@ -52,6 +52,8 @@ class SearchFilters:
     project_id: int | None = None
     initiative_id: int | None = None
     pitch_id: int | None = None
+    priority: str | None = None
+    coverage: str | None = None
     related_id: int | None = None
     related_type: str | None = None
     status: StatusFilter = "all"
@@ -78,6 +80,10 @@ def _created_date(entry: Entry) -> date | None:
 
 def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
     if not _entry_matches_relations(entry, f) or not _entry_matches_status(entry, f):
+        return False
+    if f.priority is not None and entry.priority != f.priority:
+        return False
+    if f.coverage is not None and entry.coverage != f.coverage:
         return False
     if f.tags:
         entry_tags = set(entry.tags or [])

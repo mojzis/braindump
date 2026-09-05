@@ -49,6 +49,8 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
         "body",
         type_fields={
             "status": "active",
+            "priority": "high",
+            "coverage": "partial",
             "project_ids": [project.entry.id],
             "initiative_ids": [initiative.entry.id],
         },
@@ -84,6 +86,38 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
     assert edit.status_code == 200
     assert "project_ids" in edit.text
     assert "initiative_ids" in edit.text
+    assert "coverage" in edit.text
+    assert "partial" in edit.text
+
+    pitch_detail = await _request(monkeypatch, cfg, "GET", f"/entries/{pitch.entry.id}")
+    assert "priority high" in pitch_detail.text
+    assert "coverage partial" in pitch_detail.text
+
+    capture_post = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        "/capture",
+        data={
+            "entry_type": "pitch",
+            "title": "Captured pitch",
+            "priority": "low",
+            "coverage": "uncovered",
+        },
+    )
+    assert capture_post.status_code == 303
+    captured = store.read_index(cfg, "pitches")[-1]
+    assert captured.priority == "low"
+    assert captured.coverage == "uncovered"
+
+    bad = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{pitch.entry.id}",
+        data={"coverage": "invalid"},
+    )
+    assert bad.status_code == 400
 
     updated = await _request(
         monkeypatch,

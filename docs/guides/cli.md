@@ -44,7 +44,8 @@ Common options:
 | `--project`, `-p` | Set the project (defaults to the git repo / directory name in skills) |
 | `--summary`, `-s` | One-line summary |
 | `--status` | For todos: `pending`, `in-progress`, `done` |
-| `--priority` | For todos |
+| `--priority` | For todos and pitches: `high`, `medium`, or `low` |
+| `--coverage` | For pitches: `uncovered`, `partial`, or `covered` |
 | `--due-date` | For todos (`YYYY-MM-DD`) |
 | `--body-file` | Read the body from a file instead of stdin |
 | `--original-input` / `--original-input-file` | Store verbatim source input |
@@ -90,6 +91,8 @@ bd search parse --type til --human        # human-readable instead of JSON
 | `--type` | Restrict to one type |
 | `--project`, `-p` / `--all` | Scope to a project / ignore the active focus |
 | `--status` | `open`, `done`, or `all` (default `all`) |
+| `--priority` | Filter todos or pitches by `high`, `medium`, or `low` |
+| `--coverage` | Filter pitches by `uncovered`, `partial`, or `covered` |
 | `--tag`, `-t` | Require a tag (repeatable) |
 | `--since` / `--until` | Date bounds (`YYYY-MM-DD`) |
 | `--limit`, `-n` | Max results (default 50) |

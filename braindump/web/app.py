@@ -40,6 +40,8 @@ from braindump.core.query import StatusFilter
 from braindump.core.schema import (
     ALL_TYPES,
     LEGACY_TODO_STATUSES,
+    PITCH_COVERAGES,
+    PRIORITIES,
     PROJECT_STATES,
     SETTLED_STATUSES,
     TODO_STATUSES,
@@ -583,6 +585,8 @@ def capture_get(
             preset_type=type or "",
             preset_title=title or "",
             project_states=list(PROJECT_STATES),
+            priorities=list(PRIORITIES),
+            pitch_coverages=list(PITCH_COVERAGES),
             registered_projects=registered_projects,
             active_initiatives=_active_planning_entries(cfg, "initiatives"),
             active_pitches=_active_planning_entries(cfg, "pitches"),
@@ -591,7 +595,7 @@ def capture_get(
 
 
 @app.post("/capture")
-def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
+def capture_post(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -604,6 +608,8 @@ def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry
     local_dir: str = Form(""),
     tech_stack: str = Form(""),
     status: str = Form(""),
+    priority: str = Form(""),
+    coverage: str = Form(""),
     project_ids: str = Form(""),
     initiative_ids: str = Form(""),
     initiative_id: str = Form(""),
@@ -640,6 +646,10 @@ def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry
         type_fields["status"] = status.strip()
     elif entry_type in {"initiative", "pitch"}:
         type_fields["status"] = "active"
+    if priority.strip():
+        type_fields["priority"] = priority.strip()
+    if coverage.strip():
+        type_fields["coverage"] = coverage.strip()
     try:
         project_id_values = _csv_ints(project_ids)
         initiative_id_values = _csv_ints(initiative_ids)
@@ -712,6 +722,8 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     project_id: int | None = None,
     initiative_id: int | None = None,
     pitch_id: int | None = None,
+    priority: str | None = None,
+    coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
 ):
@@ -727,6 +739,8 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         project_id=project_id,
         initiative_id=initiative_id,
         pitch_id=pitch_id,
+        priority=priority,
+        coverage=coverage,
         related_id=related_id,
         related_type=related_type,
         limit=100,
@@ -752,6 +766,8 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
+            priority=priority,
+            coverage=coverage,
             related_id=related_id,
             related_type=related_type or "",
         ),
@@ -800,6 +816,8 @@ def _planning_list(request: Request, entry_type: str, title: str):
             pitch_id=None,
             related_id=None,
             related_type="",
+            priority=None,
+            coverage=None,
         ),
     )
 
@@ -863,6 +881,8 @@ def entry_edit(request: Request, entry_id: int):
             active_pitches=planning["pitches"],
             todo_statuses=TODO_STATUSES,
             legacy_todo_statuses=LEGACY_TODO_STATUSES,
+            priorities=list(PRIORITIES),
+            pitch_coverages=list(PITCH_COVERAGES),
         ),
     )
 
@@ -878,6 +898,8 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
     status: str | None = Form(None),
     area: str | None = Form(None),
     body: str | None = Form(None),
+    priority: str | None = Form(None),
+    coverage: str | None = Form(None),
     initiative_id: str | None = Form(None),
     pitch_id: str | None = Form(None),
     project_ids: str | None = Form(None),
@@ -902,6 +924,9 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
         patch["status"] = status
     if area is not None:
         patch["area"] = area.strip() or None
+    for key, raw in {"priority": priority, "coverage": coverage}.items():
+        if raw is not None or key in form:
+            patch[key] = raw.strip() or None if raw else None
     for key, raw in {
         "initiative_id": initiative_id,
         "pitch_id": pitch_id,
@@ -971,6 +996,7 @@ _TODO_SORT_KEYS = {
     "id": lambda h: h.entry.id,
     "date": lambda h: h.entry.created_at or "",
     "status": lambda h: h.entry.status or "",
+    "priority": lambda h: {"high": 0, "medium": 1, "low": 2}.get(h.entry.priority, 3),
     "project": lambda h: (h.entry.project or "").lower(),
     "title": lambda h: (h.entry.title or "").lower(),
     "tags": lambda h: ", ".join(h.entry.tags).lower(),
@@ -983,6 +1009,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
     q: str | None = None,
     project: str | None = None,
     tag: str | None = None,
+    priority: str | None = None,
     sort: str = "date",
     direction: str = Query("desc", alias="dir"),
     show_all: bool = Query(False, alias="all"),
@@ -998,6 +1025,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
             types=["todos"],
             project=project or None,
             tags=[tag] if tag else [],
+            priority=priority,
             status="all" if show_all else "open",
             limit=500,
             fulltext=False,
@@ -1028,6 +1056,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
             q=q or "",
             selected=project or "",
             tag=tag or "",
+            priority=priority or "",
             sort=sort,
             dir="desc" if descending else "asc",
             show_all=show_all,

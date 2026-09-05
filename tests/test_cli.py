@@ -289,6 +289,37 @@ def test_cli_graph_create_show_list_and_search(tmp_path, monkeypatch):
     }
 
 
+def test_cli_pitch_priority_coverage_and_filters(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    created = runner.invoke(
+        app,
+        [
+            "create",
+            "pitch",
+            "Covered pitch",
+            "--priority",
+            "high",
+            "--coverage",
+            "covered",
+        ],
+    )
+    assert created.exit_code == 0
+    pitch_id = int(created.output.split("#", 1)[1].split()[0])
+
+    shown = runner.invoke(app, ["show", str(pitch_id)])
+    assert "priority: high" in shown.output
+    assert "coverage: covered" in shown.output
+    searched = runner.invoke(app, ["search", "--coverage", "covered"])
+    assert json.loads(searched.output)["id"] == pitch_id
+
+    updated = runner.invoke(app, ["update", str(pitch_id), "--coverage", "partial"])
+    assert updated.exit_code == 0
+    found = entries.find_by_id(cfg, pitch_id)
+    assert found is not None
+    assert found[1].coverage == "partial"
+
+
 def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
     tmp_path, monkeypatch
 ):
@@ -298,7 +329,8 @@ def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
     initiative = entries.create_entry(cfg, "initiative", "Launch", "body")
     source = tmp_path / "selected-pitch.md"
     source.write_text(
-        '---\ntitle: Selected pitch\ntags: ["launch"]\n---\n'
+        '---\ntitle: Selected pitch\ntags: ["launch"]\n'
+        "priority: medium\ncoverage: partial\n---\n"
         "# Selected pitch\n\nPreserve this body.\n"
     )
 
@@ -338,6 +370,8 @@ def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
     assert pitch.source_path == str(source.resolve())
     assert pitch.project_ids == [project.entry.id]
     assert pitch.initiative_ids == [initiative.entry.id]
+    assert pitch.priority == "medium"
+    assert pitch.coverage == "partial"
     assert source.exists()
 
     removed = runner.invoke(

@@ -13,6 +13,7 @@ Search across all braindump entries.
 Planning filters are ID-based: use --initiative-id, --pitch-id, or
 --related-id/--related-type. Use --status open for unsettled entries and
 --status settled for done/cancelled todos.
+Use `--priority` for todo/pitch priority and `--coverage` for pitch coverage.
 
 ## Input
 

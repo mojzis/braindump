@@ -92,6 +92,30 @@ def test_search_filter_by_tags_and_type(cfg):
     assert hits[0].entry.title == "Ripgrep glob trick"
 
 
+def test_search_filter_by_priority_and_pitch_coverage(cfg):
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Covered high pitch",
+        "body",
+        type_fields={"priority": "high", "coverage": "covered"},
+        now=datetime(2026, 4, 11, 9),
+    )
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Partial low pitch",
+        "body",
+        type_fields={"priority": "low", "coverage": "partial"},
+        now=datetime(2026, 4, 11, 10),
+    )
+
+    high = query.search(cfg, query.SearchFilters(priority="high"))
+    covered = query.search(cfg, query.SearchFilters(coverage="covered"))
+    assert [hit.entry.title for hit in high] == ["Covered high pitch"]
+    assert [hit.entry.title for hit in covered] == ["Covered high pitch"]
+
+
 def test_search_date_range(cfg):
     _seed(cfg)
     hits = query.search(

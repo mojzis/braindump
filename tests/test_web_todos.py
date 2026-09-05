@@ -132,6 +132,27 @@ async def test_todos_tag_filter(monkeypatch, cfg):
 
 
 @pytest.mark.anyio
+async def test_todos_priority_filter_and_sort(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    _todo(cfg, "low item", minute=1)
+    high = entries.create_entry(
+        cfg,
+        "todo",
+        "high item",
+        "body",
+        type_fields={"status": "pending", "priority": "high"},
+        now=datetime(2026, 4, 11, 14, 2),
+    )
+
+    filtered = await _get("/todos?priority=high")
+    assert "high item" in filtered.text
+    assert "low item" not in filtered.text
+    sorted_rows = await _get("/todos?sort=priority&dir=asc")
+    assert sorted_rows.text.index("high item") < sorted_rows.text.index("low item")
+    assert f"/entries/{high.entry.id}" in sorted_rows.text
+
+
+@pytest.mark.anyio
 async def test_todos_bad_sort_and_dir_fall_back(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
     _todo(cfg, "only one")

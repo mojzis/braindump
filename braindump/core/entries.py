@@ -18,7 +18,9 @@ from braindump.core.errors import EntryNotFoundError
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     LEGACY_TODO_STATUSES,
+    PITCH_COVERAGES,
     PLANNING_STATUSES,
+    PRIORITIES,
     PROJECT_STATES,
     QA_RESULTS,
     TODO_STATUSES,
@@ -515,6 +517,19 @@ def _validate_canonical_fields(
 
 
 def _validate_status_and_state(entry_type: str, fields: dict[str, Any]) -> None:
+    priority = fields.get("priority")
+    if (
+        priority is not None
+        and entry_type in {"todo", "pitch"}
+        and priority not in PRIORITIES
+    ):
+        raise ValueError(f"{entry_type} priority must be one of {list(PRIORITIES)}")
+    coverage = fields.get("coverage")
+    if coverage is not None:
+        if entry_type != "pitch":
+            raise ValueError("coverage is only valid for pitches")
+        if coverage not in PITCH_COVERAGES:
+            raise ValueError(f"pitch coverage must be one of {list(PITCH_COVERAGES)}")
     status = fields.get("status")
     if status is not None:
         if entry_type == "todo" and status not in (
@@ -580,6 +595,7 @@ _MUTABLE_FIELDS = {
     "status",
     "subtype",
     "priority",
+    "coverage",
     "due_date",
     "category",
     "source",
