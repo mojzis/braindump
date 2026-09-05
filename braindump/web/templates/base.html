@@ -20,6 +20,7 @@
       <a href="/" data-shortcut="g d">dashboard</a>
       <a href="/journal" data-shortcut="g j">journal</a>
       <a href="/todos" data-shortcut="g t">todos</a>
+      <a href="/tils" data-shortcut="g l">TILs</a>
       <a href="/capture" data-shortcut="g c">capture</a>
       <a href="/entries" data-shortcut="g e">entries</a>
       <a href="/initiatives">initiatives</a>
@@ -55,6 +56,7 @@
       <li><kbd>g d</kbd> dashboard</li>
       <li><kbd>g j</kbd> today's journal</li>
       <li><kbd>g t</kbd> todos</li>
+      <li><kbd>g l</kbd> TILs</li>
       <li><kbd>g c</kbd> capture</li>
       <li><kbd>g e</kbd> entries list</li>
       <li><kbd>g p</kbd> projects</li>
@@ -103,7 +105,7 @@
         if (gPending) {
           gPending = false;
           clearTimeout(gTimer);
-          const map = { d: "/", j: "/journal", t: "/todos", c: "/capture", e: "/entries", p: "/projects", a: "/tags" };
+          const map = { d: "/", j: "/journal", t: "/todos", l: "/tils", c: "/capture", e: "/entries", p: "/projects", a: "/tags" };
           if (map[e.key]) { e.preventDefault(); window.location = map[e.key]; }
         }
       });

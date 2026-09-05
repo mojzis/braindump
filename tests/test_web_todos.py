@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from html import unescape
 
 import httpx
 import pytest
@@ -150,6 +151,36 @@ async def test_todos_priority_filter_and_sort(monkeypatch, cfg):
     sorted_rows = await _get("/todos?sort=priority&dir=asc")
     assert sorted_rows.text.index("high item") < sorted_rows.text.index("low item")
     assert f"/entries/{high.entry.id}" in sorted_rows.text
+
+
+@pytest.mark.anyio
+async def test_todos_links_preserve_priority_filter(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    entries.create_entry(
+        cfg,
+        "todo",
+        "urgent item",
+        "body",
+        tags=["urgent", "reference"],
+        project="alpha",
+        type_fields={"status": "pending", "priority": "high"},
+        now=datetime(2026, 4, 11, 14, 2),
+    )
+
+    response = await _get(
+        "/todos?q=urgent+item&project=alpha&tag=urgent&priority=high"
+        "&sort=priority&dir=asc"
+    )
+    body = unescape(response.text)
+
+    assert (
+        'href="/todos?q=urgent%20item&project=alpha&tag=urgent&priority=high'
+        '&sort=priority&dir=desc"' in body
+    )
+    assert (
+        'href="/todos?q=urgent%20item&project=alpha&tag=reference&priority=high'
+        '&sort=priority&dir=asc"' in body
+    )
 
 
 @pytest.mark.anyio
