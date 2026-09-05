@@ -1037,6 +1037,69 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
     )
 
 
+# --- TILs -------------------------------------------------------------------
+
+
+_TIL_SORT_KEYS = {
+    "id": lambda h: h.entry.id,
+    "date": lambda h: h.entry.created_at or "",
+    "project": lambda h: (h.entry.project or "").lower(),
+    "title": lambda h: (h.entry.title or "").lower(),
+    "tags": lambda h: ", ".join(h.entry.tags).lower(),
+    "category": lambda h: (h.entry.category or "").lower(),
+    "source": lambda h: (h.entry.source or "").lower(),
+}
+
+
+@app.get("/tils", response_class=HTMLResponse)
+def tils_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitting adds indirection
+    request: Request,
+    q: str | None = None,
+    project: str | None = None,
+    tag: str | None = None,
+    sort: str = "date",
+    direction: str = Query("desc", alias="dir"),
+):
+    cfg = load_config()
+    # No active-project focus here: /tils is a cross-project view that defaults
+    # to all TILs regardless of project.
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            q=q or None,
+            types=["til"],
+            project=project or None,
+            tags=[tag] if tag else [],
+            limit=500,
+            fulltext=False,
+        ),
+    )
+    groups: dict[str, list[query.Hit]] = {}
+    for h in hits:
+        groups.setdefault(h.entry.project or "(none)", []).append(h)
+    grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
+
+    sort = sort if sort in _TIL_SORT_KEYS else "date"
+    descending = direction != "asc"
+    rows = sorted(hits, key=_TIL_SORT_KEYS[sort], reverse=descending)
+
+    return templates.TemplateResponse(
+        request,
+        "tils.html",
+        _context(
+            request,
+            grouped=grouped,
+            rows=rows,
+            total=len(hits),
+            q=q or "",
+            selected=project or "",
+            tag=tag or "",
+            sort=sort,
+            dir="desc" if descending else "asc",
+        ),
+    )
+
+
 # --- projects --------------------------------------------------------------
 
 

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}TILs{% endblock %}
+{% block body %}
+{# single source of truth for /tils links: carry the active filters and sort #}
+{% macro tils_url(project=none, tag=none, sort=none, dir=none) %}
+  {%- set parts = [] -%}
+  {%- if q %}{% set _ = parts.append("q=" ~ q | urlencode) %}{% endif -%}
+  {%- if project %}{% set _ = parts.append("project=" ~ project | urlencode) %}{% endif -%}
+  {%- if tag %}{% set _ = parts.append("tag=" ~ tag | urlencode) %}{% endif -%}
+  {%- if sort %}{% set _ = parts.append("sort=" ~ sort) %}{% endif -%}
+  {%- if dir %}{% set _ = parts.append("dir=" ~ dir) %}{% endif -%}
+  /tils?{{ parts | join('&') }}
+{%- endmacro %}
+<div class="todos-page">
+  <form method="get" action="/tils" class="filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="search TILs…" />
+    {% if selected %}<input type="hidden" name="project" value="{{ selected }}" />{% endif %}
+    {% if tag %}<input type="hidden" name="tag" value="{{ tag }}" />{% endif %}
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="dir" value="{{ dir }}" />
+    <button type="submit">search</button>
+    <span class="muted">{{ total }} {{ "TIL" if total == 1 else "TILs" }}</span>
+  </form>
+
+  {% if selected or tag %}
+    <p class="muted active-filters">
+      {% if selected %}project <strong>{{ selected }}</strong>{% endif %}
+      {% if selected and tag %} · {% endif %}
+      {% if tag %}tag <strong>{{ tag }}</strong>{% endif %}
+      · <a href="{{ tils_url(sort=sort, dir=dir) }}">clear filters</a>
+    </p>
+  {% endif %}
+
+  {% if grouped %}
+    <div class="todo-projects">
+      {% for project, tils in grouped %}
+        {% if project != "(none)" %}
+          <a href="{{ tils_url(project=project, tag=tag, sort=sort, dir=dir) }}"
+             class="chip{% if project == selected %} active{% endif %}">{{ project }} <span class="count">{{ tils | length }}</span></a>
+        {% else %}
+          <span class="chip muted">(no project) <span class="count">{{ tils | length }}</span></span>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    {% macro th(key, label) %}
+      {% set next_dir = "desc" if (sort == key and dir == "asc") else "asc" %}
+      <th class="{% if sort == key %}sorted{% endif %}">
+        <a href="{{ tils_url(project=selected, tag=tag, sort=key, dir=next_dir) }}">
+          {{ label }}{% if sort == key %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
+        </a>
+      </th>
+    {% endmacro %}
+
+    <table class="entries-table sortable">
+      <thead>
+        <tr>
+          {{ th("id", "#") }}
+          {{ th("date", "date") }}
+          {{ th("project", "project") }}
+          {{ th("title", "title") }}
+          {{ th("tags", "tags") }}
+          {{ th("category", "category") }}
+          {{ th("source", "source") }}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for h in rows %}
+        <tr>
+          <td><a href="/entries/{{ h.entry.id }}">#{{ h.entry.id }}</a></td>
+          <td>{{ (h.entry.created_at or "")[:10] }}</td>
+          <td>
+            {% if h.entry.project %}
+              <a href="{{ tils_url(project=h.entry.project, tag=tag, sort=sort, dir=dir) }}" class="muted">{{ h.entry.project }}</a>
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td><a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a></td>
+          <td class="muted tags-cell">
+            {% for t in h.entry.tags %}
+              <a href="{{ tils_url(project=selected, tag=t, sort=sort, dir=dir) }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </td>
+          <td>{{ h.entry.category or "" }}</td>
+          <td>{{ h.entry.source or "" }}</td>
+          <td><a href="/entries/{{ h.entry.id }}/edit" class="muted" title="edit">✎</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">no TILs{% if q %} match “{{ q }}”{% endif %}.</p>
+  {% endif %}
+</div>
+{% endblock %}
