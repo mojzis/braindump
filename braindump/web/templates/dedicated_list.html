@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}{{ plural_label }}{% endblock %}
+{% block body %}
+{# Shared link builder for dedicated lists; callers replace only the filter being changed. #}
+{% macro list_url(project=none, tag=none, sort=none, dir=none) %}
+  {%- set parts = [] -%}
+  {%- if q %}{% set _ = parts.append("q=" ~ q | urlencode) %}{% endif -%}
+  {%- if show_all %}{% set _ = parts.append("all=1") %}{% endif -%}
+  {%- if show_postponed %}{% set _ = parts.append("postponed=1") %}{% endif -%}
+  {%- if project %}{% set _ = parts.append("project=" ~ project | urlencode) %}{% endif -%}
+  {%- if tag %}{% set _ = parts.append("tag=" ~ tag | urlencode) %}{% endif -%}
+  {%- if sort %}{% set _ = parts.append("sort=" ~ sort) %}{% endif -%}
+  {%- if dir %}{% set _ = parts.append("dir=" ~ dir) %}{% endif -%}
+  {{ list_path }}?{{ parts | join('&') }}
+{%- endmacro %}
+<div class="todos-page">
+  <form method="get" action="{{ list_path }}" class="filters">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ search_placeholder }}" />
+    {% if selected %}<input type="hidden" name="project" value="{{ selected }}" />{% endif %}
+    {% if tag %}<input type="hidden" name="tag" value="{{ tag }}" />{% endif %}
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="dir" value="{{ dir }}" />
+    <button type="submit">search</button>
+    {% if "all" in lifecycle_controls %}
+      <label><input type="checkbox" name="all" value="1" {% if show_all %}checked{% endif %}
+        onchange="this.form.submit()" /> show done/cancelled too</label>
+    {% endif %}
+    {% if "postponed" in lifecycle_controls %}
+      <label><input type="checkbox" name="postponed" value="1" {% if show_postponed %}checked{% endif %}
+        onchange="this.form.submit()" /> show postponed</label>
+    {% endif %}
+    <span class="muted">{{ total }} {{ singular_label if total == 1 else plural_label }}</span>
+  </form>
+
+  {% if selected or tag %}
+    <p class="muted active-filters">
+      {% if selected %}project <strong>{{ selected }}</strong>{% endif %}
+      {% if selected and tag %} · {% endif %}
+      {% if tag %}tag <strong>{{ tag }}</strong>{% endif %}
+      · <a href="{{ list_url(sort=sort, dir=dir) }}">clear filters</a>
+    </p>
+  {% endif %}
+
+  {% if grouped %}
+    <div class="todo-projects">
+      {% for project, project_rows in grouped %}
+        {% if project != "(none)" %}
+          <a href="{{ list_url(project=project, tag=tag, sort=sort, dir=dir) }}"
+             class="chip{% if project == selected %} active{% endif %}">{{ project }} <span class="count">{{ project_rows | length }}</span></a>
+        {% else %}
+          <span class="chip muted">(no project) <span class="count">{{ project_rows | length }}</span></span>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    {% macro th(key, label) %}
+      {% set next_dir = "desc" if (sort == key and dir == "asc") else "asc" %}
+      <th class="{% if sort == key %}sorted{% endif %}">
+        <a href="{{ list_url(project=selected, tag=tag, sort=key, dir=next_dir) }}">
+          {{ label }}{% if sort == key %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
+        </a>
+      </th>
+    {% endmacro %}
+
+    <table class="entries-table sortable">
+      <thead>
+        <tr>
+          {% for key, label in columns %}{{ th(key, label) }}{% endfor %}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for h in rows %}
+        <tr class="{% if h.entry.status in settled_statuses %}done{% endif %}">
+          {% for key, _label in columns %}
+            {% if key == "id" %}
+              <td><a href="/entries/{{ h.entry.id }}">#{{ h.entry.id }}</a></td>
+            {% elif key == "date" %}
+              <td>{{ (h.entry.created_at or "")[:10] }}</td>
+            {% elif key == "project" %}
+              <td>
+                {% if h.entry.project %}
+                  <a href="{{ list_url(project=h.entry.project, tag=tag, sort=sort, dir=dir) }}" class="muted">{{ h.entry.project }}</a>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+            {% elif key == "title" %}
+              <td><a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a></td>
+            {% elif key == "tags" %}
+              <td class="muted tags-cell">
+                {% for t in h.entry.tags %}
+                  <a href="{{ list_url(project=selected, tag=t, sort=sort, dir=dir) }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+            {% else %}
+              <td>{{ h.entry|attr(key) or "" }}</td>
+            {% endif %}
+          {% endfor %}
+          <td><a href="/entries/{{ h.entry.id }}/edit" class="muted" title="edit">✎</a></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">no {% if "all" in lifecycle_controls and not show_all %}open {% endif %}{{ plural_label }}{% if q %} match “{{ q }}”{% endif %}.</p>
+  {% endif %}
+</div>
+{% endblock %}
