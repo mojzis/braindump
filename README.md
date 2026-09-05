@@ -76,7 +76,7 @@ bd update 42 --tags a,b --project foo # patch metadata
 bd project focus braindump            # scope all queries to a project
 bd journal today                      # today's journal state
 bd serve                              # local web UI at http://127.0.0.1:8765/
-bd app                                # same UI in a native desktop window (detached)
+bd app                                # same UI in native Journal + Todos windows (detached)
 ```
 
 ### Web UI
@@ -93,12 +93,14 @@ bd app                                # same UI in a native desktop window (deta
 
 Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` for help.
 
-### Desktop window
+### Desktop windows
 
-`bd app` runs the exact same web UI, but inside a native [pywebview](https://pywebview.flet.dev/)
-window instead of a browser tab — a lightweight way to keep braindump open as its
-own app locally. It's not a packaged/bundled build: it just starts the server and
-points a window at it.
+`bd app` runs the exact same web UI, but inside two native
+[pywebview](https://pywebview.flet.dev/) windows instead of browser tabs — a
+lightweight way to keep braindump open as its own app locally. The Journal and
+Todos windows open side by side by default, using one local server and one event
+loop. It's not a packaged/bundled build: it just starts the server and points
+both windows at it.
 
 It **detaches by default** — the command returns immediately, the window keeps
 running after you close the terminal, and anything the process prints goes to
@@ -109,15 +111,18 @@ bd app                  # detach, print the pid, hand the shell back
 bd app --foreground     # stay attached (use this when debugging a crash)
 ```
 
-On macOS the window calls itself **Braindump** — in the menu bar and in the
-⌘-tab switcher — rather than the interpreter running it. Unbundled Python has no
-.app of its own, so `bd app` overwrites the bundle name macOS would otherwise
-read (`Python 3.14`) before the process registers with the window server.
+On macOS the app calls itself **Braindump** — in the menu bar and in the
+⌘-tab switcher — rather than the interpreter running it. The two windows have
+distinct **Braindump — Journal** and **Braindump — Todos** titles. Unbundled
+Python has no .app of its own, so `bd app` overwrites the bundle name macOS
+would otherwise read (`Python 3.14`) before the process registers with the
+window server.
 
 If something is already serving on the port (a running `bd serve`, or another
-`bd app`), the window attaches to that server instead of starting a second one.
-The server belongs to whichever process started it, so closing *that* window
-also stops the server for any window that attached to it.
+`bd app`), both windows attach to that server instead of starting a second one.
+The server belongs to whichever process started it: a process that starts the
+server shuts it down after both windows close, while an attached pair leaves
+the existing server running.
 
 Requires the `[app]` extra:
 

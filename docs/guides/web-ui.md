@@ -6,18 +6,19 @@
 ```bash
 bd serve                         # default host/port
 bd serve --host 0.0.0.0 --port 9000
-bd app                           # same UI in a native pywebview window ([app] extra)
+bd app                           # same UI in native Journal + Todos windows ([app] extra)
 ```
 
-`bd app` starts the same server in a background thread and points a native
-[pywebview](https://pywebview.flet.dev/) window at it — a convenience wrapper,
-not a packaged build.
+`bd app` starts the same server in a background thread and opens native
+[pywebview](https://pywebview.flet.dev/) Journal and Todos windows side by side
+by default. Both windows use that one server and one event loop — a convenience
+wrapper, not a packaged build.
 
-On macOS it also renames itself: without a .app bundle of its own, the window
-would introduce itself as `Python 3.14` in the ⌘-tab switcher and `Python` in
-the menu bar. `bd app` overwrites both bundle keys (`CFBundleDisplayName` and
-`CFBundleName`) before the Cocoa backend registers the process, so it shows up
-as **Braindump**.
+On macOS it also renames itself: without a .app bundle of its own, the windows
+would introduce themselves as `Python 3.14` in the ⌘-tab switcher and `Python`
+in the menu bar. `bd app` overwrites both bundle keys
+(`CFBundleDisplayName` and `CFBundleName`) before the Cocoa backend registers
+the process, so it shows up as **Braindump**.
 
 ## Selecting and copying text
 

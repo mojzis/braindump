@@ -48,12 +48,25 @@ _STARTUP_GRACE = 5.0
 #: name in the menu bar and the app switcher.
 _APP_NAME = "Braindump"
 
-#: Default window geometry. The journal editor plus the rendered days below it
-#: want a lot of vertical room, so start noticeably larger than pywebview's
-#: 800x600 default.
-_WINDOW_WIDTH = 1400
-_WINDOW_HEIGHT = 950
-_WINDOW_MIN_SIZE = (900, 600)
+#: Initial layout for the two focused views. Equal-width windows fit side by
+#: side on a typical 1400px-wide display and can still be resized freely.
+_JOURNAL_WINDOW = {
+    "title": "Braindump — Journal",
+    "path": "/journal",
+    "x": 0,
+    "y": 0,
+    "width": 700,
+    "height": 950,
+}
+_TODOS_WINDOW = {
+    "title": "Braindump — Todos",
+    "path": "/todos",
+    "x": 700,
+    "y": 0,
+    "width": 700,
+    "height": 950,
+}
+_WINDOW_MIN_SIZE = (500, 600)
 
 #: Window/taskbar icon. Same brain the web UI uses as its favicon; pywebview
 #: wants a raster file path, so we ship the rendered PNG next to the SVG.
@@ -317,7 +330,7 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
 
     cfg = load_config()
     resolved_port = port or cfg.port
-    url = f"http://{host}:{resolved_port}/"
+    url = f"http://{host}:{resolved_port}"
 
     server: _Server | None = None
     thread: threading.Thread | None = None
@@ -338,19 +351,23 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
             raise RuntimeError(f"Web server did not start on {host}:{resolved_port}")
 
     try:
-        window = webview.create_window(
-            _APP_NAME,
-            url,
-            width=_WINDOW_WIDTH,
-            height=_WINDOW_HEIGHT,
-            min_size=_WINDOW_MIN_SIZE,
-            # pywebview defaults this to False, which injects
-            # `body { user-select: none; cursor: default }` into the page on
-            # every backend — so nothing in the window could even be selected,
-            # let alone copied. Braindump is a reading app; text selects.
-            text_select=True,
-        )
-        _enable_clipboard_on_show(window)
+        for layout in (_JOURNAL_WINDOW, _TODOS_WINDOW):
+            window = webview.create_window(
+                layout["title"],
+                f"{url}{layout['path']}",
+                x=layout["x"],
+                y=layout["y"],
+                width=layout["width"],
+                height=layout["height"],
+                min_size=_WINDOW_MIN_SIZE,
+                # pywebview defaults this to False, which injects
+                # `body { user-select: none; cursor: default }` into the page
+                # on every backend — so nothing in the window could even be
+                # selected, let alone copied. Braindump is a reading app;
+                # text selects.
+                text_select=True,
+            )
+            _enable_clipboard_on_show(window)
         webview.start(icon=str(_ICON_PATH) if _ICON_PATH.exists() else None)
     finally:
         if server is not None:

@@ -56,14 +56,16 @@ class _StubWebview:
 
     def __init__(self):
         self.windows: list[tuple[str, str]] = []
-        self.window_kwargs: dict = {}
-        self.window = _StubWindow()
+        self.window_objects: list[_StubWindow] = []
+        self.window_kwargs: list[dict] = []
         self.started = False
 
     def create_window(self, title, url, **kwargs):
         self.windows.append((title, url))
-        self.window_kwargs = kwargs
-        return self.window
+        self.window_kwargs.append(kwargs)
+        window = _StubWindow()
+        self.window_objects.append(window)
+        return window
 
     def start(self, **kwargs):
         self.started = True
@@ -208,7 +210,14 @@ def test_run_app_attaches_to_an_already_running_server(monkeypatch):
 
     desktop.run_app(host="127.0.0.1", port=9911)
 
-    assert stub.windows == [("Braindump", "http://127.0.0.1:9911/")]
+    assert stub.windows == [
+        ("Braindump — Journal", "http://127.0.0.1:9911/journal"),
+        ("Braindump — Todos", "http://127.0.0.1:9911/todos"),
+    ]
+    assert [
+        (kwargs["x"], kwargs["y"], kwargs["width"], kwargs["height"])
+        for kwargs in stub.window_kwargs
+    ] == [(0, 0, 700, 950), (700, 0, 700, 950)]
     assert stub.started
 
 
@@ -501,7 +510,7 @@ def test_run_app_asks_for_a_selectable_window(monkeypatch):
 
     desktop.run_app(host="127.0.0.1", port=9911)
 
-    assert stub.window_kwargs["text_select"] is True
+    assert [kwargs["text_select"] for kwargs in stub.window_kwargs] == [True, True]
 
 
 def test_run_app_registers_the_clipboard_hook(monkeypatch):
@@ -511,7 +520,10 @@ def test_run_app_registers_the_clipboard_hook(monkeypatch):
 
     desktop.run_app(host="127.0.0.1", port=9911)
 
-    assert stub.window.events.before_show.handlers == [desktop._on_before_show]
+    assert [window.events.before_show.handlers for window in stub.window_objects] == [
+        [desktop._on_before_show],
+        [desktop._on_before_show],
+    ]
     # pywebview hands the window only to a parameter with this exact name, and
     # calls the handler with no arguments otherwise (webview/event.py).
     assert "window" in inspect.signature(desktop._on_before_show).parameters
