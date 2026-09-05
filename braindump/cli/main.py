@@ -637,9 +637,9 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
     if status is not None:
         patch["status"] = status
     if priority is not None:
-        patch["priority"] = priority
+        patch["priority"] = priority or None
     if coverage is not None:
-        patch["coverage"] = coverage
+        patch["coverage"] = coverage or None
     if area is not None:
         patch["area"] = area
     patch.update(

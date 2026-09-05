@@ -319,6 +319,15 @@ def test_cli_pitch_priority_coverage_and_filters(tmp_path, monkeypatch):
     assert found is not None
     assert found[1].coverage == "partial"
 
+    cleared = runner.invoke(
+        app, ["update", str(pitch_id), "--priority", "", "--coverage", ""]
+    )
+    assert cleared.exit_code == 0
+    found = entries.find_by_id(cfg, pitch_id)
+    assert found is not None
+    assert found[1].priority is None
+    assert found[1].coverage is None
+
 
 def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
     tmp_path, monkeypatch

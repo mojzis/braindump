@@ -518,12 +518,11 @@ def _validate_canonical_fields(
 
 def _validate_status_and_state(entry_type: str, fields: dict[str, Any]) -> None:
     priority = fields.get("priority")
-    if (
-        priority is not None
-        and entry_type in {"todo", "pitch"}
-        and priority not in PRIORITIES
-    ):
-        raise ValueError(f"{entry_type} priority must be one of {list(PRIORITIES)}")
+    if priority is not None:
+        if entry_type not in {"todo", "pitch"}:
+            raise ValueError("priority is only valid for todos and pitches")
+        if priority not in PRIORITIES:
+            raise ValueError(f"{entry_type} priority must be one of {list(PRIORITIES)}")
     coverage = fields.get("coverage")
     if coverage is not None:
         if entry_type != "pitch":

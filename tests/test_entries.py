@@ -73,6 +73,10 @@ def test_pitch_priority_and_coverage_round_trip_and_validation(cfg):
         entries.create_entry(
             cfg, "todo", "bad coverage", "body", type_fields={"coverage": "partial"}
         )
+    with pytest.raises(ValueError, match="only valid for todos and pitches"):
+        entries.create_entry(
+            cfg, "til", "bad priority", "body", type_fields={"priority": "urgent"}
+        )
 
 
 def test_parse_source_document_tracks_headings_and_checked_items():
