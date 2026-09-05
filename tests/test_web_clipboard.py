@@ -43,6 +43,10 @@ async def test_base_layout_loads_the_clipboard_script(monkeypatch, cfg):
 
     assert r.status_code == 200
     assert "/static/clipboard.js" in r.text
+    assert '<form class="entry-jump" id="entry-jump-form">' in r.text
+    assert 'id="entry-jump-id"' in r.text
+    assert "<kbd>g i</kbd> focus entry ID" in r.text
+    assert '"/entries/" + encodeURIComponent(entryId)' in r.text
 
 
 @pytest.mark.anyio

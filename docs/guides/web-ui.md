@@ -72,6 +72,7 @@ copied into braindump.
 | `g j` | Journal |
 | `g c` | Capture |
 | `g e` | Entries |
+| `g i` | Focus entry ID |
 | `g p` | Projects |
 | `/` | Focus search |
 | `⌘ / Ctrl + Enter` | Parse (on the journal page) |

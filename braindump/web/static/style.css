@@ -39,6 +39,12 @@ a:hover { text-decoration: underline; }
 .project-focus input:focus { outline: none; border-color: var(--accent); }
 .project-focus button { padding: 5px 11px; background: var(--bg-tint); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 .project-focus button:hover { border-color: var(--accent); color: var(--accent); }
+.entry-jump { display: flex; gap: 6px; align-items: center; }
+.entry-jump label { color: var(--muted); }
+.entry-jump input { width: 7em; padding: 5px 9px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
+.entry-jump input:focus { outline: none; border-color: var(--accent); }
+.entry-jump button { padding: 5px 11px; background: var(--bg-tint); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.entry-jump button:hover { border-color: var(--accent); color: var(--accent); }
 
 .active-banner { background: var(--banner); padding: 7px 24px; border-bottom: 1px solid var(--border); text-align: center; }
 main { max-width: 1100px; margin: 0 auto; padding: 28px 24px; }

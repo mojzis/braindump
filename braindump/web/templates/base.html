@@ -35,6 +35,11 @@
         <button type="submit" name="name" value="">clear</button>
       {% endif %}
     </form>
+    <form class="entry-jump" id="entry-jump-form">
+      <label for="entry-jump-id">jump to:</label>
+      <input id="entry-jump-id" type="number" name="entry_id" min="1" inputmode="numeric" placeholder="entry ID" />
+      <button type="submit">go</button>
+    </form>
   </header>
 
   {% if active_project %}
@@ -57,6 +62,7 @@
       <li><kbd>g t</kbd> todos</li>
       <li><kbd>g c</kbd> capture</li>
       <li><kbd>g e</kbd> entries list</li>
+      <li><kbd>g i</kbd> focus entry ID</li>
       <li><kbd>g p</kbd> projects</li>
       <li><kbd>g a</kbd> tags</li>
       <li><kbd>/</kbd> focus search on entries page</li>
@@ -72,6 +78,8 @@
   <script>
     (function () {
       const DIALOG = document.getElementById("shortcuts");
+      const ENTRY_JUMP_FORM = document.getElementById("entry-jump-form");
+      const ENTRY_JUMP_INPUT = document.getElementById("entry-jump-id");
       let gPending = false;
       let gTimer = null;
 
@@ -103,9 +111,20 @@
         if (gPending) {
           gPending = false;
           clearTimeout(gTimer);
+          if (e.key === "i") {
+            e.preventDefault();
+            ENTRY_JUMP_INPUT.focus();
+            return;
+          }
           const map = { d: "/", j: "/journal", t: "/todos", c: "/capture", e: "/entries", p: "/projects", a: "/tags" };
           if (map[e.key]) { e.preventDefault(); window.location = map[e.key]; }
         }
+      });
+
+      ENTRY_JUMP_FORM.addEventListener("submit", function (e) {
+        e.preventDefault();
+        const entryId = ENTRY_JUMP_INPUT.value.trim();
+        if (entryId) window.location = "/entries/" + encodeURIComponent(entryId);
       });
     })();
   </script>
