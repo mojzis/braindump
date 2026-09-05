@@ -95,27 +95,10 @@ def numbered_lines_for_prompt(
     lines = body.splitlines()
     idx = _scratchpad_start(lines)
     limit = idx if idx is not None else len(lines)
-    prior_anchors: dict[int, str] = {}
-    if anchor_map is not None:
-        for anchor, resolved in anchor_map.items():
-            if not isinstance(resolved, tuple):
-                continue
-            try:
-                source_index, source_text = resolved
-            except ValueError:
-                continue
-            if (
-                isinstance(source_index, int)
-                and not isinstance(source_index, bool)
-                and 0 <= source_index < limit
-                and lines[source_index] == source_text
-            ):
-                prior_anchors[source_index] = anchor
-        anchor_map.clear()
     rendered = []
     for i in range(limit):
         line = lines[i]
-        anchor = prior_anchors.get(i) or _new_anchor(anchor_map)
+        anchor = _new_anchor(anchor_map)
         if anchor_map is not None:
             anchor_map[anchor] = (i, line)
         suffix = "  [already digested]" if "[→" in line else ""

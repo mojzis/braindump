@@ -96,17 +96,6 @@ def test_numbered_lines_assigns_distinct_opaque_anchors_to_duplicate_lines():
     assert anchors[anchor_lines[1]] == (1, "same")
 
 
-def test_numbered_lines_reuses_opaque_anchors_for_the_same_snapshot():
-    anchors: dict[str, tuple[int, str]] = {}
-    first = digest.numbered_lines_for_prompt("same\nfresh", anchor_map=anchors)
-    first_anchors = [line.split(": ", 1)[0] for line in first.splitlines()]
-
-    second = digest.numbered_lines_for_prompt("same\nfresh", anchor_map=anchors)
-    second_anchors = [line.split(": ", 1)[0] for line in second.splitlines()]
-
-    assert second_anchors == first_anchors
-
-
 # --- validate_pass1 -----------------------------------------------------------
 
 
