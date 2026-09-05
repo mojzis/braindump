@@ -96,6 +96,17 @@ def test_numbered_lines_assigns_distinct_opaque_anchors_to_duplicate_lines():
     assert anchors[anchor_lines[1]] == (1, "same")
 
 
+def test_numbered_lines_reuses_opaque_anchors_for_the_same_snapshot():
+    anchors: dict[str, tuple[int, str]] = {}
+    first = digest.numbered_lines_for_prompt("same\nfresh", anchor_map=anchors)
+    first_anchors = [line.split(": ", 1)[0] for line in first.splitlines()]
+
+    second = digest.numbered_lines_for_prompt("same\nfresh", anchor_map=anchors)
+    second_anchors = [line.split(": ", 1)[0] for line in second.splitlines()]
+
+    assert second_anchors == first_anchors
+
+
 # --- validate_pass1 -----------------------------------------------------------
 
 
@@ -507,6 +518,46 @@ async def test_run_parse_does_not_retry_when_all_journal_lines_are_digested(cfg)
     assert result.outcome == "no_eligible"
     assert result.retry_attempted is False
     assert result.validation_failures["unknown_anchor"] == 1
+
+
+@pytest.mark.anyio
+async def test_run_parse_reports_validation_exhaustion_after_one_retry(cfg):
+    day = date(2026, 5, 9)
+    _seed_journal(cfg, day, "capture this idea")
+
+    class AlwaysRejectedRunner:
+        def __init__(self):
+            self.pass1_prompts = 0
+
+        async def __call__(self, *args, tools="", **kwargs):
+            if not tools:
+                self.pass1_prompts += 1
+                return {
+                    "sections": [
+                        {
+                            "project": "ideas",
+                            "items": [
+                                {
+                                    "anchor": "a_missing",
+                                    "type": "thought",
+                                    "title": "Capture idea",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            return {"items": []}
+
+    runner = AlwaysRejectedRunner()
+    result = await digest.run_parse(cfg, day, runner=runner)
+
+    assert runner.pass1_prompts == 2
+    assert result.total_entries == 0
+    assert result.outcome == "validation_rejected"
+    assert result.retry_attempted is True
+    assert result.retry_exhausted is True
+    assert result.warning is not None
+    assert result.validation_failures["unknown_anchor"] == 2
 
 
 def _seed_project(cfg, name: str, local_dir: Path | None = None):

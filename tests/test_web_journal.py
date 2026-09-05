@@ -242,6 +242,10 @@ async def test_parse_status_explains_empty_parse_outcomes(
 
     assert status_resp.status_code == 286
     assert expected in status_resp.text
+    if result.outcome == "validation_rejected":
+        assert "⚠ parse incomplete" in status_resp.text
+    elif result.outcome == "error":
+        assert "✓ parsed" not in status_resp.text
 
 
 @pytest.mark.anyio

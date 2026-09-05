@@ -31,7 +31,7 @@
       <p>⚠ parse failed{% if job.result.errors %}: {{ job.result.errors | join("; ") }}{% endif %}</p>
       {% else %}
       <p>
-        ✓ parsed —
+        {% if job.result.outcome == "validation_rejected" %}⚠ parse incomplete —{% else %}✓ parsed —{% endif %}
           {% if job.result.total_entries %}
             {% for section in job.result.sections %}
               <span class="parse-project">{{ section.project }}</span> {{ section.entry_ids | length }} entries{% if not loop.last %}, {% endif %}
