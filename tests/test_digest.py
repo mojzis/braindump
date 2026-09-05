@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, datetime
 from pathlib import Path
 
@@ -222,6 +223,24 @@ def test_validate_pass1_reports_specific_validation_reasons():
     )
 
 
+def test_validate_pass1_rejects_legacy_anchor_when_snapshot_map_is_supplied():
+    snapshot = ["a real actionable line"]
+    anchors: dict[str, tuple[int, str]] = {}
+    digest.numbered_lines_for_prompt("\n".join(snapshot), anchor_map=anchors)
+    diagnostics = digest.Counter()
+
+    result = digest.validate_pass1(
+        snapshot,
+        {"sections": [_section("proj", line=0, line_text=snapshot[0])]},
+        [],
+        anchor_map=anchors,
+        diagnostics=diagnostics,
+    )
+
+    assert result == []
+    assert diagnostics == digest.Counter(missing_anchor=1)
+
+
 def test_validate_pass1_coerces_non_list_tags_and_sub_lines_to_empty():
     # A malformed model response could hand back a bare string for a field
     # that's supposed to be a list -- must not silently iterate it char by
@@ -395,7 +414,19 @@ class FakeRunner:
     ):
         self.calls.append({"prompt": prompt, "cwd": cwd, "tools": tools})
         if tools == "":
-            return self.pass1_data
+            data = deepcopy(self.pass1_data)
+            prompt_anchors = [
+                line.split(": ", 1)[0]
+                for line in prompt.splitlines()
+                if line.startswith("a_")
+            ]
+            for section in data.get("sections", []):
+                for item in section.get("items", []):
+                    if "anchor" not in item and isinstance(item.get("line"), int):
+                        item["anchor"] = prompt_anchors[item["line"]]
+                        item.pop("line")
+                        item.pop("line_text", None)
+            return data
         dir_name = Path(cwd).name if cwd else None
         if dir_name in self.pass2_raise_for_dirs:
             msg = f"pass2 boom for {dir_name}"

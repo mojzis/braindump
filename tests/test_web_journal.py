@@ -210,6 +210,14 @@ async def test_parse_status_returns_286_and_trigger_header_when_done(monkeypatch
             ),
             "all proposed candidates rejected during validation",
         ),
+        (
+            digest.ParseResult(
+                day=date(2026, 6, 9),
+                outcome="error",
+                errors=["pass 1 failed: pass1 exploded"],
+            ),
+            "parse failed: pass 1 failed: pass1 exploded",
+        ),
     ],
 )
 async def test_parse_status_explains_empty_parse_outcomes(

@@ -27,6 +27,9 @@
   {% else %}
     <div class="parse-status parse-done">
       {% if job.result %}
+      {% if job.result.outcome == "error" %}
+      <p>⚠ parse failed{% if job.result.errors %}: {{ job.result.errors | join("; ") }}{% endif %}</p>
+      {% else %}
       <p>
         ✓ parsed —
           {% if job.result.total_entries %}
@@ -50,6 +53,7 @@
           {% if job.result.errors %} · {{ job.result.errors | length }} errors{% endif %}
           {% if job.result.warning %} · {{ job.result.warning }}{% endif %}
         </p>
+      {% endif %}
       {% else %}
         <p>✓ parse finished</p>
       {% endif %}

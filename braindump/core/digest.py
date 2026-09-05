@@ -196,7 +196,7 @@ def _resolve_anchor_details(
     raw: dict[str, Any],
     anchor_map: dict[str, tuple[int, str]] | None = None,
 ) -> tuple[tuple[int, str] | None, str | None]:
-    if anchor_map is not None and not ("anchor" not in raw and "line" in raw):
+    if anchor_map is not None:
         return _resolve_opaque_anchor(raw, anchor_map)
     return _resolve_legacy_anchor(snapshot_lines, raw)
 
