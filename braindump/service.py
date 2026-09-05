@@ -111,8 +111,6 @@ class BraindumpService:
             type_fields=dict(request.type_fields),
         )
 
-    create_entry = create
-
     def search(self, request: SearchRequest) -> list[query.Hit]:
         project = (
             None if request.all_projects else self._effective_project(request.project)
@@ -156,20 +154,14 @@ class BraindumpService:
                     found[entry.id] = self._entry_view(type_dir, entry)
         return found
 
-    show = get_entries
-
     def update(self, request: UpdateRequest) -> Entry:
         return entries.update_entry(
             self.cfg, request.entry_id, dict(request.patch), body=request.body
         )
 
-    update_entry = update
-
     def done(self, arg: int | str) -> Entry:
         entry_id = arg if isinstance(arg, int) else self.resolve_todo(arg)
         return entries.mark_done(self.cfg, entry_id)
-
-    mark_done = done
 
     def resolve_todo(self, arg: str) -> int:
         if arg.isdigit():

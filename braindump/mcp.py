@@ -7,7 +7,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import date
 from enum import Enum
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -75,10 +75,10 @@ def _search_request(
     types: list[str] | None = None,
     project: str | None = None,
     all_projects: bool = False,
-    status: str = "all",
+    status: StatusFilter = "all",
     tags: list[str] | None = None,
-    since: str | None = None,
-    until: str | None = None,
+    since: date | None = None,
+    until: date | None = None,
     limit: int = 50,
     offset: int = 0,
     fulltext: bool = True,
@@ -93,10 +93,10 @@ def _search_request(
         types=tuple(types or ()),
         project=project,
         all_projects=all_projects,
-        status=cast(StatusFilter, status),
+        status=status,
         tags=tuple(tags or ()),
-        since=date.fromisoformat(since) if since else None,
-        until=date.fromisoformat(until) if until else None,
+        since=since,
+        until=until,
         limit=limit,
         offset=offset,
         fulltext=fulltext,
@@ -164,10 +164,10 @@ def search(
     types: list[str] | None = None,
     project: str | None = None,
     all_projects: bool = False,
-    status: str = "all",
+    status: StatusFilter = "all",
     tags: list[str] | None = None,
-    since: str | None = None,
-    until: str | None = None,
+    since: date | None = None,
+    until: date | None = None,
     limit: int = 50,
     offset: int = 0,
     fulltext: bool = True,
@@ -209,10 +209,10 @@ def list_entries(
     types: list[str] | None = None,
     project: str | None = None,
     all_projects: bool = False,
-    status: str = "all",
+    status: StatusFilter = "all",
     tags: list[str] | None = None,
-    since: str | None = None,
-    until: str | None = None,
+    since: date | None = None,
+    until: date | None = None,
     limit: int = 10,
     offset: int = 0,
     project_id: int | None = None,

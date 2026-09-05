@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
 from typer.testing import CliRunner
 
 from braindump.cli.main import app
@@ -18,6 +19,18 @@ def call_tool(name, arguments):
         if isinstance(structured, dict)
         else structured
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("search", {"status": "invalid"}),
+        ("list", {"since": "not-a-date"}),
+    ],
+)
+def test_mcp_rejects_invalid_search_filters(name, arguments):
+    with pytest.raises(Exception, match=r"(status|since)"):
+        call_tool(name, arguments)
 
 
 def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
