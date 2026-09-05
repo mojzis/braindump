@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import secrets
 from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
@@ -81,14 +82,15 @@ def carry_forward_scratchpad(prev_body: str) -> str:
     return scratchpad
 
 
-def numbered_lines_for_prompt(body: str) -> str:
-    """Render non-scratchpad lines as `"{idx}: {text}"` for the pass-1 prompt.
+def numbered_lines_for_prompt(
+    body: str, *, anchor_map: dict[str, tuple[int, str]] | None = None
+) -> str:
+    """Render non-scratchpad lines with opaque anchors for the pass-1 prompt.
 
-    `idx` is the 0-based index into `body.splitlines()` (i.e. the same
-    indexing `read_body().splitlines()` uses), so indexes stay valid for
-    `apply_annotations` even though scratchpad lines are excluded from the
-    rendered listing entirely. Lines already containing `[→` are still shown
-    (for context) but flagged as already digested.
+    When ``anchor_map`` is supplied it is populated with the generated
+    ``anchor -> (source index, source text)`` mapping used to validate the
+    model response. The random anchors make duplicate lines independently
+    addressable without exposing source indexes to the model.
     """
     lines = body.splitlines()
     idx = _scratchpad_start(lines)
@@ -96,9 +98,20 @@ def numbered_lines_for_prompt(body: str) -> str:
     rendered = []
     for i in range(limit):
         line = lines[i]
+        anchor = _new_anchor(anchor_map)
+        if anchor_map is not None:
+            anchor_map[anchor] = (i, line)
         suffix = "  [already digested]" if "[→" in line else ""
-        rendered.append(f"{i}: {line}{suffix}")
+        rendered.append(f"{anchor}: {line}{suffix}")
     return "\n".join(rendered)
+
+
+def _new_anchor(anchor_map: dict[str, tuple[int, str]] | None) -> str:
+    """Create an opaque per-snapshot anchor, avoiding the unlikely collision."""
+    while True:
+        anchor = f"a_{secrets.token_urlsafe(12)}"
+        if anchor_map is None or anchor not in anchor_map:
+            return anchor
 
 
 # --- edit distance -------------------------------------------------------
@@ -176,31 +189,61 @@ class ValidatedSection:
     items: list[ValidatedItem] = field(default_factory=list)
 
 
-def _resolve_anchor(snapshot_lines: list[str], raw: dict[str, Any]) -> str | None:
-    """Return the ground-truth journal line this item anchors to, or None.
+def _resolve_anchor_details(
+    snapshot_lines: list[str],
+    raw: dict[str, Any],
+    anchor_map: dict[str, tuple[int, str]] | None = None,
+) -> tuple[tuple[int, str] | None, str | None]:
+    if anchor_map is not None:
+        return _resolve_opaque_anchor(raw, anchor_map)
+    return _resolve_legacy_anchor(snapshot_lines, raw)
 
-    The model is asked to echo `line_text` verbatim, but it routinely strips a
-    leading bullet/number marker (``- foo`` -> ``foo``). Rather than silently
-    drop the item, accept the match when the model's text equals the snapshot
-    line after both are bullet-normalized, and always return the *snapshot*
-    line so downstream annotation anchors to the real, full line.
-    """
+
+def _resolve_opaque_anchor(
+    raw: dict[str, Any], anchor_map: dict[str, tuple[int, str]]
+) -> tuple[tuple[int, str] | None, str | None]:
+    anchor = raw.get("anchor")
+    if not isinstance(anchor, str) or not anchor:
+        return None, "missing_anchor"
+    resolved = anchor_map.get(anchor)
+    if resolved is None:
+        return None, "unknown_anchor"
+    _, actual = resolved
+    if "[→" in actual:
+        return None, "already_digested"
+    return resolved, None
+
+
+def _resolve_legacy_anchor(
+    snapshot_lines: list[str], raw: dict[str, Any]
+) -> tuple[tuple[int, str] | None, str | None]:
+    """Compatibility for direct callers using the pre-anchor item shape."""
     idx = raw.get("line")
     if not isinstance(idx, int) or isinstance(idx, bool):
-        return None
+        return None, "invalid_line_index"
     if idx < 0 or idx >= len(snapshot_lines):
-        return None
+        return None, "line_index_out_of_range"
     actual = snapshot_lines[idx]
     if "[→" in actual:
-        return None
+        return None, "already_digested"
     line_text = raw.get("line_text")
     if not isinstance(line_text, str):
-        return None
+        return None, "missing_line_text"
     if actual == line_text:
-        return actual
+        return (idx, actual), None
     if _normalize_sub_line(actual) == _normalize_sub_line(line_text):
-        return actual
-    return None
+        return (idx, actual), None
+    return None, "line_text_mismatch"
+
+
+def _resolve_anchor(
+    snapshot_lines: list[str],
+    raw: dict[str, Any],
+    anchor_map: dict[str, tuple[int, str]] | None = None,
+) -> str | None:
+    """Return the ground-truth journal line this item anchors to, or None."""
+    resolved, _ = _resolve_anchor_details(snapshot_lines, raw, anchor_map)
+    return resolved[1] if resolved is not None else None
 
 
 _BULLET_PREFIX_RE = re.compile(r"^\s*(?:[-*+•]|\d+[.)])\s+")
@@ -242,19 +285,22 @@ def _string_list(value: Any) -> list[str]:
     return [str(v) for v in value]
 
 
-def _validate_item(
-    snapshot_lines: list[str], raw: dict[str, Any]
-) -> ValidatedItem | None:
-    actual = _resolve_anchor(snapshot_lines, raw)
-    if actual is None:
-        return None
+def _validate_item_with_reason(
+    snapshot_lines: list[str],
+    raw: dict[str, Any],
+    anchor_map: dict[str, tuple[int, str]] | None = None,
+) -> tuple[ValidatedItem | None, str | None]:
+    resolved, reason = _resolve_anchor_details(snapshot_lines, raw, anchor_map)
+    if resolved is None:
+        return None, reason
+    line, actual = resolved
     if raw.get("type") not in ENTRY_TYPES:
-        return None
+        return None, "invalid_type"
     title = str(raw.get("title") or "").strip()
     if not title:
-        return None
+        return None, "missing_title"
     return ValidatedItem(
-        line=raw["line"],
+        line=line,
         line_text=actual,
         type=raw["type"],
         title=title,
@@ -262,18 +308,28 @@ def _validate_item(
         summary=str(raw.get("summary") or "").strip(),
         tags=_string_list(raw.get("tags")),
         sub_lines=_string_list(raw.get("sub_lines")),
-    )
+    ), None
+
+
+def _validate_item(
+    snapshot_lines: list[str], raw: dict[str, Any]
+) -> ValidatedItem | None:
+    """Validate one legacy/direct-call item without exposing its reason."""
+    item, _ = _validate_item_with_reason(snapshot_lines, raw)
+    return item
 
 
 def validate_pass1(
     snapshot_lines: list[str],
     data: dict[str, Any],
     existing_projects: Iterable[str],
+    *,
+    anchor_map: dict[str, tuple[int, str]] | None = None,
+    diagnostics: Counter[str] | None = None,
 ) -> list[ValidatedSection]:
     """Sanitize pass-1 model output against ground truth. Never trust the model.
 
-    - Drops items with an out-of-range `line` index.
-    - Drops items whose `line_text` doesn't exactly match `snapshot_lines[line]`.
+    - Drops items with a missing or unknown opaque anchor.
     - Drops items whose target line already contains `[→` (idempotency).
     - Slugifies each section's `project`, typo-folding onto an existing
       project name at Levenshtein distance <= 2; otherwise it's a new project.
@@ -284,16 +340,27 @@ def validate_pass1(
     # dicts preserve insertion order, so this alone tracks first-encountered order too
     merged: dict[str, list[ValidatedItem]] = {}
 
-    for section in data.get("sections", []):
+    raw_sections = data.get("sections", [])
+    if not isinstance(raw_sections, list):
+        return []
+    for section in raw_sections:
         if not isinstance(section, dict):
             continue
         project = _resolve_project_slug(str(section.get("project") or ""), existing)
-        items = [
-            validated
-            for raw in section.get("items", [])
-            if isinstance(raw, dict)
-            and (validated := _validate_item(snapshot_lines, raw)) is not None
-        ]
+        items = []
+        raw_items = section.get("items", [])
+        if not isinstance(raw_items, list):
+            continue
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            validated, reason = _validate_item_with_reason(
+                snapshot_lines, raw, anchor_map
+            )
+            if validated is not None:
+                items.append(validated)
+            elif diagnostics is not None and reason is not None:
+                diagnostics[reason] += 1
         if not items:
             continue
         merged.setdefault(project, []).extend(items)
@@ -348,8 +415,7 @@ def apply_annotations(
 # --- schemas -----------------------------------------------------------------
 
 _ITEM_PROPERTIES: dict[str, Any] = {
-    "line": {"type": "integer"},
-    "line_text": {"type": "string"},
+    "anchor": {"type": "string"},
     "type": {"type": "string", "enum": list(ENTRY_TYPES)},
     "title": {"type": "string"},
     "body": {"type": "string"},
@@ -372,7 +438,7 @@ PASS1_SCHEMA: dict[str, Any] = {
                         "items": {
                             "type": "object",
                             "properties": _ITEM_PROPERTIES,
-                            "required": ["line", "line_text", "type", "title"],
+                            "required": ["anchor", "type", "title"],
                         },
                     },
                 },
@@ -443,10 +509,10 @@ existing tags below over inventing new ones), and a one-line `summary`.
 `body` should lightly clean up typos/grammar while staying close to what was
 actually written — do not invent facts.
 
-Every item's `line` must be the exact 0-based index shown before the line's
-text below, and `line_text` must be an exact copy of that line's text
-(everything after the leading "N: ", not including any "[already digested]"
-flag)."""
+Every item's `anchor` must be an exact opaque anchor shown before the line's
+text below. Copy the anchor exactly; do not invent or alter it. Do not return
+the source line number or line text — Python resolves the anchor to the exact
+snapshot line."""
 
 
 def build_pass1_prompt(
@@ -471,7 +537,7 @@ def build_pass1_prompt(
 ## Frequently used tags
 {tag_line}
 
-## Today's journal (0-based line numbers)
+## Today's journal (opaque snapshot anchors)
 {numbered_lines}
 
 Return JSON matching the schema:
@@ -545,12 +611,100 @@ class ParseResult:
     sections: list[SectionResult] = field(default_factory=list)
     unanchored: list[Annotation] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    eligible: int = 0
     proposed: int = 0
     dropped: int = 0
+    validation_failures: Counter[str] = field(default_factory=Counter)
+    outcome: str = "finished"
+    retry_attempted: bool = False
+    retry_succeeded: bool = False
+    retry_exhausted: bool = False
+    warning: str | None = None
 
     @property
     def total_entries(self) -> int:
         return sum(len(s.entry_ids) for s in self.sections)
+
+
+@dataclass(frozen=True)
+class _Pass1Context:
+    cfg: Config
+    snapshot_lines: list[str]
+    snapshot_anchors: dict[str, tuple[int, str]]
+    existing_names: list[str]
+
+
+def _eligible_line_count(lines: Sequence[str]) -> int:
+    """Count non-empty, not-yet-annotated lines outside the scratchpad."""
+    return sum(1 for line in lines if line.strip() and "[→" not in line)
+
+
+def _proposal_count(data: dict[str, Any]) -> int:
+    sections = data.get("sections", [])
+    if not isinstance(sections, list):
+        return 0
+    total = 0
+    for section in sections:
+        if isinstance(section, dict) and isinstance(section.get("items"), list):
+            total += sum(1 for item in section["items"] if isinstance(item, dict))
+    return total
+
+
+def _retry_pass1_prompt(prompt: str, failures: Counter[str]) -> str:
+    details = ", ".join(f"{reason}: {count}" for reason, count in failures.items())
+    return f"""{prompt}
+
+Your previous response contained proposed candidates, but Python rejected every
+candidate during validation. Retry once, preserving the same opaque anchors
+exactly. Fix these validation problems: {details or "invalid candidate data"}.
+Return only corrected JSON matching the schema."""
+
+
+async def _retry_rejected_pass1(
+    runner: Runner,
+    prompt: str,
+    context: _Pass1Context,
+    result: ParseResult,
+) -> list[ValidatedSection]:
+    result.retry_attempted = True
+    try:
+        retry_data = await runner(
+            _retry_pass1_prompt(prompt, result.validation_failures),
+            cwd=context.cfg.home,
+            tools="",
+            json_schema=PASS1_SCHEMA,
+        )
+    except Exception as e:
+        result.errors.append(f"pass 1 retry failed: {e}")
+        retry_data = {"sections": []}
+    result.proposed += _proposal_count(retry_data)
+    retry_sections = validate_pass1(
+        context.snapshot_lines,
+        retry_data,
+        context.existing_names,
+        anchor_map=context.snapshot_anchors,
+        diagnostics=result.validation_failures,
+    )
+    result.dropped = sum(result.validation_failures.values())
+    if retry_sections:
+        result.retry_succeeded = True
+    else:
+        result.retry_exhausted = True
+        result.warning = (
+            "All proposed candidates were rejected during validation after one retry."
+        )
+    return retry_sections
+
+
+def _set_parse_outcome(result: ParseResult, sections: list[ValidatedSection]) -> None:
+    if not result.eligible:
+        result.outcome = "no_eligible"
+    elif not result.proposed:
+        result.outcome = "no_candidates"
+    elif not sections:
+        result.outcome = "validation_rejected"
+    else:
+        result.outcome = "created"
 
 
 def _merge_pass2(
@@ -669,13 +823,23 @@ async def run_parse(
 
     body = journal.read_body(cfg, day)
     snapshot_lines = body.splitlines()
+    snapshot_anchors: dict[str, tuple[int, str]] = {}
     result = ParseResult(day=day)
+    scratchpad_idx = _scratchpad_start(snapshot_lines)
+    eligible_lines = (
+        snapshot_lines[:scratchpad_idx]
+        if scratchpad_idx is not None
+        else snapshot_lines
+    )
+    result.eligible = _eligible_line_count(eligible_lines)
 
     project_stats = projects_mod.list_projects(cfg)
     top_tags = tags_mod.tag_frequency(cfg).most_common(20)
 
     pass1_prompt = build_pass1_prompt(
-        numbered_lines_for_prompt(body), project_stats, top_tags
+        numbered_lines_for_prompt(body, anchor_map=snapshot_anchors),
+        project_stats,
+        top_tags,
     )
     try:
         pass1_data = await runner(
@@ -683,22 +847,33 @@ async def run_parse(
         )
     except Exception as e:
         result.errors.append(f"pass 1 failed: {e}")
+        result.outcome = "error"
         return result
 
     existing_names = [p.name for p in project_stats]
-    sections = validate_pass1(snapshot_lines, pass1_data, existing_names)
-    local_dirs = {p.name: p.local_dir for p in project_stats}
-
-    result.proposed = sum(
-        sum(1 for it in s.get("items", []) if isinstance(it, dict))
-        for s in pass1_data.get("sections", [])
-        if isinstance(s, dict)
+    sections = validate_pass1(
+        snapshot_lines,
+        pass1_data,
+        existing_names,
+        anchor_map=snapshot_anchors,
+        diagnostics=result.validation_failures,
     )
+    local_dirs = {p.name: p.local_dir for p in project_stats}
+    pass1_context = _Pass1Context(
+        cfg=cfg,
+        snapshot_lines=snapshot_lines,
+        snapshot_anchors=snapshot_anchors,
+        existing_names=existing_names,
+    )
+
+    result.proposed = _proposal_count(pass1_data)
     kept = sum(len(s.items) for s in sections)
-    result.dropped = max(0, result.proposed - kept)
+    result.dropped = sum(result.validation_failures.values())
     logger.info(
-        "parse %s: pass 1 proposed %d item(s) in %d section(s); kept %d, dropped %d",
+        "parse %s: pass 1 eligible %d line(s), proposed %d item(s) in %d section(s); "
+        "kept %d, dropped %d",
         day,
+        result.eligible,
         result.proposed,
         len(sections),
         kept,
@@ -706,11 +881,34 @@ async def run_parse(
     )
     if result.dropped:
         logger.warning(
-            "parse %s: %d proposed item(s) dropped in validation "
-            "(line index / line_text mismatch or already digested)",
+            "parse %s: %d proposed item(s) dropped in validation: %s",
             day,
             result.dropped,
+            dict(result.validation_failures),
         )
+
+    if not sections and result.proposed and result.eligible:
+        retry_sections = await _retry_rejected_pass1(
+            runner,
+            pass1_prompt,
+            pass1_context,
+            result,
+        )
+        if retry_sections:
+            sections = retry_sections
+
+    _set_parse_outcome(result, sections)
+    logger.info(
+        "parse %s outcome=%s eligible=%d proposed=%d dropped=%d retry_attempted=%s "
+        "retry_succeeded=%s",
+        day,
+        result.outcome,
+        result.eligible,
+        result.proposed,
+        result.dropped,
+        result.retry_attempted,
+        result.retry_succeeded,
+    )
 
     for section in sections:
         _report(section.project, "queued")
