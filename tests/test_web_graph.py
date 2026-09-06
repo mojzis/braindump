@@ -178,6 +178,24 @@ async def test_pitch_lists_sort_priority_and_filter_unaudited(monkeypatch, cfg):
         "GET",
         "/entries?type=pitch&coverage=unaudited&sort=priority&dir=asc&all=1",
     )
+    default_form = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries?type=pitch&priority=&coverage=&all=1",
+    )
+    priority_with_blank_coverage = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries?type=pitch&priority=high&coverage=&all=1",
+    )
+    unaudited_with_blank_priority = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries?type=pitch&priority=&coverage=unaudited&all=1",
+    )
 
     assert pitches.status_code == 200
     assert pitches.text.index("High unaudited pitch") < pitches.text.index(
@@ -191,6 +209,12 @@ async def test_pitch_lists_sort_priority_and_filter_unaudited(monkeypatch, cfg):
     assert "High unaudited pitch" in filtered.text
     assert "Low audited pitch" not in filtered.text
     assert '<option value="unaudited" selected>' in filtered.text
+    assert "High unaudited pitch" in default_form.text
+    assert "Low audited pitch" in default_form.text
+    assert "High unaudited pitch" in priority_with_blank_coverage.text
+    assert "Low audited pitch" not in priority_with_blank_coverage.text
+    assert "High unaudited pitch" in unaudited_with_blank_priority.text
+    assert "Low audited pitch" not in unaudited_with_blank_priority.text
 
     invalid = await _request(monkeypatch, cfg, "GET", "/pitches?sort=bogus")
     assert invalid.status_code == 422

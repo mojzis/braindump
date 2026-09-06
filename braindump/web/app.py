@@ -279,6 +279,12 @@ def _csv(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+def _strip_or_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.strip() or None
+
+
 def _csv_ints(value: str | None) -> list[int]:
     return [int(v) for v in _csv(value)]
 
@@ -733,6 +739,8 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     cfg = load_config()
     active = projects.get_active_project(cfg)
     proj_filter = None if all_projects else (project or active)
+    priority = _strip_or_none(priority)
+    coverage = _strip_or_none(coverage)
     filters = query.SearchFilters(
         q=q or None,
         types=[type] if type else [],
@@ -1111,6 +1119,9 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
 ) -> dict:
     filters = set(spec.filter_controls)
     lifecycle = set(spec.lifecycle_controls)
+    priority = _strip_or_none(priority)
+    sort = sort if sort in spec.sort_keys else "date"
+    descending = direction != "asc"
     status = "all"
     if "all" in lifecycle:
         status = "all" if show_all else "open"
@@ -1124,6 +1135,8 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
             tags=[tag] if tag else [],
             priority=priority if "priority" in filters else None,
             status=status,
+            sort="priority" if sort == "priority" else "date",
+            direction="desc" if descending else "asc",
             limit=500,
             fulltext=False,
         ),
@@ -1135,9 +1148,11 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
         groups.setdefault(h.entry.project or "(none)", []).append(h)
     grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
 
-    sort = sort if sort in spec.sort_keys else "date"
-    descending = direction != "asc"
-    rows = sorted(hits, key=spec.sort_keys[sort], reverse=descending)
+    rows = (
+        hits
+        if sort == "priority"
+        else sorted(hits, key=spec.sort_keys[sort], reverse=descending)
+    )
 
     return _context(
         request,

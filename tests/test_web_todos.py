@@ -6,7 +6,8 @@ from html import unescape
 import httpx
 import pytest
 
-from braindump.core import entries
+from braindump.core import entries, store
+from braindump.core.schema import Entry
 from braindump.web.app import app
 
 
@@ -151,6 +152,72 @@ async def test_todos_priority_filter_and_sort(monkeypatch, cfg):
     sorted_rows = await _get("/todos?sort=priority&dir=asc")
     assert sorted_rows.text.index("high item") < sorted_rows.text.index("low item")
     assert f"/entries/{high.entry.id}" in sorted_rows.text
+
+    blank_filter = await _get("/todos?priority=")
+    assert "high item" in blank_filter.text
+    assert "low item" in blank_filter.text
+
+
+@pytest.mark.anyio
+async def test_todos_priority_sort_happens_before_500_row_limit(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    newer_unspecified = [
+        Entry(
+            id=entry_id,
+            type="todo",
+            title=f"overflow item {entry_id}",
+            file_path=f"2026/04/overflow-{entry_id}.md",
+            created_at="2026-04-12T12:00:00Z",
+            status="pending",
+        )
+        for entry_id in range(1, 502)
+    ]
+    old_high = Entry(
+        id=502,
+        type="todo",
+        title="old high priority",
+        file_path="2026/04/old-high-priority.md",
+        created_at="2026-04-11T12:00:00Z",
+        status="pending",
+        priority="high",
+    )
+    store.rewrite_index_atomic(cfg, "todos", [*newer_unspecified, old_high])
+
+    response = await _get("/todos?sort=priority&dir=asc")
+
+    assert response.status_code == 200
+    assert "old high priority" in response.text
+    assert "500 todos" in response.text
+
+
+@pytest.mark.anyio
+async def test_todos_descending_priority_keeps_noncanonical_values_last(
+    monkeypatch, cfg
+):
+    _set_home(monkeypatch, cfg)
+    priorities = ("high", "medium", "low", None, "urgent")
+    records = [
+        Entry(
+            id=entry_id,
+            type="todo",
+            title=f"priority {priority or 'unspecified'}",
+            file_path=f"2026/04/priority-{entry_id}.md",
+            created_at=f"2026-04-11T14:0{entry_id}:00Z",
+            status="pending",
+            priority=priority,
+        )
+        for entry_id, priority in enumerate(priorities, start=1)
+    ]
+    store.rewrite_index_atomic(cfg, "todos", records)
+
+    response = await _get("/todos?sort=priority&dir=desc")
+
+    body = response.text
+    assert response.status_code == 200
+    assert body.index("priority low") < body.index("priority medium")
+    assert body.index("priority medium") < body.index("priority high")
+    assert body.index("priority high") < body.index("priority urgent")
+    assert body.index("priority high") < body.index("priority unspecified")
 
 
 @pytest.mark.anyio
