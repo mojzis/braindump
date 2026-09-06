@@ -13,7 +13,8 @@ List recent braindump entries.
 The available planning types are initiative and pitch. Their active records
 use the same list command; use --status all or --status settled for history.
 Use `--priority` for todo/pitch priority filtering and `--coverage` for pitch
-coverage filtering.
+coverage filtering (`unaudited` matches pitches with no stored coverage). Use
+`--sort priority --direction asc` to put high-priority work first.
 
 ## Input
 

@@ -3,7 +3,7 @@
 {% block body %}
 <div class="entries-page">
   <h2>{{ index_title or "entries" }}</h2>
-  <form method="get" action="/entries" class="filters">
+  <form method="get" action="{{ list_action }}" class="filters">
     <input type="text" name="q" value="{{ q }}" placeholder="search…" />
     <select name="type">
       <option value="">all types</option>
@@ -27,6 +27,7 @@
     </select>
     <select name="coverage">
       <option value="">all coverage</option>
+      <option value="unaudited" {% if coverage == "unaudited" %}selected{% endif %}>unaudited</option>
       <option value="uncovered" {% if coverage == "uncovered" %}selected{% endif %}>uncovered</option>
       <option value="partial" {% if coverage == "partial" %}selected{% endif %}>partial</option>
       <option value="covered" {% if coverage == "covered" %}selected{% endif %}>covered</option>
@@ -39,13 +40,22 @@
     <input type="number" name="related_id" value="{{ related_id or '' }}" placeholder="related ID" />
     <input type="text" name="related_type" value="{{ related_type }}" placeholder="relation type" />
     <label><input type="checkbox" name="all" value="1" {% if all_projects_flag %}checked{% endif %} /> all projects</label>
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="dir" value="{{ dir }}" />
     <button type="submit">filter</button>
   </form>
 
   {% if hits %}
     <table class="entries-table">
       <thead>
-        <tr><th>id</th><th>date</th><th>type</th><th>status</th><th>priority</th><th>coverage</th><th>title</th><th>project</th><th>tags</th></tr>
+        {% set next_priority_dir = "desc" if sort == "priority" and dir == "asc" else "asc" %}
+        <tr><th>id</th><th>date</th><th>type</th><th>status</th>
+          <th class="{% if sort == 'priority' %}sorted{% endif %}">
+            <a href="{{ request.url.include_query_params(sort='priority', dir=next_priority_dir) }}">
+              priority{% if sort == "priority" %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
+            </a>
+          </th>
+          <th>coverage</th><th>title</th><th>project</th><th>tags</th></tr>
       </thead>
       <tbody>
       {% for h in hits %}

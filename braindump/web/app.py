@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import markdown as md
 import nh3
@@ -727,6 +727,8 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
+    sort: query.SortField = "date",
+    direction: Annotated[query.SortDirection, Query(alias="dir")] = "desc",
 ):
     cfg = load_config()
     active = projects.get_active_project(cfg)
@@ -744,6 +746,8 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         coverage=coverage,
         related_id=related_id,
         related_type=related_type,
+        sort=sort,
+        direction=direction,
         limit=100,
     )
 
@@ -771,30 +775,52 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
             coverage=coverage,
             related_id=related_id,
             related_type=related_type or "",
+            sort=sort,
+            dir=direction,
+            list_action="/entries",
         ),
     )
 
 
 @app.get("/initiatives", response_class=HTMLResponse)
-def initiatives_list(request: Request):
-    return _planning_list(request, "initiative", "initiatives")
+def initiatives_list(
+    request: Request,
+    sort: query.SortField = "date",
+    direction: Annotated[query.SortDirection, Query(alias="dir")] = "desc",
+):
+    return _planning_list(
+        request, "initiative", "initiatives", sort=sort, direction=direction
+    )
 
 
 @app.get("/pitches", response_class=HTMLResponse)
-def pitches_list(request: Request):
-    return _planning_list(request, "pitch", "pitches")
+def pitches_list(
+    request: Request,
+    sort: query.SortField = "date",
+    direction: Annotated[query.SortDirection, Query(alias="dir")] = "desc",
+):
+    return _planning_list(request, "pitch", "pitches", sort=sort, direction=direction)
 
 
-def _planning_list(request: Request, entry_type: str, title: str):
+def _planning_list(
+    request: Request,
+    entry_type: str,
+    title: str,
+    *,
+    sort: query.SortField,
+    direction: query.SortDirection,
+):
     cfg = load_config()
-    hits = [
-        hit
-        for hit in query.search(
-            cfg,
-            query.SearchFilters(types=[entry_type], status="all", limit=100),
-        )
-        if hit.entry.status == "active"
-    ]
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            types=[entry_type],
+            status="active",
+            sort=sort,
+            direction=direction,
+            limit=100,
+        ),
+    )
     all_projects_list = [
         p.name for p in projects.list_projects(cfg) if p.name != "(none)"
     ]
@@ -819,6 +845,9 @@ def _planning_list(request: Request, entry_type: str, title: str):
             related_type="",
             priority=None,
             coverage=None,
+            sort=sort,
+            dir=direction,
+            list_action="/entries",
         ),
     )
 

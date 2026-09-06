@@ -125,6 +125,31 @@ def test_update_entry_rewrites_title_and_index(cfg):
     assert stored[0].updated_at is not None
 
 
+@pytest.mark.parametrize(
+    ("entry_type", "type_dir"), (("todo", "todos"), ("pitch", "pitches"))
+)
+def test_update_preserves_unchanged_legacy_priority(cfg, entry_type, type_dir):
+    result = entries.create_entry(
+        cfg,
+        entry_type,
+        "Legacy priority",
+        "body",
+        type_fields={"priority": "high"},
+        now=_fake_now(),
+    )
+    result.entry.priority = "urgent"
+    store.rewrite_index_atomic(cfg, type_dir, [result.entry])
+
+    renamed = entries.update_entry(cfg, result.entry.id, {"title": "Renamed"})
+    unchanged = entries.update_entry(cfg, result.entry.id, {"priority": "urgent"})
+
+    assert renamed.priority == "urgent"
+    assert unchanged.priority == "urgent"
+    assert "priority: urgent" in result.full_path.read_text()
+    with pytest.raises(ValueError, match=f"{entry_type} priority"):
+        entries.update_entry(cfg, result.entry.id, {"priority": "critical"})
+
+
 def test_update_entry_replaces_body(cfg):
     r = entries.create_entry(
         cfg, "todos", "t", "old body content", project="p", now=_fake_now()

@@ -510,15 +510,21 @@ def _validate_canonical_fields(
     fields: dict[str, Any],
     *,
     relation_fields: set[str] | None = None,
+    validate_priority: bool = True,
 ) -> None:
     """Validate lifecycle values and typed numeric links before any write."""
-    _validate_status_and_state(entry_type, fields)
+    _validate_status_and_state(entry_type, fields, validate_priority=validate_priority)
     _validate_relation_fields(cfg, entry_type, fields, relation_fields)
 
 
-def _validate_status_and_state(entry_type: str, fields: dict[str, Any]) -> None:
+def _validate_status_and_state(
+    entry_type: str,
+    fields: dict[str, Any],
+    *,
+    validate_priority: bool = True,
+) -> None:
     priority = fields.get("priority")
-    if priority is not None:
+    if validate_priority and priority is not None:
         if entry_type not in {"todo", "pitch"}:
             raise ValueError("priority is only valid for todos and pitches")
         if priority not in PRIORITIES:
@@ -658,6 +664,7 @@ def update_entry(
         entry.type,
         merged,
         relation_fields=set(patch) & relation_fields_for_type,
+        validate_priority=("priority" in patch and patch["priority"] != entry.priority),
     )
     updated = Entry.model_validate(merged)
     updated.tags = drop_self_project_tag(updated.tags, updated.project)

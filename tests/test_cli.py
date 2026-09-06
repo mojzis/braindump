@@ -329,6 +329,68 @@ def test_cli_pitch_priority_coverage_and_filters(tmp_path, monkeypatch):
     assert found[1].coverage is None
 
 
+def test_cli_priority_sort_and_unaudited_filter(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Low audited",
+        "body",
+        type_fields={"priority": "low", "coverage": "covered"},
+    )
+    unaudited = entries.create_entry(
+        cfg, "pitch", "High unaudited", "body", type_fields={"priority": "high"}
+    )
+
+    listed = runner.invoke(
+        app,
+        [
+            "list",
+            "pitch",
+            "--sort",
+            "priority",
+            "--dir",
+            "asc",
+            "--limit",
+            "1",
+            "--json",
+        ],
+    )
+    searched = runner.invoke(
+        app, ["search", "--sort", "priority", "--dir", "asc", "--limit", "1"]
+    )
+    unaudited_list = runner.invoke(
+        app, ["list", "pitch", "--coverage", "unaudited", "--json"]
+    )
+    unaudited_search = runner.invoke(app, ["search", "--coverage", "unaudited"])
+
+    assert listed.exit_code == 0
+    assert json.loads(listed.output)["id"] == unaudited.entry.id
+    assert searched.exit_code == 0
+    assert json.loads(searched.output)["id"] == unaudited.entry.id
+    assert json.loads(unaudited_list.output)["id"] == unaudited.entry.id
+    assert json.loads(unaudited_search.output)["id"] == unaudited.entry.id
+
+
+def test_cli_sort_validation_and_coverage_help(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    invalid = runner.invoke(app, ["search", "--sort", "bogus"])
+    list_help = runner.invoke(app, ["list", "--help"], terminal_width=140)
+    search_help = runner.invoke(app, ["search", "--help"], terminal_width=140)
+
+    assert invalid.exit_code == 2
+    assert "sort must be one of" in invalid.output
+    for help_result in (list_help, search_help):
+        assert "--coverage" in help_result.output
+        assert "unaudited" in help_result.output
+        assert "uncovered" in help_result.output
+        assert "partial" in help_result.output
+        assert "covered" in help_result.output
+
+
 def test_cli_pitch_import_dry_run_then_import_and_confirm_source_removal(
     tmp_path, monkeypatch
 ):

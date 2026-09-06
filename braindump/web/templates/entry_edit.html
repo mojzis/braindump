@@ -17,6 +17,9 @@
         <select name="priority">
           <option value="">(unspecified)</option>
           {% for p in priorities %}<option value="{{ p }}" {% if entry.priority == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+          {% if entry.priority and entry.priority not in priorities %}
+            <option value="{{ entry.priority }}" selected>{{ entry.priority }} (legacy)</option>
+          {% endif %}
         </select>
       </label>
       <label>status
@@ -35,6 +38,9 @@
           <select name="priority">
             <option value="">(unspecified)</option>
             {% for p in priorities %}<option value="{{ p }}" {% if entry.priority == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+            {% if entry.priority and entry.priority not in priorities %}
+              <option value="{{ entry.priority }}" selected>{{ entry.priority }} (legacy)</option>
+            {% endif %}
           </select>
         </label>
         <label>coverage

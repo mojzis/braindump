@@ -307,28 +307,41 @@ def list_cmd(
     project_id: int | None = typer.Option(None, "--project-id"),
     initiative_id: int | None = typer.Option(None, "--initiative-id"),
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
-    priority: str | None = typer.Option(None, "--priority"),
-    coverage: str | None = typer.Option(None, "--coverage"),
+    priority: str | None = typer.Option(
+        None, "--priority", help="high, medium, or low"
+    ),
+    coverage: str | None = typer.Option(
+        None,
+        "--coverage",
+        help="unaudited, uncovered, partial, or covered",
+    ),
+    sort: str = typer.Option("date", "--sort", help="date or priority"),
+    direction: str = typer.Option("desc", "--direction", "--dir", help="asc or desc"),
 ):
-    """List recent entries (newest first)."""
+    """List recent entries."""
     cfg = load_config()
     types: list[str] = [type_to_dir(entry_type)] if entry_type else []
     proj = None if all_projects else _effective_project(project, cfg)
-    hits = query.search(
-        cfg,
-        query.SearchFilters(
-            types=types,
-            project=proj,
-            status=cast(StatusFilter, status),
-            project_id=project_id,
-            initiative_id=initiative_id,
-            pitch_id=pitch_id,
-            priority=priority,
-            coverage=coverage,
-            limit=limit,
-            fulltext=False,
-        ),
-    )
+    try:
+        hits = query.search(
+            cfg,
+            query.SearchFilters(
+                types=types,
+                project=proj,
+                status=cast(StatusFilter, status),
+                project_id=project_id,
+                initiative_id=initiative_id,
+                pitch_id=pitch_id,
+                priority=priority,
+                coverage=coverage,
+                sort=cast(query.SortField, sort),
+                direction=cast(query.SortDirection, direction),
+                limit=limit,
+                fulltext=False,
+            ),
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -380,8 +393,16 @@ def search(
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
     related_id: int | None = typer.Option(None, "--related-id"),
     related_type: str | None = typer.Option(None, "--related-type"),
-    priority: str | None = typer.Option(None, "--priority"),
-    coverage: str | None = typer.Option(None, "--coverage"),
+    priority: str | None = typer.Option(
+        None, "--priority", help="high, medium, or low"
+    ),
+    coverage: str | None = typer.Option(
+        None,
+        "--coverage",
+        help="unaudited, uncovered, partial, or covered",
+    ),
+    sort: str = typer.Option("date", "--sort", help="date or priority"),
+    direction: str = typer.Option("desc", "--direction", "--dir", help="asc or desc"),
 ):
     """Search across braindump entries."""
     cfg = load_config()
@@ -401,12 +422,17 @@ def search(
         related_type=related_type,
         priority=priority,
         coverage=coverage,
+        sort=cast(query.SortField, sort),
+        direction=cast(query.SortDirection, direction),
         since=_parse_date(since),
         until=_parse_date(until),
         limit=limit,
         fulltext=not no_fulltext,
     )
-    hits = query.search(cfg, filters)
+    try:
+        hits = query.search(cfg, filters)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if as_json:
         for h in hits:
             _emit_hit_json(h)

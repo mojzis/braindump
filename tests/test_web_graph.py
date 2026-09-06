@@ -68,6 +68,8 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
     assert (
         f'value="{pitch.entry.id}"' in capture.text or "active_pitches" in capture.text
     )
+    assert "prioritySelect.disabled = !priorityApplies" in capture.text
+    assert "coverageSelect.disabled = !coverageApplies" in capture.text
 
     todo = entries.create_entry(
         cfg,
@@ -142,6 +144,90 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
     assert project_page.status_code == 200
     assert f"/entries/{initiative.entry.id}" in project_page.text
     assert f"/entries/{pitch.entry.id}" in project_page.text
+
+
+@pytest.mark.anyio
+async def test_pitch_lists_sort_priority_and_filter_unaudited(monkeypatch, cfg):
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Low audited pitch",
+        "body",
+        type_fields={"status": "active", "priority": "low", "coverage": "partial"},
+        now=datetime(2026, 4, 11, 12),
+    )
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "High unaudited pitch",
+        "body",
+        type_fields={"status": "active", "priority": "high"},
+        now=datetime(2026, 4, 11, 11),
+    )
+
+    pitches = await _request(monkeypatch, cfg, "GET", "/pitches?sort=priority&dir=asc")
+    generic = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries?type=pitch&sort=priority&dir=asc&all=1",
+    )
+    filtered = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries?type=pitch&coverage=unaudited&sort=priority&dir=asc&all=1",
+    )
+
+    assert pitches.status_code == 200
+    assert pitches.text.index("High unaudited pitch") < pitches.text.index(
+        "Low audited pitch"
+    )
+    assert generic.text.index("High unaudited pitch") < generic.text.index(
+        "Low audited pitch"
+    )
+    assert "priority ▲" in pitches.text
+    assert "priority ▲" in generic.text
+    assert "High unaudited pitch" in filtered.text
+    assert "Low audited pitch" not in filtered.text
+    assert '<option value="unaudited" selected>' in filtered.text
+
+    invalid = await _request(monkeypatch, cfg, "GET", "/pitches?sort=bogus")
+    assert invalid.status_code == 422
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("entry_type", "type_dir"), (("todo", "todos"), ("pitch", "pitches"))
+)
+async def test_web_edit_preserves_selected_legacy_priority(
+    monkeypatch, cfg, entry_type, type_dir
+):
+    result = entries.create_entry(
+        cfg,
+        entry_type,
+        "Legacy priority",
+        "body",
+        type_fields={"priority": "high"},
+    )
+    result.entry.priority = "urgent"
+    store.rewrite_index_atomic(cfg, type_dir, [result.entry])
+
+    edit = await _request(monkeypatch, cfg, "GET", f"/entries/{result.entry.id}/edit")
+    updated = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{result.entry.id}",
+        data={"title": "Renamed", "priority": "urgent"},
+    )
+
+    assert '<option value="urgent" selected>urgent (legacy)</option>' in edit.text
+    assert updated.status_code == 200
+    stored = entries.find_by_id(cfg, result.entry.id)
+    assert stored is not None
+    assert stored[1].title == "Renamed"
+    assert stored[1].priority == "urgent"
 
 
 @pytest.mark.anyio

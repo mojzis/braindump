@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+import pytest
+
 from braindump.core import entries, query
 
 
@@ -116,6 +118,22 @@ def test_search_filter_by_priority_and_pitch_coverage(cfg):
     assert [hit.entry.title for hit in covered] == ["Covered high pitch"]
 
 
+def test_search_filter_by_unaudited_pitch_coverage(cfg):
+    entries.create_entry(cfg, "pitch", "Unaudited pitch", "body")
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Audited pitch",
+        "body",
+        type_fields={"coverage": "covered"},
+    )
+    entries.create_entry(cfg, "todo", "Todo has no coverage", "body")
+
+    hits = query.search(cfg, query.SearchFilters(coverage="unaudited"))
+
+    assert [hit.entry.title for hit in hits] == ["Unaudited pitch"]
+
+
 def test_search_date_range(cfg):
     _seed(cfg)
     hits = query.search(
@@ -131,6 +149,44 @@ def test_search_sorts_newest_first(cfg):
     hits = query.search(cfg, query.SearchFilters())
     titles = [h.entry.title for h in hits]
     assert titles == ["Ripgrep glob trick", "Fix auth bug", "Ship deploy pipeline"]
+
+
+def test_search_sorts_priority_before_limiting(cfg):
+    for minute, (title, priority) in enumerate(
+        (("low", "low"), ("medium", "medium"), ("high", "high")), start=1
+    ):
+        entries.create_entry(
+            cfg,
+            "todo",
+            title,
+            "body",
+            type_fields={"priority": priority},
+            now=datetime(2026, 4, 11, 14, minute),
+        )
+
+    highest = query.search(
+        cfg,
+        query.SearchFilters(sort="priority", direction="asc", limit=1),
+    )
+    lowest = query.search(
+        cfg,
+        query.SearchFilters(sort="priority", direction="desc", limit=1),
+    )
+
+    assert [hit.entry.title for hit in highest] == ["high"]
+    assert [hit.entry.title for hit in lowest] == ["low"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (("sort", "bogus", "sort must be"), ("direction", "sideways", "direction must be")),
+)
+def test_search_rejects_invalid_sort_options(cfg, field, value, message):
+    filters = query.SearchFilters()
+    setattr(filters, field, value)
+
+    with pytest.raises(ValueError, match=message):
+        query.search(cfg, filters)
 
 
 def test_search_multi_word_and(cfg):
