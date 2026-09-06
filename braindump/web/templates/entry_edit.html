@@ -13,6 +13,15 @@
       <label>project <input type="text" name="project" value="{{ entry.project or '' }}" list="project-datalist" /></label>
     {% endif %}
     {% if entry.type == "todo" %}
+      <label>priority
+        <select name="priority">
+          <option value="">(unspecified)</option>
+          {% for p in priorities %}<option value="{{ p }}" {% if entry.priority == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+          {% if entry.priority and entry.priority not in priorities %}
+            <option value="{{ entry.priority }}" selected>{{ entry.priority }} (legacy)</option>
+          {% endif %}
+        </select>
+      </label>
       <label>status
         <select name="status">
           {% for s in todo_statuses %}
@@ -24,6 +33,23 @@
         </select>
       </label>
     {% elif entry.type in ("initiative", "pitch") %}
+      {% if entry.type == "pitch" %}
+        <label>priority
+          <select name="priority">
+            <option value="">(unspecified)</option>
+            {% for p in priorities %}<option value="{{ p }}" {% if entry.priority == p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+            {% if entry.priority and entry.priority not in priorities %}
+              <option value="{{ entry.priority }}" selected>{{ entry.priority }} (legacy)</option>
+            {% endif %}
+          </select>
+        </label>
+        <label>coverage
+          <select name="coverage">
+            <option value="">(unaudited)</option>
+            {% for c in pitch_coverages %}<option value="{{ c }}" {% if entry.coverage == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+          </select>
+        </label>
+      {% endif %}
       <label>status
         <select name="status">
           {% for s in ("active", "done") %}

@@ -3,7 +3,7 @@
 {% block body %}
 <div class="entries-page">
   <h2>{{ index_title or "entries" }}</h2>
-  <form method="get" action="/entries" class="filters">
+  <form method="get" action="{{ list_action }}" class="filters">
     <input type="text" name="q" value="{{ q }}" placeholder="search…" />
     <select name="type">
       <option value="">all types</option>
@@ -19,6 +19,19 @@
       <option value="active" {% if status == "active" %}selected{% endif %}>active</option>
       <option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>cancelled</option>
     </select>
+    <select name="priority">
+      <option value="">all priorities</option>
+      <option value="high" {% if priority == "high" %}selected{% endif %}>high</option>
+      <option value="medium" {% if priority == "medium" %}selected{% endif %}>medium</option>
+      <option value="low" {% if priority == "low" %}selected{% endif %}>low</option>
+    </select>
+    <select name="coverage">
+      <option value="">all coverage</option>
+      <option value="unaudited" {% if coverage == "unaudited" %}selected{% endif %}>unaudited</option>
+      <option value="uncovered" {% if coverage == "uncovered" %}selected{% endif %}>uncovered</option>
+      <option value="partial" {% if coverage == "partial" %}selected{% endif %}>partial</option>
+      <option value="covered" {% if coverage == "covered" %}selected{% endif %}>covered</option>
+    </select>
     <input type="text" name="project" value="{{ project }}" list="project-datalist" placeholder="project" />
     <input type="text" name="tag" value="{{ tag }}" placeholder="tag" />
     <input type="number" name="project_id" value="{{ project_id or '' }}" placeholder="project ID" />
@@ -27,13 +40,22 @@
     <input type="number" name="related_id" value="{{ related_id or '' }}" placeholder="related ID" />
     <input type="text" name="related_type" value="{{ related_type }}" placeholder="relation type" />
     <label><input type="checkbox" name="all" value="1" {% if all_projects_flag %}checked{% endif %} /> all projects</label>
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="dir" value="{{ dir }}" />
     <button type="submit">filter</button>
   </form>
 
   {% if hits %}
     <table class="entries-table">
       <thead>
-        <tr><th>id</th><th>date</th><th>type</th><th>status</th><th>title</th><th>project</th><th>tags</th></tr>
+        {% set next_priority_dir = "desc" if sort == "priority" and dir == "asc" else "asc" %}
+        <tr><th>id</th><th>date</th><th>type</th><th>status</th>
+          <th class="{% if sort == 'priority' %}sorted{% endif %}">
+            <a href="{{ request.url.include_query_params(sort='priority', dir=next_priority_dir) }}">
+              priority{% if sort == "priority" %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
+            </a>
+          </th>
+          <th>coverage</th><th>title</th><th>project</th><th>tags</th></tr>
       </thead>
       <tbody>
       {% for h in hits %}
@@ -42,6 +64,8 @@
           <td>{{ (h.entry.created_at or "")[:10] }}</td>
           <td>{{ h.entry.type }}</td>
           <td>{{ h.entry.status or "" }}</td>
+          <td>{{ h.entry.priority or "" }}</td>
+          <td>{{ h.entry.coverage or ("unaudited" if h.entry.type == "pitch" else "") }}</td>
           <td><a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a></td>
           <td>{{ h.entry.project or "" }}</td>
           <td class="muted">{{ h.entry.tags | join(", ") }}</td>
