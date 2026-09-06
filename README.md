@@ -18,14 +18,14 @@ cd ~/git/braindump
 ```
 
 This will:
-1. `uv tool install` the `bd` CLI (with the `web` extra for the local UI)
-2. Copy Claude skills to `~/.claude/skills/`
+1. `uv tool install` the `bd` CLI and stdio MCP server (with `web` for the local UI)
+2. Install the shared skills to `~/.claude/skills/` and `~/.codex/skills/`
 3. Seed the data directory at `~/braindump/` with empty indexes for each type
 4. Drop optional session-tracking scripts into `~/braindump/scripts/`
 
 ### How the `uv tool` install works
 
-`bd` is installed as a [uv tool](https://docs.astral.sh/uv/concepts/tools/): uv
+`bd` and `bd-mcp` are installed as [uv tools](https://docs.astral.sh/uv/concepts/tools/): uv
 builds the package from this directory and drops it into its **own isolated
 environment** under `~/.local/share/uv/tools/braindump/`, then puts a `bd`
 shim on your `PATH` at `~/.local/bin/bd`.
@@ -44,13 +44,14 @@ extras:
 
 ```bash
 cd ~/git/braindump
-uv tool install --force --reinstall --no-cache ".[web]"      # CLI + bd serve
-uv tool install --force --reinstall --no-cache ".[app]"      # + bd app desktop window
+uv tool install --force --reinstall --no-cache ".[mcp]"        # CLI + MCP stdio server
+uv tool install --force --reinstall --no-cache ".[web,mcp]"    # CLI + bd serve + MCP
+uv tool install --force --reinstall --no-cache ".[app,mcp]"    # + bd app desktop window + MCP
 ```
 
 Extras are not cumulative across installs — each `uv tool install` replaces the
 environment, so pass every extra you want in one go (`".[app]"` already pulls in
-`[web]`). Missing extras show up as import errors at run time:
+`[web]`; add `mcp` when you need the server). Missing extras show up as import errors at run time:
 `ModuleNotFoundError: No module named 'uvicorn'` means a `bd` installed without
 `[web]`. Running `./install.sh` does the `[web]` install for you.
 
@@ -91,7 +92,8 @@ bd app                                # same UI in native Journal + Todos window
 - Per-project dashboards with open todos, recent activity, and tag counts
 - Active-project focus mode applied across every view
 
-Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` for help.
+Keyboard shortcuts: `g d`, `g j`, `g t` for todos, `g l` for TILs, `g c`,
+`g e`, `g i` to focus entry ID, `g p`, `/` to focus search, `?` for help.
 
 ### Desktop windows
 
@@ -160,6 +162,40 @@ Start a new Claude Code session after installation. Available:
 | `/bd-digest [date]` | Digest a journal day into structured per-project entries |
 
 All of them delegate to the same `bd` CLI, so what you see in the web UI is exactly what the skills produce.
+
+### MCP clients
+
+The installer includes the `bd-mcp` stdio server. Point an MCP client at this
+checkout (or at the installed `bd-mcp` command) and set `BRAINDUMP_DIR` if your
+data is not in `~/braindump`.
+
+Claude Code project configuration (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "braindump": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/braindump", "--extra", "mcp", "bd-mcp"]
+    }
+  }
+}
+```
+
+Codex configuration (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.braindump]
+command = "uv"
+args = ["run", "--directory", "/path/to/braindump", "--extra", "mcp", "bd-mcp"]
+```
+
+The MCP tools use the same service contract as the CLI for entry, project, tag,
+and journal operations. Test with an isolated store before using real data:
+
+```bash
+BRAINDUMP_DIR="$(mktemp -d)" bd-mcp
+```
 
 ## Data layout
 

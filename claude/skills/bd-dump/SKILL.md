@@ -65,7 +65,7 @@ $ARGUMENTS
    rm -f "$OI"
    ```
 
-   Add type-specific flags as needed: `--status`, `--subtype`, `--priority`, `--category`, `--source`, `--mood`, `--related-to`, `--prompt-type`, `--model-target`.
+   Add type-specific flags as needed: `--status`, `--subtype`, `--priority`, `--coverage` (pitches), `--category`, `--source`, `--mood`, `--related-to`, `--prompt-type`, `--model-target`.
 
 ## Output
 

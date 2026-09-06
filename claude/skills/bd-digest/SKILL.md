@@ -99,7 +99,7 @@ For each line you decided to digest:
   rm -f "$OI"
   ```
 
-  Add type-specific flags as needed (`--status`, `--subtype`, `--priority`, `--category`, `--source`, `--mood`, `--related-to`, `--prompt-type`, `--model-target`).
+  Add type-specific flags as needed (`--status`, `--subtype`, `--priority`, `--coverage` for pitches, `--category`, `--source`, `--mood`, `--related-to`, `--prompt-type`, `--model-target`).
 
 ### 6. Look up the new entry id and mark the journal line
 

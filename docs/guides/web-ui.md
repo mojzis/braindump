@@ -48,8 +48,8 @@ the right-click menu still works.
 | `/` | Dashboard — today's journal preview, open todos, recent activity, top tags, projects |
 | `/journal` | The running doc: today's editor on top, the last ~7 days rendered below with lazy-load-on-scroll, autosave, `✳ parse`, and a "finish the day" button |
 | `/journal/<YYYY-MM-DD>` | Read-only permalink for a single past day |
-| `/capture` | Quick-capture form (type, title, body, tags, project) |
-| `/entries` | Searchable / filterable list |
+| `/capture` | Quick-capture form (type, title, body, tags, project, priority, and pitch coverage) |
+| `/entries` | Searchable / filterable list, including priority and pitch coverage |
 | `/entries/<id>` | View + edit-in-place (title, tags, project, status, body) |
 | `/projects`, `/projects/<name>` | Project inventory and per-project dashboards |
 | `/tags` | Tag analytics |
@@ -59,6 +59,10 @@ detail routes. Their relations render as ID-backed links; stale links remain
 visible as missing-reference warnings. The web UI does not import or remove
 external pitch files: curated import and its separate source-removal
 confirmation are CLI operations.
+
+Pitch coverage is entered and audited manually. Missing coverage is unaudited;
+`covered` asserts that each remaining deliverable has a linked Braindump todo or
+Linear ticket. The web UI does not calculate coverage or integrate with Linear.
 
 Cockpit-facing state remains local and minimal. A todo in in-qa can receive a
 pass/fail receipt through bd qa; the durable fields are qa_result,
@@ -71,8 +75,11 @@ copied into braindump.
 |------|--------|
 | `g d` | Dashboard |
 | `g j` | Journal |
+| `g t` | Todos |
+| `g l` | TILs |
 | `g c` | Capture |
 | `g e` | Entries |
+| `g i` | Focus entry ID |
 | `g p` | Projects |
 | `/` | Focus search |
 | `⌘ / Ctrl + Enter` | Parse (on the journal page) |

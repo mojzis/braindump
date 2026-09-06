@@ -128,7 +128,7 @@ async def test_tils_links_preserve_combined_filters(monkeypatch, cfg):
     r = await _get("/tils?q=python+fact&project=alpha&tag=urgent&sort=category&dir=asc")
     body = unescape(r.text)
 
-    assert 'href="/tils?q=python%20fact&sort=category&dir=asc"' in body
+    assert 'class="ghost-btn" href="/tils?sort=category&dir=asc"' in body
     assert (
         'href="/tils?q=python%20fact&project=alpha&tag=urgent&sort=category&dir=asc"'
         in body

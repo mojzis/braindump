@@ -46,6 +46,20 @@
       </select>
     </label>
 
+    <label id="field-priority">priority
+      <select name="priority" id="priority-select">
+        <option value="">(unspecified)</option>
+        {% for p in priorities %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+      </select>
+    </label>
+
+    <label id="field-coverage">pitch coverage
+      <select name="coverage" id="coverage-select">
+        <option value="">(unaudited)</option>
+        {% for c in pitch_coverages %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </label>
+
     <fieldset id="relation-fields">
       <legend>relations</legend>
       <label>related projects (IDs, comma-separated)
@@ -122,6 +136,10 @@
   var projFields = document.getElementById("project-fields");
     var projRef = document.getElementById("field-project");
   var status = document.getElementById("field-status");
+  var priority = document.getElementById("field-priority");
+  var coverage = document.getElementById("field-coverage");
+  var prioritySelect = document.getElementById("priority-select");
+  var coverageSelect = document.getElementById("coverage-select");
   var relationFields = document.getElementById("relation-fields");
   var qaFields = document.getElementById("qa-fields");
   function sync() {
@@ -130,6 +148,12 @@
     // A project entry does not belong to itself — hide the "project" reference field.
     projRef.style.display = isProject ? "none" : "";
     status.style.display = isProject ? "none" : "";
+    var priorityApplies = sel.value === "todo" || sel.value === "pitch";
+    var coverageApplies = sel.value === "pitch";
+    priority.style.display = priorityApplies ? "" : "none";
+    prioritySelect.disabled = !priorityApplies;
+    coverage.style.display = coverageApplies ? "" : "none";
+    coverageSelect.disabled = !coverageApplies;
     relationFields.style.display = (sel.value === "initiative" || sel.value === "pitch" || sel.value === "todo") ? "" : "none";
     qaFields.style.display = (sel.value === "todo" || sel.value === "pitch") ? "" : "none";
   }

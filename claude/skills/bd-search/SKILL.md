@@ -1,7 +1,7 @@
 ---
 description: Search braindump entries
 allowed-tools: Bash, Read
-argument-hint: <query...> [type] [--open|--done]
+argument-hint: <query...> [type] [--status open|--status done]
 ---
 
 # Braindump Search
@@ -13,6 +13,9 @@ Search across all braindump entries.
 Planning filters are ID-based: use --initiative-id, --pitch-id, or
 --related-id/--related-type. Use --status open for unsettled entries and
 --status settled for done/cancelled todos.
+Use `--priority` for todo/pitch priority and `--coverage` for pitch coverage;
+`--coverage unaudited` matches pitches with no stored coverage. Use
+`--sort priority --direction asc` to put high-priority results first.
 
 ## Input
 
