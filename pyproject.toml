@@ -9,7 +9,7 @@ authors = [{ name = "Matous Mojzis" }]
 dependencies = [
     "markdown>=3.10.3",
     "nh3>=0.3.7",
-    "pydantic>=2.13.4",
+    "pydantic>=2.13.5",
     "typer>=0.27.2",
 ]
 
@@ -47,7 +47,7 @@ dev = [
     "pytest-cov",
     "freezegun>=1.5.5",
     "httpx>=0.28.1",
-    "ruff>=0.16.4",
+    "ruff>=0.16.5",
     "ty>=0.0.75",
     "vulture",
     "biston>=0.7.0",
