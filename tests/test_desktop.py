@@ -55,6 +55,20 @@ class _StubWebview:
     """Stand-in for the pywebview module."""
 
     def __init__(self):
+        self.screens = [
+            types.SimpleNamespace(
+                x=-1920,
+                y=100,
+                width=1920,
+                height=1080,
+                frame=types.SimpleNamespace(
+                    X=-1920,
+                    Y=125,
+                    Width=1920,
+                    Height=1055,
+                ),
+            )
+        ]
         self.windows: list[tuple[str, str]] = []
         self.window_objects: list[_StubWindow] = []
         self.window_kwargs: list[dict] = []
@@ -198,6 +212,59 @@ def test_launch_detached_still_detects_a_crash_behind_a_running_server(
 # --- run_app ---------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("work_area", "expected"),
+    [
+        (
+            desktop._Rect(0, 0, 1920, 1040),
+            (
+                desktop._Rect(260, 45, 700, 950),
+                desktop._Rect(960, 45, 700, 950),
+            ),
+        ),
+        (
+            desktop._Rect(-1920, 25, 1920, 1055),
+            (
+                desktop._Rect(-1660, 77, 700, 950),
+                desktop._Rect(-960, 77, 700, 950),
+            ),
+        ),
+        (
+            desktop._Rect(100, 50, 800, 600),
+            (
+                desktop._Rect(134, 50, 700, 600),
+                desktop._Rect(166, 50, 700, 600),
+            ),
+        ),
+        (
+            desktop._Rect(-800, -200, 600, 500),
+            (
+                desktop._Rect(-800, -200, 568, 500),
+                desktop._Rect(-768, -200, 568, 500),
+            ),
+        ),
+    ],
+    ids=["large", "large-negative-origin", "small", "small-negative-origin"],
+)
+def test_window_rects_stay_inside_work_area(work_area, expected):
+    rects = desktop._window_rects(work_area)
+
+    assert rects == expected
+    for rect in rects:
+        assert (
+            work_area.x
+            <= rect.x
+            <= rect.x + rect.width
+            <= work_area.x + work_area.width
+        )
+        assert (
+            work_area.y
+            <= rect.y
+            <= rect.y + rect.height
+            <= work_area.y + work_area.height
+        )
+
+
 def test_run_app_attaches_to_an_already_running_server(monkeypatch):
     stub = _StubWebview()
     monkeypatch.setattr(desktop, "_import_webview", lambda: stub)
@@ -217,7 +284,11 @@ def test_run_app_attaches_to_an_already_running_server(monkeypatch):
     assert [
         (kwargs["x"], kwargs["y"], kwargs["width"], kwargs["height"])
         for kwargs in stub.window_kwargs
-    ] == [(0, 0, 700, 950), (700, 0, 700, 950)]
+    ] == [(260, 77, 700, 950), (960, 77, 700, 950)]
+    assert [kwargs["screen"] for kwargs in stub.window_kwargs] == [
+        stub.screens[0],
+        stub.screens[0],
+    ]
     assert stub.started
 
 

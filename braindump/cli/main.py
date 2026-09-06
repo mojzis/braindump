@@ -1099,13 +1099,14 @@ def app_cmd(
         False,
         "--foreground",
         "-f",
-        help="Stay attached to this terminal instead of detaching.",
+        help="Stay attached until both windows close instead of detaching.",
     ),
 ):
-    """Run the web UI in a native desktop window (pywebview).
+    """Open Journal and Todos in separate native windows (pywebview).
 
-    Detaches by default: the window keeps running after the shell that started
-    it closes, and its output goes to `~/braindump/.bd-app.log`.
+    They share one local server and one pywebview event loop. Detaches by
+    default; an owned server stops only after both windows close. Output goes
+    to `~/braindump/.bd-app.log`.
     """
     # optional [app] dep — imported lazily
     from braindump.web.desktop import launch_detached, run_app  # noqa: PLC0415

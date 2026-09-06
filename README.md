@@ -46,7 +46,7 @@ extras:
 cd ~/git/braindump
 uv tool install --force --reinstall --no-cache ".[mcp]"        # CLI + MCP stdio server
 uv tool install --force --reinstall --no-cache ".[web,mcp]"    # CLI + bd serve + MCP
-uv tool install --force --reinstall --no-cache ".[app,mcp]"    # + bd app desktop window + MCP
+uv tool install --force --reinstall --no-cache ".[app,mcp]"    # + bd app desktop windows + MCP
 ```
 
 Extras are not cumulative across installs — each `uv tool install` replaces the
@@ -104,7 +104,7 @@ Todos windows open side by side by default, using one local server and one event
 loop. It's not a packaged/bundled build: it just starts the server and points
 both windows at it.
 
-It **detaches by default** — the command returns immediately, the window keeps
+It **detaches by default** — the command returns immediately, the windows keep
 running after you close the terminal, and anything the process prints goes to
 `~/braindump/.bd-app.log`:
 

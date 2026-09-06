@@ -32,7 +32,7 @@ app = [
     # wire the window's copy menu, so it's a dependency of ours too.
     "qtpy>=2.4.3",
     # Same story on macOS: pywebview pulls pyobjc in there regardless, but
-    # desktop.py imports Foundation itself to rename the app bundle.
+    # desktop.py imports AppKit/Foundation for screen geometry and app naming.
     "pyobjc-framework-Cocoa>=12.2.2; sys_platform=='darwin'",
 ]
 
@@ -114,7 +114,7 @@ exclude = ["scripts/**", "tests/**", "**/conftest.py"]
 # optional-extra deps loaded lazily inside desktop.py — teach deptry the
 # mapping so they aren't flagged. (pyobjc-framework-Cocoa ships more modules
 # than Foundation; only the one braindump imports is worth listing.)
-package_module_name_map = {"pywebview" = ["webview"], "pyobjc-framework-Cocoa" = ["Foundation"]}
+package_module_name_map = {"pywebview" = ["webview"], "pyobjc-framework-Cocoa" = ["AppKit", "Foundation"]}
 
 [tool.deptry.per_rule_ignores]
 # braindump self-references its own `web` extra from the `app` extra.

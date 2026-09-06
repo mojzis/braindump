@@ -14,6 +14,10 @@ bd app                           # same UI in native Journal + Todos windows ([a
 by default. Both windows use that one server and one event loop — a convenience
 wrapper, not a packaged build.
 
+If `bd app` owns the server, it stops only after both windows close. If the
+windows attach to an existing `bd serve` or `bd app`, they leave that server
+running when they close.
+
 On macOS it also renames itself: without a .app bundle of its own, the windows
 would introduce themselves as `Python 3.14` in the ⌘-tab switcher and `Python`
 in the menu bar. `bd app` overwrites both bundle keys

@@ -21,7 +21,7 @@ bd journal today | append | close | show <YYYY-MM-DD>
 bd tags stats | show <tag>
 bd doctor                              # validate indexes
 bd serve [--host 127.0.0.1] [--port 8765]
-bd app   [--host 127.0.0.1] [--port 8765]   # same UI in a native pywebview window
+bd app   [--host 127.0.0.1] [--port 8765]   # native Journal + Todos windows
 ```
 
 ## Creating entries
@@ -195,5 +195,10 @@ bd doctor                        # validate that JSONL indexes match the markdow
 ```bash
 bd serve                         # http://127.0.0.1:8765/
 bd serve --host 0.0.0.0 --port 9000
-bd app                           # same UI in a native desktop window (needs the [app] extra)
+bd app                           # separate native Journal + Todos windows ([app] extra)
 ```
+
+The two `bd app` windows share one local server and one pywebview event loop.
+When `bd app` owns the server, it stops only after both windows close. When the
+windows attach to an existing `bd serve` or `bd app`, they leave that server
+running when they close.
