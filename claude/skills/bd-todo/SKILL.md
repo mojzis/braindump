@@ -65,7 +65,7 @@ $ARGUMENTS
    rm -f "$OI"
    ```
 
-   Repeat `--tag` per tag. Add `--priority` only if relevant.
+   Repeat `--tag` per tag. Add `--priority` (`high`, `medium`, or `low`) only if relevant.
 
 ## Output
 

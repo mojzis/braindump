@@ -156,6 +156,7 @@ The `input` field always contains the original user input exactly as provided. `
 - **prompt**: `prompt_type` (system/user/template/example), `model_target`
 - **project**: `description`, `state` (`active`/`paused`/`archived`), `local_dir`, `tech_stack` (list of strings). A project entry's own `project` field is always `null`.
 - **journal**: `date` (YYYY-MM-DD), `word_count` — one entry per day, file is `journal/YYYY/MM/YYYY-MM-DD.md`
+- **pitch**: `priority` (high/medium/low), optional `coverage` (`uncovered`, `partial`, `covered`). Missing coverage is unaudited; `covered` is a manual assertion that each remaining deliverable has a linked Braindump todo or Linear ticket.
 
 ## File Naming Convention
 

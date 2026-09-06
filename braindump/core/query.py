@@ -42,6 +42,14 @@ StatusFilter = Literal[
     "postponed",
     "active",
 ]
+SortField = Literal["date", "priority"]
+SortDirection = Literal["asc", "desc"]
+
+_SORT_FIELDS = ("date", "priority")
+_SORT_DIRECTIONS = ("asc", "desc")
+_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+_MISSING_PRIORITY_RANK = len(_PRIORITY_ORDER)
+_LOW_PRIORITY_RANK = _MISSING_PRIORITY_RANK - 1
 
 
 @dataclass
@@ -52,12 +60,16 @@ class SearchFilters:
     project_id: int | None = None
     initiative_id: int | None = None
     pitch_id: int | None = None
+    priority: str | None = None
+    coverage: str | None = None
     related_id: int | None = None
     related_type: str | None = None
     status: StatusFilter = "all"
     tags: list[str] = field(default_factory=list)
     since: date | None = None
     until: date | None = None
+    sort: SortField = "date"
+    direction: SortDirection = "desc"
     limit: int = 50
     offset: int = 0
     fulltext: bool = True
@@ -79,6 +91,10 @@ def _created_date(entry: Entry) -> date | None:
 def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
     if not _entry_matches_relations(entry, f) or not _entry_matches_status(entry, f):
         return False
+    if f.priority is not None and entry.priority != f.priority:
+        return False
+    if not _entry_matches_coverage(entry, f.coverage):
+        return False
     if f.tags:
         entry_tags = set(entry.tags or [])
         if not all(t in entry_tags for t in f.tags):
@@ -92,6 +108,14 @@ def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
         if f.until and d > f.until:
             return False
     return True
+
+
+def _entry_matches_coverage(entry: Entry, coverage: str | None) -> bool:
+    if coverage is None:
+        return True
+    if coverage == "unaudited":
+        return entry.type == "pitch" and entry.coverage is None
+    return entry.coverage == coverage
 
 
 def _entry_matches_relations(entry: Entry, f: SearchFilters) -> bool:
@@ -168,7 +192,33 @@ class Hit:
     type_dir: str = ""
 
 
+def _validate_sort(f: SearchFilters) -> None:
+    if f.sort not in _SORT_FIELDS:
+        raise ValueError(f"sort must be one of {list(_SORT_FIELDS)}")
+    if f.direction not in _SORT_DIRECTIONS:
+        raise ValueError(f"direction must be one of {list(_SORT_DIRECTIONS)}")
+
+
+def _priority_sort_key(hit: Hit, direction: SortDirection) -> tuple[bool, int]:
+    rank = _PRIORITY_ORDER.get(hit.entry.priority or "", _MISSING_PRIORITY_RANK)
+    if direction == "desc" and rank < _MISSING_PRIORITY_RANK:
+        rank = _LOW_PRIORITY_RANK - rank
+    return rank == _MISSING_PRIORITY_RANK, rank
+
+
+def _sort_hits(hits: list[Hit], f: SearchFilters) -> None:
+    """Sort in place, keeping missing/legacy priorities after canonical ones."""
+    hits.sort(key=lambda h: h.entry.created_at or "", reverse=True)
+    if f.sort == "date":
+        if f.direction == "asc":
+            hits.reverse()
+        return
+    hits.sort(key=lambda hit: _priority_sort_key(hit, f.direction))
+
+
 def search(cfg: Config, f: SearchFilters) -> list[Hit]:
+    _validate_sort(f)
+
     words = _words(f.q or "")
     type_dirs = _normalize_types(f.types)
 
@@ -200,8 +250,7 @@ def search(cfg: Config, f: SearchFilters) -> list[Hit]:
                 hits.append(Hit(entry=found, source="fulltext", type_dir=type_dir))
                 seen_paths.add(key)
 
-    # sort newest first
-    hits.sort(key=lambda h: h.entry.created_at or "", reverse=True)
+    _sort_hits(hits, f)
 
     if f.offset:
         hits = hits[f.offset :]
