@@ -469,7 +469,7 @@ def _find_entries_by_ids(
 
 
 def _format_entry(cfg: Config, type_dir: str, entry: Entry) -> str:
-    """Return the formatted text for a single entry."""
+    """Return the formatted, human-readable text for a single entry."""
     lines: list[str] = []
     lines.append(f"#{entry.id} {entry.type} — {entry.title}")
 
