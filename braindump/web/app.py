@@ -1122,6 +1122,9 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
     priority = _strip_or_none(priority)
     sort = sort if sort in spec.sort_keys else "date"
     descending = direction != "asc"
+    query_direction = (
+        "desc" if descending or sort not in {"date", "priority"} else "asc"
+    )
     status = "all"
     if "all" in lifecycle:
         status = "all" if show_all else "open"
@@ -1136,7 +1139,7 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
             priority=priority if "priority" in filters else None,
             status=status,
             sort="priority" if sort == "priority" else "date",
-            direction="desc" if descending else "asc",
+            direction=query_direction,
             limit=500,
             fulltext=False,
         ),

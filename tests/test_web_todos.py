@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from html import unescape
 
 import httpx
@@ -188,6 +189,32 @@ async def test_todos_priority_sort_happens_before_500_row_limit(monkeypatch, cfg
     assert response.status_code == 200
     assert "old high priority" in response.text
     assert "500 todos" in response.text
+
+
+@pytest.mark.anyio
+async def test_todos_local_sort_keeps_same_500_rows_across_directions(monkeypatch, cfg):
+    _set_home(monkeypatch, cfg)
+    records = [
+        Entry(
+            id=entry_id,
+            type="todo",
+            title=f"item {503 - entry_id:03d}",
+            file_path=f"2026/04/item-{entry_id}.md",
+            created_at=(datetime(2026, 4, 1) + timedelta(minutes=entry_id)).isoformat(),
+            status="pending",
+        )
+        for entry_id in range(1, 503)
+    ]
+    store.rewrite_index_atomic(cfg, "todos", records)
+
+    ascending = await _get("/todos?sort=title&dir=asc")
+    descending = await _get("/todos?sort=title&dir=desc")
+
+    ascending_ids = set(re.findall(r">#(\d+)</a>", ascending.text))
+    descending_ids = set(re.findall(r">#(\d+)</a>", descending.text))
+    assert ascending.status_code == descending.status_code == 200
+    assert len(ascending_ids) == 500
+    assert ascending_ids == descending_ids == {str(i) for i in range(3, 503)}
 
 
 @pytest.mark.anyio
