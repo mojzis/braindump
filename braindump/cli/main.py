@@ -3,6 +3,9 @@
 This module is intentionally thin: all logic lives in `braindump.core.*`. The
 CLI is just argument parsing, stdin plumbing, and output formatting. Both the
 Claude skills and any shell scripts should call into this surface.
+
+Every command is registered with ``@app.command`` and reached by the ``bd``
+console script (``[project.scripts]`` in pyproject.toml).
 """
 
 from __future__ import annotations

@@ -49,6 +49,12 @@ dev = [
     "biston>=0.7.0",
     "deptry",
     "poethepoet>=0.48.0",
+    "madoqua>=0.2.1",
+    "gerenuk>=0.3.0",
+    "biston>=0.7.2",
+    "zorilla>=0.2.1",
+    "pycoati>=0.2.6",
+    "ty-find>=0.5.0",
 ]
 
 [project.scripts]
@@ -119,3 +125,20 @@ DEP002 = ["jinja2", "python-multipart", "braindump"]
 [tool.poe]
 verbosity = -1
 include = "poe_tasks.toml"
+
+[tool.madoqua]
+# fix phase keeps the defaults: ruff check --fix, ruff format (re-staged).
+# check phase keeps the defaults (ruff check, ty check) and adds:
+extend_check = [
+    # madoqua appends the staged .py files. biston reads them as --focus-args focus files
+    # (only clone pairs touching a staged file); zorilla lints exactly those files.
+    { name = "biston",  cmd = "biston scan --focus-args", timeout_s = 60,  max_output_lines = 80 },
+    { name = "zorilla", cmd = "zorilla check",            timeout_s = 30,  max_output_lines = 80 },
+    # gerenuk scopes itself from the git diff, so no file list.
+    { name = "gerenuk", cmd = "gerenuk run -- -q",        pass_files = false, timeout_s = 120, max_output_lines = 120 },
+]
+
+[tool.zorilla.rules.ZR005]
+# FastAPI TestClient routes in tests/test_web_*.py and test_errors.py are the thing under test,
+# not an external resource.
+allowed_prefixes = ["/todos", "/tils", "/entries", "/initiatives", "/projects", "/capture", "/api/"]

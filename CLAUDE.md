@@ -243,3 +243,50 @@ When you finish a coding task in this repo, commit the change first, then run
 the `python-review` skill over the changed Python (cml-style: commit, then
 review the committed diff). Act on anything it flags — as a follow-up commit —
 before reporting done.
+
+## Toolbox
+
+The [aesop toolbox](https://mojzis.github.io/aesop/llms.txt) is wired in as dev
+dependencies. Every tool documents itself: run `uv run <tool> guide` before
+guessing at flags (`uv run <tool> guide tune` / `guide triage` for the details).
+
+**On every commit** — `madoqua` is the single pre-commit hook (`hooks/pre-commit`,
+config under `[tool.madoqua]` in `pyproject.toml`). It runs only when a `.py` file
+is staged: fix phase `ruff check --fix` + `ruff format` (re-staged), then check
+phase `ruff check`, `ty check`, `biston scan --focus-args` (clone pairs touching a
+staged file), `zorilla check` (test smells in the staged test files) and
+`gerenuk run` (only the tests the working-tree diff against `origin/main` can
+reach; the whole suite when a non-Python file changed). Typical cost is ~3 s,
+dominated by gerenuk running pytest; `uv run madoqua stats` shows the timings of
+every run (`.git/hook-timings.jsonl`).
+
+Fresh clone: `uv sync && uv run madoqua install` once — `core.hooksPath` is local
+git config, the shim in `hooks/` is committed.
+
+**On demand** (agents: use these instead of grep for Python symbols):
+
+```bash
+uv run tyf find <symbol>            # where it's defined
+uv run tyf show <symbol> -r         # signature + usages; tyf refs <symbol> for impact
+uv run gerenuk impacted-tests       # which tests the current diff reaches, and why
+uv run gerenuk audit <file.py>      # symbols nothing references (report, don't auto-delete)
+uv run biston scan .                # full-tree clone scan
+uv run zorilla check tests          # full test-smell lint (ZR004 roulette is real; split, don't suppress)
+uv run ty check                     # repo-wide types (the hook checks staged files only)
+```
+
+**Periodic audit, never in the hook or CI** — `pycoati` scores every test for
+suspicion and hands you a ranked list plus a remediation ladder. Run it before a
+test cleanup session (it runs the suite with `--cov`, so pytest-cov must be
+installed):
+
+```bash
+uv run pycoati . --format pretty
+```
+
+**Refresh the toolbox** (`--refresh` matters: without it uv may serve a cached
+index and miss a release published minutes ago):
+
+```bash
+uv lock --refresh --upgrade-package madoqua --upgrade-package gerenuk --upgrade-package biston --upgrade-package zorilla --upgrade-package pycoati --upgrade-package ty-find && uv sync
+```
