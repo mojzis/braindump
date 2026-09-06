@@ -74,6 +74,8 @@ copied into braindump.
 |------|--------|
 | `g d` | Dashboard |
 | `g j` | Journal |
+| `g t` | Todos |
+| `g l` | TILs |
 | `g c` | Capture |
 | `g e` | Entries |
 | `g i` | Focus entry ID |

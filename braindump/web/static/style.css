@@ -5,6 +5,7 @@
   --fg: #2c281f;          /* warm near-black */
   --muted: #8a8068;       /* warm gray */
   --accent: #b07a2e;      /* amber/ochre */
+  --accent-strong: #80551c; /* WCAG-AA text on bg-tint */
   --accent-soft: #f3e6c8; /* pale amber wash */
   --card: #fffdf7;        /* near-white, warm */
   --border: #e3d9c2;      /* tan */
@@ -34,11 +35,13 @@ a:hover { text-decoration: underline; }
 .nav a:hover { color: var(--accent); text-decoration: none; }
 .logo { font-weight: 700; font-size: 16px; color: var(--accent) !important; letter-spacing: -0.01em; }
 .project-focus, .entry-jump { display: flex; gap: 6px; align-items: center; }
-.project-focus label, .entry-jump label { color: var(--muted); }
+.project-focus label { color: var(--muted); }
+.entry-jump label { color: var(--fg); }
 .project-focus input, .entry-jump input { padding: 5px 9px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
 .project-focus input:focus, .entry-jump input:focus { outline: none; border-color: var(--accent); }
 .project-focus button, .entry-jump button { padding: 5px 11px; background: var(--bg-tint); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
-.project-focus button:hover, .entry-jump button:hover { border-color: var(--accent); color: var(--accent); }
+.project-focus button:hover { border-color: var(--accent); color: var(--accent); }
+.entry-jump button:hover { border-color: var(--accent); color: var(--accent-strong); }
 .entry-jump input { width: 7em; }
 
 .active-banner { background: var(--banner); padding: 7px 24px; border-bottom: 1px solid var(--border); text-align: center; }

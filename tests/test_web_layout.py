@@ -33,10 +33,11 @@ async def test_base_layout_offers_entry_id_jump(monkeypatch, cfg):
 
     assert r.status_code == 200
     assert '<form class="entry-jump" id="entry-jump-form">' in r.text
-    assert '<label for="entry-jump-id">jump to:</label>' in r.text
+    assert '<label for="entry-jump-id">jump to entry ID:</label>' in r.text
     assert '<input id="entry-jump-id" type="number"' in r.text
+    assert 'placeholder="entry ID" required' in r.text
     assert '<button type="submit">go</button>' in r.text
+    assert '<script src="/static/shortcuts.js"></script>' in r.text
     assert "<li><kbd>g i</kbd> focus entry ID</li>" in r.text
     assert '<a href="/tils" data-shortcut="g l">TILs</a>' in r.text
     assert "<li><kbd>g l</kbd> TILs</li>" in r.text
-    assert 'l: "/tils"' in r.text
