@@ -17,7 +17,7 @@ from typing import Any
 from braindump.core import entries, journal, projects, query, store, tags
 from braindump.core.config import Config
 from braindump.core.errors import BraindumpError
-from braindump.core.query import StatusFilter
+from braindump.core.query import SortDirection, SortField, StatusFilter
 from braindump.core.schema import ALL_TYPE_DIRS, Entry
 
 
@@ -53,8 +53,12 @@ class SearchRequest:
     project_id: int | None = None
     initiative_id: int | None = None
     pitch_id: int | None = None
+    priority: str | None = None
+    coverage: str | None = None
     related_id: int | None = None
     related_type: str | None = None
+    sort: SortField = "date"
+    direction: SortDirection = "desc"
 
 
 @dataclass(frozen=True)
@@ -129,8 +133,12 @@ class BraindumpService:
             project_id=request.project_id,
             initiative_id=request.initiative_id,
             pitch_id=request.pitch_id,
+            priority=request.priority,
+            coverage=request.coverage,
             related_id=request.related_id,
             related_type=request.related_type,
+            sort=request.sort,
+            direction=request.direction,
         )
         return query.search(self.cfg, filters)
 

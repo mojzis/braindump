@@ -188,6 +188,7 @@ FRONTMATTER_FIELD_ORDER: tuple[str, ...] = (
     "project",
     "status",
     "priority",
+    "coverage",
     "subtype",
     "category",
     "source",

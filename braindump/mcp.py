@@ -14,7 +14,7 @@ from mcp.types import ToolAnnotations
 from pydantic import BaseModel
 
 from braindump.core.config import load_config
-from braindump.core.query import StatusFilter
+from braindump.core.query import SortDirection, SortField, StatusFilter
 from braindump.service import (
     BraindumpService,
     CreateRequest,
@@ -85,8 +85,12 @@ def _search_request(
     project_id: int | None = None,
     initiative_id: int | None = None,
     pitch_id: int | None = None,
+    priority: str | None = None,
+    coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
+    sort: SortField = "date",
+    direction: SortDirection = "desc",
 ) -> SearchRequest:
     return SearchRequest(
         query=query,
@@ -103,8 +107,12 @@ def _search_request(
         project_id=project_id,
         initiative_id=initiative_id,
         pitch_id=pitch_id,
+        priority=priority,
+        coverage=coverage,
         related_id=related_id,
         related_type=related_type,
+        sort=sort,
+        direction=direction,
     )
 
 
@@ -174,8 +182,12 @@ def search(
     project_id: int | None = None,
     initiative_id: int | None = None,
     pitch_id: int | None = None,
+    priority: str | None = None,
+    coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
+    sort: SortField = "date",
+    direction: SortDirection = "desc",
 ) -> list[dict[str, Any]]:
     hits = _service().search(
         _search_request(
@@ -193,8 +205,12 @@ def search(
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
+            priority=priority,
+            coverage=coverage,
             related_id=related_id,
             related_type=related_type,
+            sort=sort,
+            direction=direction,
         )
     )
     return [_jsonable(hit) for hit in hits]
@@ -218,6 +234,10 @@ def list_entries(
     project_id: int | None = None,
     initiative_id: int | None = None,
     pitch_id: int | None = None,
+    priority: str | None = None,
+    coverage: str | None = None,
+    sort: SortField = "date",
+    direction: SortDirection = "desc",
 ) -> list[dict[str, Any]]:
     hits = _service().list_entries(
         _search_request(
@@ -234,6 +254,10 @@ def list_entries(
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
+            priority=priority,
+            coverage=coverage,
+            sort=sort,
+            direction=direction,
         )
     )
     return [_jsonable(hit) for hit in hits]

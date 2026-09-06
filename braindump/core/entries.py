@@ -18,7 +18,9 @@ from braindump.core.errors import EntryNotFoundError
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     LEGACY_TODO_STATUSES,
+    PITCH_COVERAGES,
     PLANNING_STATUSES,
+    PRIORITIES,
     PROJECT_STATES,
     QA_RESULTS,
     TODO_STATUSES,
@@ -508,13 +510,31 @@ def _validate_canonical_fields(
     fields: dict[str, Any],
     *,
     relation_fields: set[str] | None = None,
+    validate_priority: bool = True,
 ) -> None:
     """Validate lifecycle values and typed numeric links before any write."""
-    _validate_status_and_state(entry_type, fields)
+    _validate_status_and_state(entry_type, fields, validate_priority=validate_priority)
     _validate_relation_fields(cfg, entry_type, fields, relation_fields)
 
 
-def _validate_status_and_state(entry_type: str, fields: dict[str, Any]) -> None:
+def _validate_status_and_state(
+    entry_type: str,
+    fields: dict[str, Any],
+    *,
+    validate_priority: bool = True,
+) -> None:
+    priority = fields.get("priority")
+    if validate_priority and priority is not None:
+        if entry_type not in {"todo", "pitch"}:
+            raise ValueError("priority is only valid for todos and pitches")
+        if priority not in PRIORITIES:
+            raise ValueError(f"{entry_type} priority must be one of {list(PRIORITIES)}")
+    coverage = fields.get("coverage")
+    if coverage is not None:
+        if entry_type != "pitch":
+            raise ValueError("coverage is only valid for pitches")
+        if coverage not in PITCH_COVERAGES:
+            raise ValueError(f"pitch coverage must be one of {list(PITCH_COVERAGES)}")
     status = fields.get("status")
     if status is not None:
         if entry_type == "todo" and status not in (
@@ -580,6 +600,7 @@ _MUTABLE_FIELDS = {
     "status",
     "subtype",
     "priority",
+    "coverage",
     "due_date",
     "category",
     "source",
@@ -643,6 +664,7 @@ def update_entry(
         entry.type,
         merged,
         relation_fields=set(patch) & relation_fields_for_type,
+        validate_priority=("priority" in patch and patch["priority"] != entry.priority),
     )
     updated = Entry.model_validate(merged)
     updated.tags = drop_self_project_tag(updated.tags, updated.project)

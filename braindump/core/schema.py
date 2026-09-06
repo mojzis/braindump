@@ -17,6 +17,8 @@ EntryType = Literal[
 
 TODO_STATUSES = ("pending", "in-progress", "in-qa", "done", "cancelled")
 LEGACY_TODO_STATUSES = ("postponed",)
+PRIORITIES = ("high", "medium", "low")
+PITCH_COVERAGES = ("uncovered", "partial", "covered")
 QA_RESULTS = ("pass", "fail")
 PLANNING_STATUSES = ("active", "done")
 SETTLED_STATUSES = ("done", "cancelled")
@@ -105,6 +107,8 @@ class Entry(BaseModel):
     # initiative / pitch graph links
     project_ids: list[int] | None = None
     initiative_ids: list[int] | None = None
+    # Optional planning metadata; coverage is pitch-only.
+    coverage: str | None = None
     # compact QA receipt (detailed runs remain outside braindump)
     qa_result: str | None = None
     qa_verified_at: str | None = None

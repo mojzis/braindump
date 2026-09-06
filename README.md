@@ -92,7 +92,8 @@ bd app                                # same UI in a native desktop window (deta
 - Per-project dashboards with open todos, recent activity, and tag counts
 - Active-project focus mode applied across every view
 
-Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` for help.
+Keyboard shortcuts: `g d`, `g j`, `g t` for todos, `g l` for TILs, `g c`,
+`g e`, `g i` to focus entry ID, `g p`, `/` to focus search, `?` for help.
 
 ### Desktop window
 

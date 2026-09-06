@@ -25,11 +25,12 @@ def call_tool(name, arguments):
     ("name", "arguments"),
     [
         ("search", {"status": "invalid"}),
+        ("search", {"sort": "invalid"}),
         ("list", {"since": "not-a-date"}),
     ],
 )
 def test_mcp_rejects_invalid_search_filters(name, arguments):
-    with pytest.raises(Exception, match=r"(status|since)"):
+    with pytest.raises(Exception, match=r"(status|sort|since)"):
         call_tool(name, arguments)
 
 
@@ -80,3 +81,40 @@ def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
     cli_done = runner.invoke(app, ["done", str(entry_id)])
     assert cli_done.exit_code == 0
     assert call_tool("done", {"arg": entry_id})["status"] == "done"
+
+
+def test_mcp_preserves_priority_coverage_filtering_and_sorting(cfg, monkeypatch):
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    for title, priority, coverage in (
+        ("Low unaudited", "low", None),
+        ("Medium covered", "medium", "covered"),
+        ("High unaudited", "high", None),
+    ):
+        type_fields = {"priority": priority}
+        if coverage is not None:
+            type_fields["coverage"] = coverage
+        call_tool(
+            "create",
+            {
+                "entry_type": "pitch",
+                "title": title,
+                "type_fields": type_fields,
+            },
+        )
+
+    covered = call_tool("search", {"coverage": "covered"})
+    assert [hit["entry"]["title"] for hit in covered] == ["Medium covered"]
+
+    unaudited = call_tool(
+        "list",
+        {
+            "types": ["pitch"],
+            "coverage": "unaudited",
+            "sort": "priority",
+            "direction": "asc",
+        },
+    )
+    assert [hit["entry"]["title"] for hit in unaudited] == [
+        "High unaudited",
+        "Low unaudited",
+    ]

@@ -71,19 +71,24 @@ title. Journal files are the exception: one file per day at
 
 | Type | Fields |
 |------|--------|
-| **todo** | `subtype`, `status` (pending / in-progress / done), `priority`, `due_date` |
+| **todo** | `subtype`, `status` (pending / in-progress / done), `priority` (high / medium / low), `due_date` |
 | **til** | `category`, `source` |
 | **thought** | `mood`, `related_to` |
 | **prompt** | `prompt_type`, `model_target` |
 | **journal** | `date` (YYYY-MM-DD), `word_count` |
 | **project** | `description`, `state` (active / paused / archived), `area` (free-form grouping, reused like a tag — e.g. `dev-tools`, `cad-3d`), `local_dir`, `tech_stack` |
 
+Pitches may also have optional `priority` (high / medium / low) and `coverage`
+(`uncovered`, `partial`, or `covered`). Missing coverage means unaudited.
+`covered` is an audit assertion that every remaining deliverable has a linked
+Braindump todo or Linear ticket; it is not calculated automatically.
+
 ## Planning entries and imported pitches
 
 Initiatives live in initiatives/ and use status active or done plus
 project_ids, a list of numeric IDs that must point to project entries. Pitches
 live in pitches/ and use status active or done, project_ids, initiative_ids,
-and source_path for an imported source's absolute resolved path. Todos may
+priority, coverage, and source_path for an imported source's absolute resolved path. Todos may
 carry one initiative_id and one pitch_id. Relations are IDs, not titles or
 tags, so renames do not break them.
 
@@ -91,7 +96,7 @@ Pitch import reads optional source frontmatter. The source title field wins;
 otherwise the first level-one heading wins, then the filename stem. The
 generated entry owns the title heading, while the rest of the body is retained
 verbatim. Meaningful fields (title, summary, tags, status, project_ids, and
-initiative_ids) are preserved; command-line relation IDs override source
+initiative_ids, priority, and coverage) are preserved; command-line relation IDs override source
 values. Source identity fields and timestamps are generated locally.
 
 The import workflow is explicit and bounded:

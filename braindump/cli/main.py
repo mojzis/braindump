@@ -139,6 +139,9 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(
+        None, "--coverage", help="Pitch coverage: uncovered, partial, or covered"
+    ),
     subtype: str | None = typer.Option(None, "--subtype"),
     category: str | None = typer.Option(None, "--category"),
     source: str | None = typer.Option(None, "--source"),
@@ -195,6 +198,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         for k, v in {
             "status": status,
             "priority": priority,
+            "coverage": coverage,
             "subtype": subtype,
             "category": category,
             "source": source,
@@ -302,22 +306,39 @@ def list_cmd(
     project_id: int | None = typer.Option(None, "--project-id"),
     initiative_id: int | None = typer.Option(None, "--initiative-id"),
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
+    priority: str | None = typer.Option(
+        None, "--priority", help="high, medium, or low"
+    ),
+    coverage: str | None = typer.Option(
+        None,
+        "--coverage",
+        help="unaudited, uncovered, partial, or covered",
+    ),
+    sort: str = typer.Option("date", "--sort", help="date or priority"),
+    direction: str = typer.Option("desc", "--direction", "--dir", help="asc or desc"),
 ):
-    """List recent entries (newest first)."""
+    """List recent entries."""
     cfg = load_config()
-    hits = BraindumpService(cfg).list_entries(
-        SearchRequest(
-            types=(type_to_dir(entry_type),) if entry_type else (),
-            project=project,
-            all_projects=all_projects,
-            status=cast(StatusFilter, status),
-            project_id=project_id,
-            initiative_id=initiative_id,
-            pitch_id=pitch_id,
-            limit=limit,
-            fulltext=False,
+    try:
+        hits = BraindumpService(cfg).list_entries(
+            SearchRequest(
+                types=(type_to_dir(entry_type),) if entry_type else (),
+                project=project,
+                all_projects=all_projects,
+                status=cast(StatusFilter, status),
+                project_id=project_id,
+                initiative_id=initiative_id,
+                pitch_id=pitch_id,
+                priority=priority,
+                coverage=coverage,
+                sort=cast(query.SortField, sort),
+                direction=cast(query.SortDirection, direction),
+                limit=limit,
+                fulltext=False,
+            )
         )
-    )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -369,29 +390,46 @@ def search(
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
     related_id: int | None = typer.Option(None, "--related-id"),
     related_type: str | None = typer.Option(None, "--related-type"),
+    priority: str | None = typer.Option(
+        None, "--priority", help="high, medium, or low"
+    ),
+    coverage: str | None = typer.Option(
+        None,
+        "--coverage",
+        help="unaudited, uncovered, partial, or covered",
+    ),
+    sort: str = typer.Option("date", "--sort", help="date or priority"),
+    direction: str = typer.Option("desc", "--direction", "--dir", help="asc or desc"),
 ):
     """Search across braindump entries."""
     cfg = load_config()
     q = " ".join(query_words or [])
-    hits = BraindumpService(cfg).search(
-        SearchRequest(
-            query=q or None,
-            types=(entry_type,) if entry_type else (),
-            project=project,
-            all_projects=all_projects,
-            status=cast(StatusFilter, status),
-            tags=tuple(tag),
-            project_id=project_id,
-            initiative_id=initiative_id,
-            pitch_id=pitch_id,
-            related_id=related_id,
-            related_type=related_type,
-            since=_parse_date(since),
-            until=_parse_date(until),
-            limit=limit,
-            fulltext=not no_fulltext,
+    try:
+        hits = BraindumpService(cfg).search(
+            SearchRequest(
+                query=q or None,
+                types=(entry_type,) if entry_type else (),
+                project=project,
+                all_projects=all_projects,
+                status=cast(StatusFilter, status),
+                tags=tuple(tag),
+                project_id=project_id,
+                initiative_id=initiative_id,
+                pitch_id=pitch_id,
+                related_id=related_id,
+                related_type=related_type,
+                priority=priority,
+                coverage=coverage,
+                sort=cast(query.SortField, sort),
+                direction=cast(query.SortDirection, direction),
+                since=_parse_date(since),
+                until=_parse_date(until),
+                limit=limit,
+                fulltext=not no_fulltext,
+            )
         )
-    )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -429,6 +467,8 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
     "initiative": ["status", "project_ids"],
     "pitch": [
         "status",
+        "priority",
+        "coverage",
         "project_ids",
         "initiative_ids",
         "source_path",
@@ -455,6 +495,8 @@ def _format_entry(view: EntryView) -> str:
 
     for field in _TYPE_SPECIFIC_FIELDS.get(entry.type, []):
         val = getattr(entry, field, None)
+        if entry.type == "pitch" and field == "coverage" and val is None:
+            val = "unaudited"
         if val is not None:
             if isinstance(val, list):
                 val = ", ".join(str(v) for v in val)
@@ -539,7 +581,7 @@ def qa_result(
 
 
 @app.command()
-def update(
+def update(  # noqa: PLR0912 -- one option per supported entry field
     entry_id: int = typer.Argument(..., metavar="ID"),
     title: str | None = typer.Option(None, "--title"),
     summary: str | None = typer.Option(None, "--summary"),
@@ -553,6 +595,7 @@ def update(
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(None, "--coverage"),
     area: str | None = typer.Option(
         None, "--area", help="Project grouping (project type)"
     ),
@@ -589,7 +632,9 @@ def update(
     if status is not None:
         patch["status"] = status
     if priority is not None:
-        patch["priority"] = priority
+        patch["priority"] = priority or None
+    if coverage is not None:
+        patch["coverage"] = coverage or None
     if area is not None:
         patch["area"] = area
     patch.update(
