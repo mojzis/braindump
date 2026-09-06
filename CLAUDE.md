@@ -260,7 +260,7 @@ reach; the whole suite when a non-Python file changed). Typical cost is ~3 s,
 dominated by gerenuk running pytest; `uv run madoqua stats` shows the timings of
 every run (`.git/hook-timings.jsonl`).
 
-Fresh clone: `uv sync && uv run madoqua install` once — `core.hooksPath` is local
+Fresh clone: `uv sync --all-extras --all-groups && uv run madoqua install` once — `core.hooksPath` is local
 git config, the shim in `hooks/` is committed.
 
 **On demand** (agents: use these instead of grep for Python symbols):
