@@ -582,7 +582,7 @@ def qa_result(
 
 
 @app.command()
-def update(
+def update(  # noqa: PLR0912 -- one branch per independently optional CLI field
     entry_id: int = typer.Argument(..., metavar="ID"),
     title: str | None = typer.Option(None, "--title"),
     summary: str | None = typer.Option(None, "--summary"),
