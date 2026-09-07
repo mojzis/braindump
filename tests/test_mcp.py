@@ -1,11 +1,18 @@
+"""MCP adapter integration tests against the CLI's shared service contract."""
+
 from __future__ import annotations
 
 import asyncio
+import json
 
+import pytest
+from typer.testing import CliRunner
+
+from braindump.cli.main import app
 from braindump.mcp import mcp
 
 
-def _call(name: str, arguments: dict):
+def call_tool(name, arguments):
     _content, structured = asyncio.run(mcp.call_tool(name, arguments))
     return (
         structured.get("result", structured)
@@ -16,7 +23,7 @@ def _call(name: str, arguments: dict):
 
 def test_mcp_handoff_create_search_show_and_update(cfg, monkeypatch):
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
-    created = _call(
+    created = call_tool(
         "create",
         {
             "entry_type": "handoff",
@@ -27,13 +34,112 @@ def test_mcp_handoff_create_search_show_and_update(cfg, monkeypatch):
     )
     entry_id = created["entry"]["id"]
 
-    searched = _call("search", {"types": ["handoff"], "branch": "feature/mcp"})
+    searched = call_tool("search", {"types": ["handoff"], "branch": "feature/mcp"})
     assert [hit["entry"]["id"] for hit in searched] == [entry_id]
-    shown = _call("show", {"ids": [entry_id]})
+    shown = call_tool("show", {"ids": [entry_id]})
     assert shown["entries"][0]["body"] == "MCP body"
     assert shown["entries"][0]["entry"]["branch"] == "feature/mcp"
 
-    updated = _call(
+    updated = call_tool(
         "update", {"entry_id": entry_id, "patch": {"branch": "release/mcp"}}
     )
     assert updated["branch"] == "release/mcp"
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("search", {"status": "invalid"}),
+        ("search", {"sort": "invalid"}),
+        ("list", {"since": "not-a-date"}),
+    ],
+)
+def test_mcp_rejects_invalid_search_filters(name, arguments):
+    with pytest.raises(Exception, match=r"(status|sort|since)"):
+        call_tool(name, arguments)
+
+
+def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    runner = CliRunner()
+
+    created = call_tool(
+        "create",
+        {
+            "entry_type": "todo",
+            "title": "MCP contract todo",
+            "body": "body from MCP",
+            "tags": ["contract"],
+            "project": "braindump",
+            "type_fields": {"status": "pending"},
+        },
+    )
+    entry = created["entry"]
+    entry_id = entry["id"]
+
+    cli_show = runner.invoke(app, ["show", "--json", str(entry_id)])
+    assert cli_show.exit_code == 0
+    shown = call_tool("show", {"ids": [entry_id]})
+    assert json.loads(cli_show.stdout)["body"] == shown["entries"][0]["body"]
+
+    cli_search = runner.invoke(app, ["search", "MCP", "contract"])
+    assert cli_search.exit_code == 0
+    cli_ids = {json.loads(line)["id"] for line in cli_search.stdout.splitlines()}
+    mcp_ids = {
+        hit["entry"]["id"] for hit in call_tool("search", {"query": "MCP contract"})
+    }
+    assert mcp_ids == cli_ids == {entry_id}
+
+    updated = call_tool(
+        "update",
+        {
+            "entry_id": entry_id,
+            "patch": {"title": "Updated MCP todo"},
+            "body": "updated body",
+        },
+    )
+    assert updated["title"] == "Updated MCP todo"
+    assert call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == (
+        "updated body"
+    )
+
+    cli_done = runner.invoke(app, ["done", str(entry_id)])
+    assert cli_done.exit_code == 0
+    assert call_tool("done", {"arg": entry_id})["status"] == "done"
+
+
+def test_mcp_preserves_priority_coverage_filtering_and_sorting(cfg, monkeypatch):
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    for title, priority, coverage in (
+        ("Low unaudited", "low", None),
+        ("Medium covered", "medium", "covered"),
+        ("High unaudited", "high", None),
+    ):
+        type_fields = {"priority": priority}
+        if coverage is not None:
+            type_fields["coverage"] = coverage
+        call_tool(
+            "create",
+            {
+                "entry_type": "pitch",
+                "title": title,
+                "type_fields": type_fields,
+            },
+        )
+
+    covered = call_tool("search", {"coverage": "covered"})
+    assert [hit["entry"]["title"] for hit in covered] == ["Medium covered"]
+
+    unaudited = call_tool(
+        "list",
+        {
+            "types": ["pitch"],
+            "coverage": "unaudited",
+            "sort": "priority",
+            "direction": "asc",
+        },
+    )
+    assert [hit["entry"]["title"] for hit in unaudited] == [
+        "High unaudited",
+        "Low unaudited",
+    ]

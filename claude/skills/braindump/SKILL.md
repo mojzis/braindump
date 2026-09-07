@@ -156,6 +156,7 @@ The `input` field always contains the original user input exactly as provided. `
 - **prompt**: `prompt_type` (system/user/template/example), `model_target`
 - **project**: `description`, `state` (`active`/`paused`/`archived`), `local_dir`, `tech_stack` (list of strings). A project entry's own `project` field is always `null`.
 - **journal**: `date` (YYYY-MM-DD), `word_count` — one entry per day, file is `journal/YYYY/MM/YYYY-MM-DD.md`
+- **pitch**: `priority` (high/medium/low), optional `coverage` (`uncovered`, `partial`, `covered`). Missing coverage is unaudited; `covered` is a manual assertion that each remaining deliverable has a linked Braindump todo or Linear ticket.
 
 ## File Naming Convention
 
@@ -223,7 +224,7 @@ All commands go through the `bd` CLI.
 
 3. **List recent:** `bd list [type] --limit 10`. Human-readable by default.
 
-4. **Read an entry:** Read the markdown file directly at `~/braindump/<type_dir>/<file_path>`.
+4. **Read an entry:** `bd show <id>` (use `bd show --json <id>` for structured output).
 
 5. **Mark a todo done:** `bd done <id|query|file_path>`.
 
@@ -256,5 +257,5 @@ No extra text, summaries, or commentary unless:
 - Summaries should be one line, under 100 chars
 - Every entry has a numeric `id` field, auto-assigned on creation
 - Use IDs to reference entries (e.g., `bd done 42`)
-- Search supports `--status open` / `--done` / `--all`
+- Search supports `--status open` / `--status done` / `--all`
 - Honor active project: if `bd project focus` is set, `bd list` and `bd search` scope to it unless you pass `--all`

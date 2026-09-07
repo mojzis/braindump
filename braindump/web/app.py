@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 import markdown as md
 import nh3
@@ -41,6 +41,8 @@ from braindump.core.query import StatusFilter
 from braindump.core.schema import (
     ALL_TYPES,
     LEGACY_TODO_STATUSES,
+    PITCH_COVERAGES,
+    PRIORITIES,
     PROJECT_STATES,
     SETTLED_STATUSES,
     TODO_STATUSES,
@@ -275,6 +277,12 @@ def _csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [v.strip() for v in value.split(",") if v.strip()]
+
+
+def _strip_or_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.strip() or None
 
 
 def _csv_ints(value: str | None) -> list[int]:
@@ -584,6 +592,8 @@ def capture_get(
             preset_type=type or "",
             preset_title=title or "",
             project_states=list(PROJECT_STATES),
+            priorities=list(PRIORITIES),
+            pitch_coverages=list(PITCH_COVERAGES),
             registered_projects=registered_projects,
             active_initiatives=_active_planning_entries(cfg, "initiatives"),
             active_pitches=_active_planning_entries(cfg, "pitches"),
@@ -592,7 +602,7 @@ def capture_get(
 
 
 @app.post("/capture")
-def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry attribute; splitting adds indirection
+def capture_post(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917 -- one Form field per entry attribute; splitting adds indirection
     entry_type: str = Form(...),
     title: str = Form(...),
     body: str = Form(""),
@@ -605,6 +615,8 @@ def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry
     local_dir: str = Form(""),
     tech_stack: str = Form(""),
     status: str = Form(""),
+    priority: str = Form(""),
+    coverage: str = Form(""),
     project_ids: str = Form(""),
     initiative_ids: str = Form(""),
     initiative_id: str = Form(""),
@@ -641,6 +653,10 @@ def capture_post(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field per entry
         type_fields["status"] = status.strip()
     elif entry_type in {"initiative", "pitch"}:
         type_fields["status"] = "active"
+    if priority.strip():
+        type_fields["priority"] = priority.strip()
+    if coverage.strip():
+        type_fields["coverage"] = coverage.strip()
     try:
         project_id_values = _csv_ints(project_ids)
         initiative_id_values = _csv_ints(initiative_ids)
@@ -713,13 +729,19 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     project_id: int | None = None,
     initiative_id: int | None = None,
     pitch_id: int | None = None,
+    priority: str | None = None,
+    coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
     branch: str | None = None,
+    sort: query.SortField = "date",
+    direction: Annotated[query.SortDirection, Query(alias="dir")] = "desc",
 ):
     cfg = load_config()
     active = projects.get_active_project(cfg)
     proj_filter = None if all_projects else (project or active)
+    priority = _strip_or_none(priority)
+    coverage = _strip_or_none(coverage)
     filters = query.SearchFilters(
         q=q or None,
         types=[type] if type else [],
@@ -729,9 +751,13 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         project_id=project_id,
         initiative_id=initiative_id,
         pitch_id=pitch_id,
+        priority=priority,
+        coverage=coverage,
         related_id=related_id,
         related_type=related_type,
         branch=branch,
+        sort=sort,
+        direction=direction,
         limit=100,
     )
 
@@ -755,33 +781,57 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
+            priority=priority,
+            coverage=coverage,
             related_id=related_id,
             related_type=related_type or "",
             branch=branch or "",
+            sort=sort,
+            dir=direction,
+            list_action="/entries",
         ),
     )
 
 
 @app.get("/initiatives", response_class=HTMLResponse)
-def initiatives_list(request: Request):
-    return _planning_list(request, "initiative", "initiatives")
+def initiatives_list(
+    request: Request,
+    sort: query.SortField = "date",
+    direction: Annotated[query.SortDirection, Query(alias="dir")] = "desc",
+):
+    return _planning_list(
+        request, "initiative", "initiatives", sort=sort, direction=direction
+    )
 
 
 @app.get("/pitches", response_class=HTMLResponse)
-def pitches_list(request: Request):
-    return _planning_list(request, "pitch", "pitches")
+def pitches_list(
+    request: Request,
+    sort: query.SortField = "date",
+    direction: Annotated[query.SortDirection, Query(alias="dir")] = "desc",
+):
+    return _planning_list(request, "pitch", "pitches", sort=sort, direction=direction)
 
 
-def _planning_list(request: Request, entry_type: str, title: str):
+def _planning_list(
+    request: Request,
+    entry_type: str,
+    title: str,
+    *,
+    sort: query.SortField,
+    direction: query.SortDirection,
+):
     cfg = load_config()
-    hits = [
-        hit
-        for hit in query.search(
-            cfg,
-            query.SearchFilters(types=[entry_type], status="all", limit=100),
-        )
-        if hit.entry.status == "active"
-    ]
+    hits = query.search(
+        cfg,
+        query.SearchFilters(
+            types=[entry_type],
+            status="active",
+            sort=sort,
+            direction=direction,
+            limit=100,
+        ),
+    )
     all_projects_list = [
         p.name for p in projects.list_projects(cfg) if p.name != "(none)"
     ]
@@ -805,6 +855,11 @@ def _planning_list(request: Request, entry_type: str, title: str):
             related_id=None,
             related_type="",
             branch="",
+            priority=None,
+            coverage=None,
+            sort=sort,
+            dir=direction,
+            list_action="/entries",
         ),
     )
 
@@ -868,6 +923,8 @@ def entry_edit(request: Request, entry_id: int):
             active_pitches=planning["pitches"],
             todo_statuses=TODO_STATUSES,
             legacy_todo_statuses=LEGACY_TODO_STATUSES,
+            priorities=list(PRIORITIES),
+            pitch_coverages=list(PITCH_COVERAGES),
         ),
     )
 
@@ -883,6 +940,8 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
     status: str | None = Form(None),
     area: str | None = Form(None),
     body: str | None = Form(None),
+    priority: str | None = Form(None),
+    coverage: str | None = Form(None),
     initiative_id: str | None = Form(None),
     pitch_id: str | None = Form(None),
     project_ids: str | None = Form(None),
@@ -908,6 +967,9 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
         patch["status"] = status
     if area is not None:
         patch["area"] = area.strip() or None
+    for key, raw in {"priority": priority, "coverage": coverage}.items():
+        if raw is not None or key in form:
+            patch[key] = raw.strip() or None if raw else None
     for key, raw in {
         "initiative_id": initiative_id,
         "pitch_id": pitch_id,
@@ -983,6 +1045,7 @@ class DedicatedListSpec:
     search_placeholder: str
     singular_label: str
     plural_label: str
+    filter_controls: tuple[str, ...] = ()
     lifecycle_controls: tuple[str, ...] = ()
     settled_statuses: tuple[str, ...] = ()
 
@@ -999,11 +1062,18 @@ _COMMON_SORT_KEYS = {
 _TODO_LIST = DedicatedListSpec(
     path="/todos",
     types=("todos",),
-    sort_keys={**_COMMON_SORT_KEYS, "status": lambda h: h.entry.status or ""},
+    sort_keys={
+        **_COMMON_SORT_KEYS,
+        "status": lambda h: h.entry.status or "",
+        "priority": lambda h: {"high": 0, "medium": 1, "low": 2}.get(
+            h.entry.priority, 3
+        ),
+    },
     columns=(
         ("id", "#"),
         ("date", "date"),
         ("status", "status"),
+        ("priority", "priority"),
         ("project", "project"),
         ("title", "title"),
         ("tags", "tags"),
@@ -1011,6 +1081,7 @@ _TODO_LIST = DedicatedListSpec(
     search_placeholder="search todos…",
     singular_label="todo",
     plural_label="todos",
+    filter_controls=("priority",),
     lifecycle_controls=("all", "postponed"),
     settled_statuses=SETTLED_STATUSES,
 )
@@ -1048,10 +1119,18 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
     tag: str | None,
     sort: str,
     direction: str,
+    priority: str | None = None,
     show_all: bool = False,
     show_postponed: bool = False,
 ) -> dict:
+    filters = set(spec.filter_controls)
     lifecycle = set(spec.lifecycle_controls)
+    priority = _strip_or_none(priority)
+    sort = sort if sort in spec.sort_keys else "date"
+    descending = direction != "asc"
+    query_direction = (
+        "desc" if descending or sort not in {"date", "priority"} else "asc"
+    )
     status = "all"
     if "all" in lifecycle:
         status = "all" if show_all else "open"
@@ -1063,7 +1142,10 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
             types=list(spec.types),
             project=project or None,
             tags=[tag] if tag else [],
+            priority=priority if "priority" in filters else None,
             status=status,
+            sort="priority" if sort == "priority" else "date",
+            direction=query_direction,
             limit=500,
             fulltext=False,
         ),
@@ -1075,9 +1157,11 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
         groups.setdefault(h.entry.project or "(none)", []).append(h)
     grouped = sorted(groups.items(), key=lambda kv: kv[0].lower())
 
-    sort = sort if sort in spec.sort_keys else "date"
-    descending = direction != "asc"
-    rows = sorted(hits, key=spec.sort_keys[sort], reverse=descending)
+    rows = (
+        hits
+        if sort == "priority"
+        else sorted(hits, key=spec.sort_keys[sort], reverse=descending)
+    )
 
     return _context(
         request,
@@ -1086,6 +1170,7 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
         search_placeholder=spec.search_placeholder,
         singular_label=spec.singular_label,
         plural_label=spec.plural_label,
+        filter_controls=spec.filter_controls,
         lifecycle_controls=spec.lifecycle_controls,
         grouped=grouped,
         rows=rows,
@@ -1093,6 +1178,7 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
         q=q or "",
         selected=project or "",
         tag=tag or "",
+        priority=priority or "" if "priority" in filters else "",
         sort=sort,
         dir="desc" if descending else "asc",
         show_all=show_all if "all" in lifecycle else False,
@@ -1107,6 +1193,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
     q: str | None = None,
     project: str | None = None,
     tag: str | None = None,
+    priority: str | None = None,
     sort: str = "date",
     direction: str = Query("desc", alias="dir"),
     show_all: bool = Query(False, alias="all"),
@@ -1121,6 +1208,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
             q=q,
             project=project,
             tag=tag,
+            priority=priority,
             sort=sort,
             direction=direction,
             show_all=show_all,

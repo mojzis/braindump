@@ -44,6 +44,41 @@ def test_create_todo_round_trip(cfg):
     assert stored[0].status == "pending"
 
 
+def test_pitch_priority_and_coverage_round_trip_and_validation(cfg):
+    result = entries.create_entry(
+        cfg,
+        "pitch",
+        "Launch pitch",
+        "body",
+        type_fields={"priority": "high", "coverage": "partial"},
+        now=_fake_now(),
+    )
+
+    assert result.entry.priority == "high"
+    assert result.entry.coverage == "partial"
+    text = result.full_path.read_text()
+    assert "priority: high" in text
+    assert "coverage: partial" in text
+    assert store.read_index(cfg, "pitches")[0].coverage == "partial"
+
+    with pytest.raises(ValueError, match="pitch priority"):
+        entries.create_entry(
+            cfg, "pitch", "bad priority", "body", type_fields={"priority": "urgent"}
+        )
+    with pytest.raises(ValueError, match="pitch coverage"):
+        entries.create_entry(
+            cfg, "pitch", "bad coverage", "body", type_fields={"coverage": "unknown"}
+        )
+    with pytest.raises(ValueError, match="only valid for pitches"):
+        entries.create_entry(
+            cfg, "todo", "bad coverage", "body", type_fields={"coverage": "partial"}
+        )
+    with pytest.raises(ValueError, match="only valid for todos and pitches"):
+        entries.create_entry(
+            cfg, "til", "bad priority", "body", type_fields={"priority": "urgent"}
+        )
+
+
 def test_parse_source_document_tracks_headings_and_checked_items():
     items = entries.parse_source_document(
         "- [ ] first\n## Alpha\n* second\n- [x] finished\n"
@@ -88,6 +123,31 @@ def test_update_entry_rewrites_title_and_index(cfg):
     assert stored[0].title == "new title"
     assert stored[0].tags == ["b"]
     assert stored[0].updated_at is not None
+
+
+@pytest.mark.parametrize(
+    ("entry_type", "type_dir"), (("todo", "todos"), ("pitch", "pitches"))
+)
+def test_update_preserves_unchanged_legacy_priority(cfg, entry_type, type_dir):
+    result = entries.create_entry(
+        cfg,
+        entry_type,
+        "Legacy priority",
+        "body",
+        type_fields={"priority": "high"},
+        now=_fake_now(),
+    )
+    result.entry.priority = "urgent"
+    store.rewrite_index_atomic(cfg, type_dir, [result.entry])
+
+    renamed = entries.update_entry(cfg, result.entry.id, {"title": "Renamed"})
+    unchanged = entries.update_entry(cfg, result.entry.id, {"priority": "urgent"})
+
+    assert renamed.priority == "urgent"
+    assert unchanged.priority == "urgent"
+    assert "priority: urgent" in result.full_path.read_text()
+    with pytest.raises(ValueError, match=f"{entry_type} priority"):
+        entries.update_entry(cfg, result.entry.id, {"priority": "critical"})
 
 
 def test_update_entry_replaces_body(cfg):

@@ -19,16 +19,22 @@ from typing import Any, NoReturn, cast
 import typer
 from typer.core import TyperGroup
 
-from braindump.core import digest, entries, journal, projects, query, store
-from braindump.core import tags as tags_mod
-from braindump.core.config import Config, load_config
+from braindump.core import digest, entries, projects, query, store
+from braindump.core.config import load_config
 from braindump.core.errors import BraindumpError, storage_error
 from braindump.core.query import StatusFilter
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     PROJECT_STATES,
-    Entry,
     type_to_dir,
+)
+from braindump.service import (
+    AmbiguousTodoError,
+    BraindumpService,
+    CreateRequest,
+    EntryView,
+    SearchRequest,
+    UpdateRequest,
 )
 
 
@@ -116,13 +122,6 @@ def _split_csv(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-def _effective_project(explicit: str | None, cfg) -> str | None:
-    """Honor the active-project filter unless the caller passed --all or --project."""
-    if explicit is not None:
-        return explicit
-    return projects.get_active_project(cfg)
-
-
 # --- create ----------------------------------------------------------------
 
 
@@ -143,6 +142,9 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(
+        None, "--coverage", help="Pitch coverage: uncovered, partial, or covered"
+    ),
     subtype: str | None = typer.Option(None, "--subtype"),
     category: str | None = typer.Option(None, "--category"),
     source: str | None = typer.Option(None, "--source"),
@@ -184,7 +186,6 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
 ):
     """Create a new entry. Body is read from stdin unless --body-file is given."""
     cfg = load_config()
-    store.ensure_type_dirs(cfg)
 
     body = body_file.read_text() if body_file is not None else _read_stdin_if_piped()
 
@@ -201,6 +202,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         for k, v in {
             "status": status,
             "priority": priority,
+            "coverage": coverage,
             "subtype": subtype,
             "category": category,
             "source": source,
@@ -271,16 +273,17 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
     )
 
     try:
-        result = entries.create_entry(
-            cfg,
-            entry_type,
-            title,
-            body,
-            tags=tag,
-            project=None if entry_type in {"initiative", "pitch"} else project,
-            summary=summary,
-            original_input=original_input,
-            type_fields=type_fields,
+        result = BraindumpService(cfg).create(
+            CreateRequest(
+                entry_type=entry_type,
+                title=title,
+                body=body,
+                tags=tuple(tag),
+                project=None if entry_type in {"initiative", "pitch"} else project,
+                summary=summary,
+                original_input=original_input,
+                type_fields=type_fields,
+            )
         )
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
@@ -309,25 +312,40 @@ def list_cmd(
     initiative_id: int | None = typer.Option(None, "--initiative-id"),
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
     branch: str | None = typer.Option(None, "--branch"),
+    priority: str | None = typer.Option(
+        None, "--priority", help="high, medium, or low"
+    ),
+    coverage: str | None = typer.Option(
+        None,
+        "--coverage",
+        help="unaudited, uncovered, partial, or covered",
+    ),
+    sort: str = typer.Option("date", "--sort", help="date or priority"),
+    direction: str = typer.Option("desc", "--direction", "--dir", help="asc or desc"),
 ):
-    """List recent entries (newest first)."""
+    """List recent entries."""
     cfg = load_config()
-    types: list[str] = [type_to_dir(entry_type)] if entry_type else []
-    proj = None if all_projects else _effective_project(project, cfg)
-    hits = query.search(
-        cfg,
-        query.SearchFilters(
-            types=types,
-            project=proj,
-            status=cast(StatusFilter, status),
-            project_id=project_id,
-            initiative_id=initiative_id,
-            pitch_id=pitch_id,
-            branch=branch,
-            limit=limit,
-            fulltext=False,
-        ),
-    )
+    try:
+        hits = BraindumpService(cfg).list_entries(
+            SearchRequest(
+                types=(type_to_dir(entry_type),) if entry_type else (),
+                project=project,
+                all_projects=all_projects,
+                status=cast(StatusFilter, status),
+                project_id=project_id,
+                initiative_id=initiative_id,
+                pitch_id=pitch_id,
+                branch=branch,
+                priority=priority,
+                coverage=coverage,
+                sort=cast(query.SortField, sort),
+                direction=cast(query.SortDirection, direction),
+                limit=limit,
+                fulltext=False,
+            )
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -381,30 +399,47 @@ def search(
     related_id: int | None = typer.Option(None, "--related-id"),
     related_type: str | None = typer.Option(None, "--related-type"),
     branch: str | None = typer.Option(None, "--branch"),
+    priority: str | None = typer.Option(
+        None, "--priority", help="high, medium, or low"
+    ),
+    coverage: str | None = typer.Option(
+        None,
+        "--coverage",
+        help="unaudited, uncovered, partial, or covered",
+    ),
+    sort: str = typer.Option("date", "--sort", help="date or priority"),
+    direction: str = typer.Option("desc", "--direction", "--dir", help="asc or desc"),
 ):
     """Search across braindump entries."""
     cfg = load_config()
     q = " ".join(query_words or [])
-    proj = None if all_projects else _effective_project(project, cfg)
-    types = [entry_type] if entry_type else []
-    filters = query.SearchFilters(
-        q=q or None,
-        types=types,
-        project=proj,
-        status=cast(StatusFilter, status),
-        tags=tag,
-        project_id=project_id,
-        initiative_id=initiative_id,
-        pitch_id=pitch_id,
-        related_id=related_id,
-        related_type=related_type,
-        branch=branch,
-        since=_parse_date(since),
-        until=_parse_date(until),
-        limit=limit,
-        fulltext=not no_fulltext,
-    )
-    hits = query.search(cfg, filters)
+    try:
+        hits = BraindumpService(cfg).search(
+            SearchRequest(
+                query=q or None,
+                types=(entry_type,) if entry_type else (),
+                project=project,
+                all_projects=all_projects,
+                status=cast(StatusFilter, status),
+                tags=tuple(tag),
+                project_id=project_id,
+                initiative_id=initiative_id,
+                pitch_id=pitch_id,
+                related_id=related_id,
+                related_type=related_type,
+                branch=branch,
+                priority=priority,
+                coverage=coverage,
+                sort=cast(query.SortField, sort),
+                direction=cast(query.SortDirection, direction),
+                since=_parse_date(since),
+                until=_parse_date(until),
+                limit=limit,
+                fulltext=not no_fulltext,
+            )
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     if as_json:
         for h in hits:
             _emit_hit_json(h)
@@ -443,6 +478,8 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
     "initiative": ["status", "project_ids"],
     "pitch": [
         "status",
+        "priority",
+        "coverage",
         "project_ids",
         "initiative_ids",
         "source_path",
@@ -454,31 +491,9 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
 }
 
 
-def _read_authored_body(cfg: Config, type_dir: str, entry: Entry) -> str:
-    """Read the authored body from the entry's markdown file."""
-    full_path = store.full_path_for(cfg, type_dir, entry.file_path)
-    if full_path.exists():
-        _, md_body = store.read_markdown(full_path)
-        _, authored, _ = entries.split_body(md_body)
-        return authored
-    return ""
-
-
-def _find_entries_by_ids(
-    cfg: Config,
-    ids: set[int],
-) -> dict[int, tuple[str, Entry]]:
-    """Scan indexes once and return all requested entries."""
-    found: dict[int, tuple[str, Entry]] = {}
-    for type_dir in ALL_TYPE_DIRS:
-        for entry in store.read_index(cfg, type_dir):
-            if entry.id in ids:
-                found[entry.id] = (type_dir, entry)
-    return found
-
-
-def _format_entry(cfg: Config, type_dir: str, entry: Entry) -> str:
-    """Return the formatted, human-readable text for a single entry."""
+def _format_entry(view: EntryView) -> str:
+    """Return the formatted text for a single entry."""
+    entry = view.entry
     lines: list[str] = []
     lines.append(f"#{entry.id} {entry.type} — {entry.title}")
 
@@ -492,24 +507,18 @@ def _format_entry(cfg: Config, type_dir: str, entry: Entry) -> str:
 
     for field in _TYPE_SPECIFIC_FIELDS.get(entry.type, []):
         val = getattr(entry, field, None)
+        if entry.type == "pitch" and field == "coverage" and val is None:
+            val = "unaudited"
         if val is not None:
             if isinstance(val, list):
                 val = ", ".join(str(v) for v in val)
             lines.append(f"{field}: {val}")
 
-    authored = _read_authored_body(cfg, type_dir, entry)
-    if authored.strip():
+    if view.body.strip():
         lines.append("")
-        lines.append(authored)
+        lines.append(view.body)
 
     return "\n".join(lines)
-
-
-def _entry_json(cfg: Config, type_dir: str, entry: Entry) -> dict:
-    """Return JSON dict for an entry."""
-    data = entry.to_index_json()
-    data["body"] = _read_authored_body(cfg, type_dir, entry)
-    return data
 
 
 @app.command()
@@ -520,7 +529,7 @@ def show(
 ):
     """Display one or more entries by ID."""
     cfg = load_config()
-    found = _find_entries_by_ids(cfg, set(ids))
+    found = BraindumpService(cfg).get_entries(ids)
     success_count = 0
     outputs: list[str] = []
 
@@ -528,14 +537,12 @@ def show(
         if entry_id not in found:
             typer.echo(f"error: entry {entry_id} not found", err=True)
             continue
-        type_dir, entry = found[entry_id]
+        view = found[entry_id]
         success_count += 1
         if as_json:
-            typer.echo(
-                json.dumps(_entry_json(cfg, type_dir, entry), ensure_ascii=False)
-            )
+            typer.echo(json.dumps(view.to_json(), ensure_ascii=False))
         else:
-            outputs.append(_format_entry(cfg, type_dir, entry))
+            outputs.append(_format_entry(view))
 
     if not as_json and outputs:
         typer.echo("\n---\n".join(outputs))
@@ -551,8 +558,12 @@ def show(
 def done(arg: str = typer.Argument(...)):
     """Mark a todo as done by id, file path, or search query."""
     cfg = load_config()
-    entry_id = _resolve_todo(cfg, arg)
-    updated = entries.mark_done(cfg, entry_id)
+    service = BraindumpService(cfg)
+    try:
+        updated = service.done(arg)
+    except AmbiguousTodoError as exc:
+        _print_todo_matches(exc)
+        raise
     typer.echo(f"done: #{updated.id} {updated.file_path}")
 
 
@@ -582,7 +593,7 @@ def qa_result(
 
 
 @app.command()
-def update(  # noqa: PLR0912 -- one branch per independently optional CLI field
+def update(  # noqa: PLR0912 -- one option per supported entry field
     entry_id: int = typer.Argument(..., metavar="ID"),
     title: str | None = typer.Option(None, "--title"),
     summary: str | None = typer.Option(None, "--summary"),
@@ -596,6 +607,7 @@ def update(  # noqa: PLR0912 -- one branch per independently optional CLI field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    coverage: str | None = typer.Option(None, "--coverage"),
     area: str | None = typer.Option(
         None, "--area", help="Project grouping (project type)"
     ),
@@ -633,7 +645,9 @@ def update(  # noqa: PLR0912 -- one branch per independently optional CLI field
     if status is not None:
         patch["status"] = status
     if priority is not None:
-        patch["priority"] = priority
+        patch["priority"] = priority or None
+    if coverage is not None:
+        patch["coverage"] = coverage or None
     if area is not None:
         patch["area"] = area
     patch.update(
@@ -666,7 +680,9 @@ def update(  # noqa: PLR0912 -- one branch per independently optional CLI field
             raise typer.BadParameter("initiative IDs must be integers") from exc
     body = _read_stdin_if_piped() if body_from_stdin else None
     try:
-        updated = entries.update_entry(cfg, entry_id, patch, body=body)
+        updated = BraindumpService(cfg).update(
+            UpdateRequest(entry_id=entry_id, patch=patch, body=body)
+        )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"updated: #{updated.id} {updated.file_path}")
@@ -681,32 +697,21 @@ def delete(entry_id: int = typer.Argument(...)):
 
 
 def _resolve_todo(cfg, arg: str) -> int:
-    if arg.isdigit():
-        return int(arg)
-    # Try file path first
-    if arg.endswith(".md") or "/" in arg:
-        found = entries.find_by_file_path(cfg, arg, "todos")
-        if found:
-            return found[1].id
-        raise BraindumpError(f"no todo found with file path: {arg}")
-    # Otherwise treat as a search over open todos
-    hits = query.search(
-        cfg,
-        query.SearchFilters(
-            q=arg, types=["todos"], status="open", limit=5, fulltext=False
-        ),
-    )
-    if not hits:
-        raise BraindumpError(f"no open todos found for: {arg}")
-    if len(hits) > 1:
+    try:
+        return BraindumpService(cfg).resolve_todo(arg)
+    except AmbiguousTodoError as exc:
+        _print_todo_matches(exc)
+        raise
+
+
+def _print_todo_matches(exc: AmbiguousTodoError) -> None:
+    if exc.matches:
         typer.echo("Multiple matches:", err=True)
-        for h in hits:
+        for h in exc.matches:
             typer.echo(
                 f"  #{h.entry.id} [{h.entry.status or 'pending'}] {h.entry.title}",
                 err=True,
             )
-        raise BraindumpError(f"{arg!r} matches {len(hits)} open todos — pass an id")
-    return hits[0].entry.id
 
 
 # --- journal ---------------------------------------------------------------
@@ -718,10 +723,10 @@ def journal_today(
 ):
     """Show or ensure today's journal exists."""
     cfg = load_config()
-    d = journal.current_day(cfg)
-    entry = journal.get_or_create_day(cfg, d)
+    service = BraindumpService(cfg)
+    d, entry, body = service.journal_today()
     if show:
-        typer.echo(journal.read_body(cfg, d))
+        typer.echo(body)
         return
     typer.echo(f"day: {d.isoformat()} id: {entry.id} words: {entry.word_count or 0}")
 
@@ -739,23 +744,24 @@ def journal_append(
     if not body.strip():
         typer.echo("No text to append.", err=True)
         raise typer.Exit(code=1)
-    d = _require_date(target_day) if target_day else journal.current_day(cfg)
-    entry = journal.append_text(cfg, d, body)
-    typer.echo(f"appended: {d.isoformat()} words: {entry.word_count or 0}")
+    d = _require_date(target_day) if target_day else None
+    entry = BraindumpService(cfg).journal_append(body, d)
+    output_day = d or entry.date
+    typer.echo(f"appended: {output_day} words: {entry.word_count or 0}")
 
 
 @journal_app.command("close")
 def journal_close():
     """Seal today's journal and open tomorrow's, regardless of the cutoff clock."""
     cfg = load_config()
-    next_entry = journal.close_today(cfg)
+    next_entry = BraindumpService(cfg).journal_close()
     typer.echo(f"opened: {next_entry.date}")
 
 
 @journal_app.command("show")
 def journal_show(day: str = typer.Argument(..., help="YYYY-MM-DD")):
     cfg = load_config()
-    typer.echo(journal.read_body(cfg, _require_date(day)))
+    typer.echo(BraindumpService(cfg).journal_show(_require_date(day)))
 
 
 # --- projects --------------------------------------------------------------
@@ -918,8 +924,9 @@ def project_list(
 ):
     """List all projects with aggregate stats."""
     cfg = load_config()
-    stats = projects.list_projects(cfg)
-    active = projects.get_active_project(cfg)
+    service = BraindumpService(cfg)
+    stats = service.project_list()
+    active = service.get_active_project()
     if not stats:
         typer.echo("(no projects yet)")
         return
@@ -940,10 +947,9 @@ def project_list(
 def project_unregistered():
     """List projects referenced by entries but never registered with create."""
     cfg = load_config()
+    service = BraindumpService(cfg)
     stats = [
-        s
-        for s in projects.list_projects(cfg)
-        if not s.registered and s.name != "(none)"
+        s for s in service.project_list() if not s.registered and s.name != "(none)"
     ]
     if not stats:
         typer.echo("(no unregistered projects)")
@@ -955,7 +961,7 @@ def project_unregistered():
 @project_app.command("show")
 def project_show(name: str = typer.Argument(...)):
     cfg = load_config()
-    s = projects.project_stats(cfg, name)
+    s = BraindumpService(cfg).project_stats(name)
     typer.echo(f"project: {name}")
     if s.registered:
         typer.echo("registered: yes")
@@ -992,15 +998,16 @@ def project_focus(
 ):
     """Set or clear the active project filter."""
     cfg = load_config()
+    service = BraindumpService(cfg)
     if clear:
-        projects.set_active_project(cfg, None)
+        service.set_active_project(None)
         typer.echo("focus cleared")
         return
     if not name:
-        current = projects.get_active_project(cfg)
+        current = service.get_active_project()
         typer.echo(f"active project: {current or '(none)'}")
         return
-    projects.set_active_project(cfg, name)
+    service.set_active_project(name)
     typer.echo(f"focused: {name}")
 
 
@@ -1010,7 +1017,7 @@ def project_focus(
 @tags_app.command("stats")
 def tags_stats():
     cfg = load_config()
-    counter = tags_mod.tag_frequency(cfg)
+    counter = BraindumpService(cfg).tag_frequency()
     if not counter:
         typer.echo("Tag frequency:\n==============")
         return
@@ -1023,7 +1030,7 @@ def tags_stats():
 @tags_app.command("show")
 def tags_show(tag: str = typer.Argument(...)):
     cfg = load_config()
-    results = tags_mod.entries_with_tag(cfg, tag)
+    results = BraindumpService(cfg).entries_with_tag(tag)
     if not results:
         typer.echo(f"No entries tagged {tag!r}")
         return
@@ -1107,13 +1114,14 @@ def app_cmd(
         False,
         "--foreground",
         "-f",
-        help="Stay attached to this terminal instead of detaching.",
+        help="Stay attached until both windows close instead of detaching.",
     ),
 ):
-    """Run the web UI in a native desktop window (pywebview).
+    """Open Journal and Todos in separate native windows (pywebview).
 
-    Detaches by default: the window keeps running after the shell that started
-    it closes, and its output goes to `~/braindump/.bd-app.log`.
+    They share one local server and one pywebview event loop. Detaches by
+    default; an owned server stops only after both windows close. Output goes
+    to `~/braindump/.bd-app.log`.
     """
     # optional [app] dep — imported lazily
     from braindump.web.desktop import launch_detached, run_app  # noqa: PLC0415

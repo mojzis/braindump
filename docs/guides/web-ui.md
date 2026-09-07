@@ -6,18 +6,23 @@
 ```bash
 bd serve                         # default host/port
 bd serve --host 0.0.0.0 --port 9000
-bd app                           # same UI in a native pywebview window ([app] extra)
+bd app                           # same UI in native Journal + Todos windows ([app] extra)
 ```
 
-`bd app` starts the same server in a background thread and points a native
-[pywebview](https://pywebview.flet.dev/) window at it — a convenience wrapper,
-not a packaged build.
+`bd app` starts the same server in a background thread and opens native
+[pywebview](https://pywebview.flet.dev/) Journal and Todos windows side by side
+by default. Both windows use that one server and one event loop — a convenience
+wrapper, not a packaged build.
 
-On macOS it also renames itself: without a .app bundle of its own, the window
-would introduce itself as `Python 3.14` in the ⌘-tab switcher and `Python` in
-the menu bar. `bd app` overwrites both bundle keys (`CFBundleDisplayName` and
-`CFBundleName`) before the Cocoa backend registers the process, so it shows up
-as **Braindump**.
+If `bd app` owns the server, it stops only after both windows close. If the
+windows attach to an existing `bd serve` or `bd app`, they leave that server
+running when they close.
+
+On macOS it also renames itself: without a .app bundle of its own, the windows
+would introduce themselves as `Python 3.14` in the ⌘-tab switcher and `Python`
+in the menu bar. `bd app` overwrites both bundle keys
+(`CFBundleDisplayName` and `CFBundleName`) before the Cocoa backend registers
+the process, so it shows up as **Braindump**.
 
 ## Selecting and copying text
 
@@ -47,8 +52,8 @@ the right-click menu still works.
 | `/` | Dashboard — today's journal preview, open todos, recent activity, top tags, projects |
 | `/journal` | The running doc: today's editor on top, the last ~7 days rendered below with lazy-load-on-scroll, autosave, `✳ parse`, and a "finish the day" button |
 | `/journal/<YYYY-MM-DD>` | Read-only permalink for a single past day |
-| `/capture` | Quick-capture form (type, title, body, tags, project) |
-| `/entries` | Searchable / filterable list |
+| `/capture` | Quick-capture form (type, title, body, tags, project, priority, and pitch coverage) |
+| `/entries` | Searchable / filterable list, including priority and pitch coverage |
 | `/entries/<id>` | View + edit-in-place (title, tags, project, status, body) |
 | `/projects`, `/projects/<name>` | Project inventory and per-project dashboards |
 | `/tags` | Tag analytics |
@@ -58,6 +63,10 @@ detail routes. Their relations render as ID-backed links; stale links remain
 visible as missing-reference warnings. The web UI does not import or remove
 external pitch files: curated import and its separate source-removal
 confirmation are CLI operations.
+
+Pitch coverage is entered and audited manually. Missing coverage is unaudited;
+`covered` asserts that each remaining deliverable has a linked Braindump todo or
+Linear ticket. The web UI does not calculate coverage or integrate with Linear.
 
 Cockpit-facing state remains local and minimal. A todo in in-qa can receive a
 pass/fail receipt through bd qa; the durable fields are qa_result,
@@ -70,8 +79,11 @@ copied into braindump.
 |------|--------|
 | `g d` | Dashboard |
 | `g j` | Journal |
+| `g t` | Todos |
+| `g l` | TILs |
 | `g c` | Capture |
 | `g e` | Entries |
+| `g i` | Focus entry ID |
 | `g p` | Projects |
 | `/` | Focus search |
 | `⌘ / Ctrl + Enter` | Parse (on the journal page) |

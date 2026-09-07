@@ -41,11 +41,14 @@ The `[web]` extra is required for `bd serve`. If it's omitted you'll get
 that's the symptom of a `bd` installed without it. Running `./install.sh` does
 the same thing (it always installs with `[web]`).
 
-## Desktop window (optional)
+## Desktop windows (optional)
 
-`bd app` runs the exact same web UI inside a native
-[pywebview](https://pywebview.flet.dev/) window instead of a browser tab.
-It requires the `[app]` extra:
+`bd app` runs the exact same web UI in separate native Journal and Todos
+[pywebview](https://pywebview.flet.dev/) windows instead of browser tabs. The
+windows share one local server and one pywebview event loop. If `bd app` starts
+that server, it stops only after both windows close; if it attaches to an
+existing server, closing the windows leaves that server running. It requires
+the `[app]` extra:
 
 ```bash
 uv tool install --force --reinstall --no-cache ".[app]"
