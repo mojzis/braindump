@@ -131,7 +131,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
     entry_type: str = typer.Argument(
         ...,
         metavar="TYPE",
-        help="todo, til, thought, prompt, project, initiative, pitch",
+        help="todo, til, thought, prompt, project, initiative, pitch, handoff",
     ),
     title: str = typer.Argument(..., help="Entry title"),
     tag: list[str] = typer.Option([], "--tag", "-t", help="Tag (repeatable)"),
@@ -180,6 +180,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
     qa_verified_at: str | None = typer.Option(None, "--qa-verified-at"),
     qa_run_ref: str | None = typer.Option(None, "--qa-run-ref"),
     source_path: str | None = typer.Option(None, "--source-path"),
+    branch: str | None = typer.Option(None, "--branch"),
 ):
     """Create a new entry. Body is read from stdin unless --body-file is given."""
     cfg = load_config()
@@ -263,6 +264,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
                 "qa_verified_at": qa_verified_at,
                 "qa_run_ref": qa_run_ref,
                 "source_path": source_path,
+                "branch": branch,
             }.items()
             if value is not None
         }
@@ -306,6 +308,7 @@ def list_cmd(
     project_id: int | None = typer.Option(None, "--project-id"),
     initiative_id: int | None = typer.Option(None, "--initiative-id"),
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
+    branch: str | None = typer.Option(None, "--branch"),
 ):
     """List recent entries (newest first)."""
     cfg = load_config()
@@ -320,6 +323,7 @@ def list_cmd(
             project_id=project_id,
             initiative_id=initiative_id,
             pitch_id=pitch_id,
+            branch=branch,
             limit=limit,
             fulltext=False,
         ),
@@ -341,9 +345,10 @@ def list_cmd(
                 values = value if isinstance(value, list) else [value]
                 relation_parts.append(f"{field}={','.join(str(v) for v in values)}")
         relation_str = f" {{{'; '.join(relation_parts)}}}" if relation_parts else ""
+        branch_str = f" {{branch={h.entry.branch}}}" if h.entry.branch else ""
         typer.echo(
             f"#{h.entry.id} {date_str} [{h.entry.type}]{status_str} "
-            f"{h.entry.title}{proj_str}{relation_str}"
+            f"{h.entry.title}{proj_str}{relation_str}{branch_str}"
         )
 
 
@@ -375,6 +380,7 @@ def search(
     pitch_id: int | None = typer.Option(None, "--pitch-id"),
     related_id: int | None = typer.Option(None, "--related-id"),
     related_type: str | None = typer.Option(None, "--related-type"),
+    branch: str | None = typer.Option(None, "--branch"),
 ):
     """Search across braindump entries."""
     cfg = load_config()
@@ -392,6 +398,7 @@ def search(
         pitch_id=pitch_id,
         related_id=related_id,
         related_type=related_type,
+        branch=branch,
         since=_parse_date(since),
         until=_parse_date(until),
         limit=limit,
@@ -406,9 +413,10 @@ def search(
         date_str = (h.entry.created_at or "")[:10]
         proj_str = f" ({h.entry.project})" if h.entry.project else ""
         status_str = f" [{h.entry.status}]" if h.entry.status else ""
+        branch_str = f" {{branch={h.entry.branch}}}" if h.entry.branch else ""
         typer.echo(
             f"#{h.entry.id} {date_str} [{h.entry.type}]{status_str} "
-            f"{h.entry.title}{proj_str}"
+            f"{h.entry.title}{proj_str}{branch_str}"
         )
 
 
@@ -442,6 +450,7 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
         "qa_verified_at",
         "qa_run_ref",
     ],
+    "handoff": ["branch"],
 }
 
 
@@ -608,6 +617,7 @@ def update(
     qa_verified_at: str | None = typer.Option(None, "--qa-verified-at"),
     qa_run_ref: str | None = typer.Option(None, "--qa-run-ref"),
     source_path: str | None = typer.Option(None, "--source-path"),
+    branch: str | None = typer.Option(None, "--branch"),
 ):
     """Patch an entry's metadata and (optionally) its body."""
     cfg = load_config()
@@ -636,6 +646,7 @@ def update(
                 "qa_verified_at": qa_verified_at,
                 "qa_run_ref": qa_run_ref,
                 "source_path": source_path,
+                "branch": branch,
             }.items()
             if value is not None
         }

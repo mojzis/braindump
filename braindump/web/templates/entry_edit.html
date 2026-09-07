@@ -12,6 +12,9 @@
     {% if entry.type not in ("initiative", "pitch") %}
       <label>project <input type="text" name="project" value="{{ entry.project or '' }}" list="project-datalist" /></label>
     {% endif %}
+    {% if entry.type == "handoff" %}
+      <label>branch <input type="text" name="branch" value="{{ entry.branch or '' }}" /></label>
+    {% endif %}
     {% if entry.type == "todo" %}
       <label>status
         <select name="status">

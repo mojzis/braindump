@@ -238,6 +238,29 @@ def test_update_drops_the_tag_when_the_project_moves(cfg):
     assert updated.tags == []
 
 
+def test_handoff_roundtrip_persists_authored_body_and_branch(cfg):
+    result = entries.create_entry(
+        cfg,
+        "handoff",
+        "Resume auth",
+        "Continue investigating the token bug.",
+        type_fields={"branch": "feature/auth"},
+        now=_fake_now(),
+    )
+
+    assert result.entry.type == "handoff"
+    assert result.entry.branch == "feature/auth"
+    assert result.entry.file_path.startswith("2026/04/")
+    assert "handoffs" in result.full_path.parts
+    assert "branch: feature/auth" in result.full_path.read_text()
+    assert "Continue investigating the token bug." in result.full_path.read_text()
+    assert store.read_index(cfg, "handoffs")[0].branch == "feature/auth"
+
+    updated = entries.update_entry(cfg, result.entry.id, {"branch": None})
+    assert updated.branch is None
+    assert "branch:" not in result.full_path.read_text()
+
+
 def test_planning_graph_round_trip_and_typed_relations(cfg):
     project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
     initiative = entries.create_entry(

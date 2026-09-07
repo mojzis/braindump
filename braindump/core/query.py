@@ -54,6 +54,7 @@ class SearchFilters:
     pitch_id: int | None = None
     related_id: int | None = None
     related_type: str | None = None
+    branch: str | None = None
     status: StatusFilter = "all"
     tags: list[str] = field(default_factory=list)
     since: date | None = None
@@ -95,6 +96,8 @@ def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
 
 
 def _entry_matches_relations(entry: Entry, f: SearchFilters) -> bool:
+    if f.branch is not None and entry.branch != f.branch:
+        return False
     if f.project is not None and entry.project != f.project:
         return False
     if f.project_id is not None and f.project_id not in (entry.project_ids or []):

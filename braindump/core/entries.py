@@ -600,6 +600,7 @@ _MUTABLE_FIELDS = {
     "qa_verified_at",
     "qa_run_ref",
     "source_path",
+    "branch",
 }
 
 

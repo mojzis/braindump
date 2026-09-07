@@ -71,6 +71,7 @@ bd --help                             # overview
 bd list                               # recent entries
 bd search auth login --status open    # multi-word AND search
 bd create todo "Fix auth" --tag auth  # create (body from stdin)
+bd create handoff "Session handoff" --branch feature/auth  # capture a handoff
 bd done 42                            # mark todo done
 bd update 42 --tags a,b --project foo # patch metadata
 bd project focus braindump            # scope all queries to a project
@@ -78,6 +79,11 @@ bd journal today                      # today's journal state
 bd serve                              # local web UI at http://127.0.0.1:8765/
 bd app                                # same UI in a native desktop window (detached)
 ```
+
+Handoffs are ordinary entries stored under `handoffs/`. Their authored body is
+kept in Markdown and an optional `branch` records the code branch to resume
+from. They use the generic create, list, search, show, update, and web entry
+paths; there is no separate handoff lifecycle.
 
 ### Web UI
 
@@ -164,6 +170,7 @@ All of them delegate to the same `bd` CLI, so what you see in the web UI is exac
 ├── til/        …
 ├── thoughts/   …
 ├── prompts/    …
+├── handoffs/   index.jsonl + YYYY/MM/<slug>--<timestamp>.md
 ├── journal/    index.jsonl + YYYY/MM/<YYYY-MM-DD>.md  (one file per day)
 ├── sessions/   Claude Code session hooks output
 ├── scripts/    session hooks only
@@ -208,11 +215,15 @@ Authored content…
 
 ```bash
 uv venv
-uv pip install -e ".[dev,web]"
+uv pip install -e ".[dev,web,mcp]"
 pytest                   # core test suite
 bd serve --reload        # local UI with autoreload
 uv run poe setup         # enable the repository pre-commit hook
 ```
+
+The optional `mcp` extra also installs the `bd-mcp` stdio adapter. It exposes
+the same create, list, search, show, and update contract as the CLI, including
+handoff bodies and branches.
 
 The agent-friendly pre-commit hook formats and re-stages staged Python files,
 then runs Ruff, ty, and Biston on those files. Use

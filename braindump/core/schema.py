@@ -13,6 +13,7 @@ EntryType = Literal[
     "project",
     "initiative",
     "pitch",
+    "handoff",
 ]
 
 TODO_STATUSES = ("pending", "in-progress", "in-qa", "done", "cancelled")
@@ -32,6 +33,7 @@ TYPE_TO_DIR: dict[str, str] = {
     "project": "projects",
     "initiative": "initiatives",
     "pitch": "pitches",
+    "handoff": "handoffs",
 }
 
 DIR_TO_TYPE: dict[str, str] = {v: k for k, v in TYPE_TO_DIR.items()}
@@ -111,6 +113,8 @@ class Entry(BaseModel):
     qa_run_ref: str | None = None
     # imported source provenance
     source_path: str | None = None
+    # handoff
+    branch: str | None = None
 
     def type_dir(self) -> str:
         return TYPE_TO_DIR[self.type]

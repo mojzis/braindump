@@ -30,6 +30,7 @@
     {% if entry.project %}
       <span>·</span><a href="/projects/{{ entry.project }}">{{ entry.project }}</a>
     {% endif %}
+    {% if entry.branch %}<span>·</span><span>branch {{ entry.branch }}</span>{% endif %}
   </p>
 
   {% if entry.tags %}

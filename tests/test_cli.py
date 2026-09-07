@@ -190,6 +190,42 @@ def test_update_rejects_unsupported_relation_without_traceback(tmp_path, monkeyp
     assert "not valid for todo" in res.output
 
 
+def test_cli_handoff_create_list_search_show_and_update(tmp_path, monkeypatch):
+    cfg = _make_cfg(tmp_path)
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    created = runner.invoke(
+        app,
+        ["create", "handoff", "Auth session", "--branch", "feature/auth"],
+        input="Resume the auth work.\n",
+    )
+    assert created.exit_code == 0
+    entry_id = int(created.output.split("#", 1)[1].split()[0])
+
+    listed = runner.invoke(
+        app, ["list", "handoff", "--branch", "feature/auth", "--json"]
+    )
+    assert listed.exit_code == 0
+    assert json.loads(listed.output)["branch"] == "feature/auth"
+
+    searched = runner.invoke(
+        app,
+        ["search", "auth", "--type", "handoff", "--branch", "feature/auth"],
+    )
+    assert searched.exit_code == 0
+    assert json.loads(searched.output)["id"] == entry_id
+
+    shown = runner.invoke(app, ["show", "--json", str(entry_id)])
+    assert json.loads(shown.output)["body"] == "Resume the auth work."
+    assert json.loads(shown.output)["branch"] == "feature/auth"
+
+    updated = runner.invoke(app, ["update", str(entry_id), "--branch", "release"])
+    assert updated.exit_code == 0
+    found = entries.find_by_id(cfg, entry_id)
+    assert found is not None
+    assert found[1].branch == "release"
+
+
 def test_qa_result_records_receipt_and_marks_done(tmp_path, monkeypatch):
     cfg = _make_cfg(tmp_path)
     todo = _create_todo(cfg, type_fields={"status": "in-qa"})

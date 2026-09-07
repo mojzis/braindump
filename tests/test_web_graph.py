@@ -134,6 +134,43 @@ async def test_graph_missing_relation_is_a_warning(monkeypatch, cfg):
 
 
 @pytest.mark.anyio
+async def test_generic_handoff_list_view_and_edit(monkeypatch, cfg):
+    handoff = entries.create_entry(
+        cfg,
+        "handoff",
+        "Web handoff",
+        "Web authored body",
+        type_fields={"branch": "feature/web"},
+        now=datetime(2026, 4, 11, 10),
+    )
+
+    listing = await _request(
+        monkeypatch, cfg, "GET", "/entries?type=handoff&branch=feature%2Fweb"
+    )
+    assert listing.status_code == 200
+    assert "Web handoff" in listing.text
+    assert "feature/web" in listing.text
+
+    detail = await _request(monkeypatch, cfg, "GET", f"/entries/{handoff.entry.id}")
+    assert "Web authored body" in detail.text
+    assert "branch feature/web" in detail.text
+
+    edit = await _request(monkeypatch, cfg, "GET", f"/entries/{handoff.entry.id}/edit")
+    assert 'name="branch"' in edit.text
+    updated = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{handoff.entry.id}",
+        data={"branch": "release/web", "body": "Updated web body"},
+    )
+    assert updated.status_code == 200
+    persisted = entries.find_by_id(cfg, handoff.entry.id)
+    assert persisted is not None
+    assert persisted[1].branch == "release/web"
+
+
+@pytest.mark.anyio
 async def test_initiative_parse_route_creates_linked_todos_once(monkeypatch, cfg):
     project = entries.create_entry(cfg, "project", "Alpha", "body")
     initiative = entries.create_entry(

@@ -177,3 +177,29 @@ def test_related_entries_keeps_stale_numeric_links(cfg):
     entries.delete_entry(cfg, project.entry.id)
     hits = query.related_entries(cfg, "project", project.entry.id)
     assert [hit.entry.id for hit in hits] == [initiative.entry.id]
+
+
+def test_search_filters_handoffs_by_exact_branch(cfg):
+    entries.create_entry(
+        cfg,
+        "handoff",
+        "Auth handoff",
+        "body",
+        type_fields={"branch": "feature/auth"},
+        now=datetime(2026, 4, 11, 10),
+    )
+    entries.create_entry(
+        cfg,
+        "handoff",
+        "Release handoff",
+        "body",
+        type_fields={"branch": "release"},
+        now=datetime(2026, 4, 11, 11),
+    )
+
+    hits = query.search(
+        cfg,
+        query.SearchFilters(types=["handoff"], branch="feature/auth", fulltext=False),
+    )
+
+    assert [hit.entry.title for hit in hits] == ["Auth handoff"]

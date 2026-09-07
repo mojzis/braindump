@@ -715,6 +715,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     pitch_id: int | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
+    branch: str | None = None,
 ):
     cfg = load_config()
     active = projects.get_active_project(cfg)
@@ -730,6 +731,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         pitch_id=pitch_id,
         related_id=related_id,
         related_type=related_type,
+        branch=branch,
         limit=100,
     )
 
@@ -755,6 +757,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
             pitch_id=pitch_id,
             related_id=related_id,
             related_type=related_type or "",
+            branch=branch or "",
         ),
     )
 
@@ -801,6 +804,7 @@ def _planning_list(request: Request, entry_type: str, title: str):
             pitch_id=None,
             related_id=None,
             related_type="",
+            branch="",
         ),
     )
 
@@ -887,6 +891,7 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
     qa_verified_at: str | None = Form(None),
     qa_run_ref: str | None = Form(None),
     source_path: str | None = Form(None),
+    branch: str | None = Form(None),
 ):
     form = await request.form()
     cfg = load_config()
@@ -910,6 +915,7 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
         "qa_verified_at": qa_verified_at,
         "qa_run_ref": qa_run_ref,
         "source_path": source_path,
+        "branch": branch,
     }.items():
         if raw is not None or key in form:
             if key in {"initiative_id", "pitch_id"}:
