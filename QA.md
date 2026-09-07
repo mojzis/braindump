@@ -133,6 +133,14 @@ async def main() -> None:
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://test") as client,
     ):
+        blank_branch = await client.get(
+            "/entries",
+            params={"type": "handoff", "branch": "", "all": "1"},
+        )
+        assert blank_branch.status_code == 200
+        assert "Branchless session updated" in blank_branch.text
+        assert "Alpha feature" in blank_branch.text
+
         filtered = await client.get(
             "/entries",
             params={

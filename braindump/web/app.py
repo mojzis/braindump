@@ -742,6 +742,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     proj_filter = None if all_projects else (project or active)
     priority = _strip_or_none(priority)
     coverage = _strip_or_none(coverage)
+    branch = _strip_or_none(branch)
     filters = query.SearchFilters(
         q=q or None,
         types=[type] if type else [],

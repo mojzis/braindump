@@ -315,6 +315,43 @@ async def test_generic_handoff_list_view_and_edit(monkeypatch, cfg):
 
 
 @pytest.mark.anyio
+async def test_generic_entries_blank_branch_control_is_not_a_filter(monkeypatch, cfg):
+    entries.create_entry(cfg, "todo", "Ordinary entry", "body")
+    entries.create_entry(cfg, "handoff", "Branchless handoff", "body")
+    entries.create_entry(
+        cfg,
+        "handoff",
+        "Named branch handoff",
+        "body",
+        type_fields={"branch": "feature/web"},
+    )
+
+    blank_branch = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries",
+        params={"branch": "", "all": "1"},
+    )
+    named_branch = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries",
+        params={"branch": "feature/web", "all": "1"},
+    )
+
+    assert blank_branch.status_code == 200
+    assert "Ordinary entry" in blank_branch.text
+    assert "Branchless handoff" in blank_branch.text
+    assert "Named branch handoff" in blank_branch.text
+    assert named_branch.status_code == 200
+    assert "Named branch handoff" in named_branch.text
+    assert "Ordinary entry" not in named_branch.text
+    assert "Branchless handoff" not in named_branch.text
+
+
+@pytest.mark.anyio
 async def test_initiative_parse_route_creates_linked_todos_once(monkeypatch, cfg):
     project = entries.create_entry(cfg, "project", "Alpha", "body")
     initiative = entries.create_entry(
