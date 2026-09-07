@@ -646,11 +646,12 @@ def update(
                 "qa_verified_at": qa_verified_at,
                 "qa_run_ref": qa_run_ref,
                 "source_path": source_path,
-                "branch": branch,
             }.items()
             if value is not None
         }
     )
+    if branch is not None:
+        patch["branch"] = branch or None
     if project_ids is not None:
         try:
             patch["project_ids"] = [int(value) for value in _split_csv(project_ids)]

@@ -225,6 +225,12 @@ def test_cli_handoff_create_list_search_show_and_update(tmp_path, monkeypatch):
     assert found is not None
     assert found[1].branch == "release"
 
+    cleared = runner.invoke(app, ["update", str(entry_id), "--branch", ""])
+    assert cleared.exit_code == 0
+    found = entries.find_by_id(cfg, entry_id)
+    assert found is not None
+    assert found[1].branch is None
+
 
 def test_qa_result_records_receipt_and_marks_done(tmp_path, monkeypatch):
     cfg = _make_cfg(tmp_path)
