@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import date, datetime
 
 import pytest
@@ -151,7 +152,8 @@ def test_search_sorts_newest_first(cfg):
     assert titles == ["Ripgrep glob trick", "Fix auth bug", "Ship deploy pipeline"]
 
 
-def test_search_sorts_priority_before_limiting(cfg):
+@pytest.fixture
+def priority_todos(cfg):
     for minute, (title, priority) in enumerate(
         (("low", "low"), ("medium", "medium"), ("high", "high")), start=1
     ):
@@ -164,6 +166,11 @@ def test_search_sorts_priority_before_limiting(cfg):
             now=datetime(2026, 4, 11, 14, minute),
         )
 
+    return cfg
+
+
+def test_search_sorts_priority_before_limiting(priority_todos):
+    cfg = priority_todos
     highest = query.search(
         cfg,
         query.SearchFilters(sort="priority", direction="asc", limit=1),
@@ -197,16 +204,11 @@ def test_search_multi_word_and(cfg):
     assert hits[0].entry.title == "Ship deploy pipeline"
 
 
+@pytest.mark.skipif(shutil.which("rg") is None, reason="fulltext requires ripgrep")
 def test_fulltext_finds_body_match(cfg):
     _seed(cfg)
     # "kubernetes" only appears in the markdown body, not title/summary/tags
     hits = query.search(cfg, query.SearchFilters(q="kubernetes"))
-    if not hits:
-        # ripgrep may not be available on CI — skip gracefully
-        import shutil
-
-        assert shutil.which("rg") is None
-        return
     assert len(hits) == 1
     assert hits[0].source == "fulltext"
     assert hits[0].entry.title == "Ship deploy pipeline"

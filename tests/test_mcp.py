@@ -59,7 +59,8 @@ def test_mcp_rejects_invalid_search_filters(name, arguments):
         call_tool(name, arguments)
 
 
-def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
+@pytest.fixture
+def mcp_todo(cfg, monkeypatch):
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
     runner = CliRunner()
 
@@ -77,11 +78,19 @@ def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
     entry = created["entry"]
     entry_id = entry["id"]
 
+    return runner, entry_id
+
+
+def test_mcp_todo_show_matches_cli(mcp_todo):
+    runner, entry_id = mcp_todo
     cli_show = runner.invoke(app, ["show", "--json", str(entry_id)])
     assert cli_show.exit_code == 0
     shown = call_tool("show", {"ids": [entry_id]})
     assert json.loads(cli_show.stdout)["body"] == shown["entries"][0]["body"]
 
+
+def test_mcp_todo_search_matches_cli(mcp_todo):
+    runner, entry_id = mcp_todo
     cli_search = runner.invoke(app, ["search", "MCP", "contract"])
     assert cli_search.exit_code == 0
     cli_ids = {json.loads(line)["id"] for line in cli_search.stdout.splitlines()}
@@ -90,6 +99,9 @@ def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
     }
     assert mcp_ids == cli_ids == {entry_id}
 
+
+def test_mcp_todo_update_and_cli_done(mcp_todo):
+    runner, entry_id = mcp_todo
     updated = call_tool(
         "update",
         {
@@ -99,16 +111,16 @@ def test_mcp_todo_round_trip_matches_cli(cfg, monkeypatch):
         },
     )
     assert updated["title"] == "Updated MCP todo"
-    assert call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == (
-        "updated body"
+    assert (
+        call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == "updated body"
     )
-
     cli_done = runner.invoke(app, ["done", str(entry_id)])
     assert cli_done.exit_code == 0
     assert call_tool("done", {"arg": entry_id})["status"] == "done"
 
 
-def test_mcp_preserves_priority_coverage_filtering_and_sorting(cfg, monkeypatch):
+@pytest.fixture
+def mcp_pitches(cfg, monkeypatch):
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
     for title, priority, coverage in (
         ("Low unaudited", "low", None),
@@ -127,6 +139,8 @@ def test_mcp_preserves_priority_coverage_filtering_and_sorting(cfg, monkeypatch)
             },
         )
 
+
+def test_mcp_preserves_priority_coverage_filtering_and_sorting(mcp_pitches):
     covered = call_tool("search", {"coverage": "covered"})
     assert [hit["entry"]["title"] for hit in covered] == ["Medium covered"]
 

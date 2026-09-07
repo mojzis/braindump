@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
 from typer.testing import CliRunner
 
 from braindump.cli.main import app
@@ -15,7 +16,8 @@ from braindump.service import (
 )
 
 
-def test_service_handoff_roundtrip_and_branch_filter(cfg):
+@pytest.fixture
+def service_handoff(cfg):
     service = BraindumpService(cfg)
     created = service.create(
         CreateRequest(
@@ -26,6 +28,11 @@ def test_service_handoff_roundtrip_and_branch_filter(cfg):
         )
     )
 
+    return service, created
+
+
+def test_service_handoff_show_and_branch_filter(service_handoff):
+    service, created = service_handoff
     view = service.get_entry(created.entry.id)
     assert view is not None
     assert view.body == "Service body"
@@ -37,11 +44,15 @@ def test_service_handoff_roundtrip_and_branch_filter(cfg):
         )
     ] == [created.entry.id]
 
+
+def test_service_updates_handoff_branch(service_handoff):
+    service, created = service_handoff
     updated = service.update(UpdateRequest(created.entry.id, {"branch": "release"}))
     assert updated.branch == "release"
 
 
-def test_service_create_show_search_list_update_and_done(cfg):
+@pytest.fixture
+def service_todo(cfg):
     service = BraindumpService(cfg)
     created = service.create(
         CreateRequest(
@@ -54,12 +65,20 @@ def test_service_create_show_search_list_update_and_done(cfg):
         )
     )
 
+    return service, created
+
+
+def test_service_todo_show_includes_body(service_todo):
+    service, created = service_todo
     view = service.get_entry(created.entry.id)
     assert view is not None
     assert view.entry.title == "Service contract todo"
     assert view.body == "Auth body"
     assert view.to_json()["body"] == "Auth body"
 
+
+def test_service_todo_list_and_search(service_todo):
+    service, created = service_todo
     listed = service.list_entries(
         SearchRequest(project="braindump", status="pending", limit=10)
     )
@@ -69,6 +88,9 @@ def test_service_create_show_search_list_update_and_done(cfg):
     )
     assert [hit.entry.id for hit in searched] == [created.entry.id]
 
+
+def test_service_todo_update_and_done(service_todo):
+    service, created = service_todo
     updated = service.update(
         UpdateRequest(
             entry_id=created.entry.id,
@@ -80,7 +102,7 @@ def test_service_create_show_search_list_update_and_done(cfg):
     assert service.done(created.entry.id).status == "done"
 
 
-def test_service_project_tag_and_journal_operations(cfg):
+def test_service_project_and_tag_operations(cfg):
     service = BraindumpService(cfg)
     project = service.create(CreateRequest(entry_type="project", title="Alpha"))
     service.create(
@@ -99,13 +121,17 @@ def test_service_project_tag_and_journal_operations(cfg):
     assert service.tag_frequency()["work"] == 1
     assert service.entries_with_tag("work")[0][1] != project.entry.id
 
+
+def test_service_journal_append_and_show(cfg):
+    service = BraindumpService(cfg)
     day = date(2026, 4, 11)
     journal_entry = service.journal_append("journal note", day)
     assert journal_entry.date == day.isoformat()
     assert service.journal_show(day) == "journal note"
 
 
-def test_service_preserves_priority_coverage_filtering_and_sorting(cfg):
+@pytest.fixture
+def service_pitches(cfg):
     service = BraindumpService(cfg)
     for title, priority, coverage in (
         ("Low unaudited", "low", None),
@@ -123,6 +149,11 @@ def test_service_preserves_priority_coverage_filtering_and_sorting(cfg):
             )
         )
 
+    return service
+
+
+def test_service_preserves_priority_coverage_filtering_and_sorting(service_pitches):
+    service = service_pitches
     covered = service.search(SearchRequest(coverage="covered"))
     assert [hit.entry.title for hit in covered] == ["Medium covered"]
 

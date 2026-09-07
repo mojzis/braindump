@@ -44,13 +44,18 @@ help = "Unused dependency check"
 
 [tool.poe.tasks._check-parallel]
 shell = """
-  ruff check . &
-  ty check &
-  vulture braindump &
-  biston scan . &
-  deptry . &
-  (uvx pysentry-rs . || true) &
-  wait
+  check_pids=()
+  ruff check . & check_pids+=("$!")
+  ty check & check_pids+=("$!")
+  vulture braindump & check_pids+=("$!")
+  biston scan . & check_pids+=("$!")
+  deptry . & check_pids+=("$!")
+  (uvx pysentry-rs . || true) & check_pids+=("$!")
+  check_status=0
+  for check_pid in "${check_pids[@]}"; do
+    wait "$check_pid" || check_status=1
+  done
+  exit "$check_status"
 """
 interpreter = "bash"
 
