@@ -21,6 +21,57 @@ uv run bd show --json "$handoff_id" | grep -q 'Resume the auth work.'
 uv run bd update "$handoff_id" --branch release/auth
 uv run bd show "$handoff_id" | grep -q 'branch: release/auth'
 
+branchless_line="$(printf 'Branchless initial body\n' | uv run bd create handoff 'Branchless session')"
+branchless_id="${branchless_line#*#}"
+branchless_id="${branchless_id%% *}"
+test -n "$branchless_id"
+
+uv run bd show --json "$branchless_id" | tee "$qa_root/branchless-show.json"
+uv run bd list handoff --all --json | tee "$qa_root/branchless-list.jsonl"
+uv run bd search 'Branchless session' --type handoff --all --json \
+  | tee "$qa_root/branchless-search.jsonl"
+printf 'Branchless updated body\n' \
+  | uv run bd update "$branchless_id" --title 'Branchless session updated' --body
+uv run bd show --json "$branchless_id" | tee "$qa_root/branchless-updated.json"
+
+uv run python - "$branchless_id" "$qa_root" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+
+entry_id = int(sys.argv[1])
+qa_root = Path(sys.argv[2])
+
+
+def read_json(name: str) -> dict:
+    return json.loads((qa_root / name).read_text())
+
+
+def read_jsonl(name: str) -> list[dict]:
+    return [json.loads(line) for line in (qa_root / name).read_text().splitlines()]
+
+
+shown = read_json("branchless-show.json")
+assert shown["id"] == entry_id
+assert shown["body"] == "Branchless initial body"
+assert shown.get("branch") is None
+
+listed = read_jsonl("branchless-list.jsonl")
+listed_entry = next(item for item in listed if item["id"] == entry_id)
+assert listed_entry.get("branch") is None
+
+searched = read_jsonl("branchless-search.jsonl")
+assert [item["id"] for item in searched] == [entry_id]
+assert searched[0].get("branch") is None
+
+updated = read_json("branchless-updated.json")
+assert updated["id"] == entry_id
+assert updated["title"] == "Branchless session updated"
+assert updated["body"] == "Branchless updated body"
+assert updated.get("branch") is None
+PY
+
 printf 'Alpha project\n' | uv run bd create project Alpha >/dev/null
 printf 'Beta project\n' | uv run bd create project Beta >/dev/null
 printf 'Alpha feature body\n' | uv run bd create handoff 'Alpha feature' --project Alpha --branch feature/auth >/dev/null
@@ -82,6 +133,19 @@ async def main() -> None:
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=transport, base_url="http://test") as client,
     ):
+        filtered = await client.get(
+            "/entries",
+            params={
+                "type": "handoff",
+                "project": "Alpha",
+                "branch": "release/auth",
+            },
+        )
+        assert filtered.status_code == 200
+        assert "Alpha release" in filtered.text
+        assert "Alpha feature" not in filtered.text
+        assert "Beta release" not in filtered.text
+
         viewed = await client.get(f"/entries/{entry_id}")
         assert viewed.status_code == 200
         assert "Auth session" in viewed.text
@@ -89,27 +153,113 @@ async def main() -> None:
 
         assert (index_path.read_bytes(), markdown_path.read_bytes()) == before
 
-        removed = await client.post(
-            f"/api/entries/{entry_id}", data={"branch": ""}
-        )
-        assert removed.status_code == 200
-        cleared = entries.find_by_id(cfg, entry_id)
-        assert cleared is not None
-        assert cleared[1].branch is None
-        detail_after_clear = await client.get(f"/entries/{entry_id}")
-        assert "branch release/auth" not in detail_after_clear.text
-
 
 asyncio.run(main())
 PY
 
-uv run python -c 'import asyncio; from braindump.mcp import mcp; print(asyncio.run(mcp.call_tool("create", {"entry_type": "handoff", "title": "MCP handoff", "body": "MCP body", "branch": "release/auth"})))'
+uv run python <<'PY'
+import asyncio
+import json
+import time
+
+from braindump.mcp import mcp
+
+
+def call(name: str, arguments: dict):
+    _content, structured = asyncio.run(mcp.call_tool(name, arguments))
+    if isinstance(structured, dict):
+        return structured.get("result", structured)
+    return structured
+
+
+target = call(
+    "create",
+    {
+        "entry_type": "handoff",
+        "title": "MCP target",
+        "body": "MCP initial body",
+        "project": "Alpha",
+        "branch": "feature/mcp",
+    },
+)
+target_id = target["entry"]["id"]
+
+# These newer records would win limit=1 if project/branch filtering happened late.
+time.sleep(1)
+call(
+    "create",
+    {
+        "entry_type": "handoff",
+        "title": "MCP wrong branch",
+        "body": "MCP branch decoy",
+        "project": "Alpha",
+        "branch": "release/mcp",
+    },
+)
+call(
+    "create",
+    {
+        "entry_type": "handoff",
+        "title": "MCP wrong project",
+        "body": "MCP project decoy",
+        "project": "Beta",
+        "branch": "feature/mcp",
+    },
+)
+
+filters = {
+    "types": ["handoff"],
+    "project": "Alpha",
+    "branch": "feature/mcp",
+    "limit": 1,
+}
+listed = call("list", filters)
+assert [hit["entry"]["id"] for hit in listed] == [target_id]
+
+searched = call("search", {"query": "MCP", **filters})
+assert [hit["entry"]["id"] for hit in searched] == [target_id]
+
+shown = call("show", {"ids": [target_id]})
+assert shown["missing_ids"] == []
+assert shown["entries"][0]["body"] == "MCP initial body"
+assert shown["entries"][0]["entry"]["branch"] == "feature/mcp"
+
+updated = call(
+    "update",
+    {
+        "entry_id": target_id,
+        "patch": {"branch": None},
+        "body": "MCP updated body",
+    },
+)
+assert updated.get("branch") is None
+
+shown_after_update = call("show", {"ids": [target_id]})
+updated_view = shown_after_update["entries"][0]
+assert updated_view["body"] == "MCP updated body"
+assert updated_view["entry"].get("branch") is None
+
+print(
+    json.dumps(
+        {
+            "target_id": target_id,
+            "list_ids": [hit["entry"]["id"] for hit in listed],
+            "search_ids": [hit["entry"]["id"] for hit in searched],
+            "shown_before_update": shown,
+            "shown_after_update": shown_after_update,
+        },
+        indent=2,
+        sort_keys=True,
+    )
+)
+PY
 ```
 
 Expected evidence: a `handoffs/index.jsonl` record, authored bodies in their
-Markdown files, exact branch filtering, CLI show/update output, and a public
-MCP create call using the same isolated store. Automated generic web
-list/view/edit coverage is included here:
+Markdown files, exact branch filtering, a branchless CLI create/show/list/
+search/update round trip, and public MCP create/list/search/show/update calls
+using the same isolated store. Automated generic web list/view/edit coverage
+is included here:
 
 ```bash
 uv run pytest -q tests/test_entries.py tests/test_query.py tests/test_cli.py \
