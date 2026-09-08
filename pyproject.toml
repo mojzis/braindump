@@ -11,6 +11,7 @@ dependencies = [
     "nh3>=0.3.7",
     "pydantic>=2.13.5",
     "typer>=0.27.2",
+    "typer-agentic>=0.1.3",
 ]
 
 [project.optional-dependencies]
@@ -58,7 +59,7 @@ dev = [
 ]
 
 [project.scripts]
-bd = "braindump.cli.main:app"
+bd = "braindump.cli.main:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -18,6 +18,7 @@ from typing import Any, NoReturn, cast
 
 import typer
 from typer.core import TyperGroup
+from typer_agentic import agent_errors
 
 from braindump.core import digest, entries, journal, projects, query, store
 from braindump.core import tags as tags_mod
@@ -1117,8 +1118,8 @@ def app_cmd(
     typer.echo(f"bd app running in the background (pid {pid})  log: {log_file}")
 
 
-def main() -> None:
-    app()
+# Agent-facing usage errors (typer-agentic): humans get stock Typer output.
+main = agent_errors(app)
 
 
 if __name__ == "__main__":
