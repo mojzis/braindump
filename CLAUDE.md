@@ -261,7 +261,7 @@ config under `[tool.madoqua]` in `pyproject.toml`). It runs only when a `.py` fi
 is staged: fix phase `ruff check --fix` + `ruff format` (re-staged), then check
 phase `ruff check`, `ty check`, `biston scan --focus-args` (clone pairs touching a
 staged file), `zorilla check` (test smells in the staged test files) and
-`gerenuk run` (only the tests the working-tree diff against `origin/main` can
+`gerenuk run` (only the tests the working-tree diff against `HEAD` can
 reach; the whole suite when a non-Python file changed). Typical cost is ~3 s,
 dominated by gerenuk running pytest; `uv run madoqua stats` shows the timings of
 every run (`.git/hook-timings.jsonl`).
