@@ -3,6 +3,8 @@
 The journal has one file per day at `journal/YYYY/MM/YYYY-MM-DD.md` and one
 index entry per day. The index entry tracks word count and last activity so
 the web UI can render a calendar/activity view cheaply.
+The module keeps the cutoff and close-day rules together so every journal
+adapter uses the same day boundaries.
 
 Day rollover semantics:
 

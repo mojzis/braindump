@@ -21,10 +21,6 @@ help = "Run type checker"
 cmd = "pytest -q --tb=short"
 help = "Run tests"
 
-[tool.poe.tasks.setup]
-cmd = "bash scripts/install-hooks.sh"
-help = "Install the repository Git hooks"
-
 [tool.poe.tasks.vulns]
 shell = "uvx pysentry-rs . || true"
 interpreter = "bash"

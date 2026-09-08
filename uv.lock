@@ -187,7 +187,6 @@ provides-extras = ["mcp", "web", "app"]
 [package.metadata.requires-dev]
 dev = [
     { name = "biston", specifier = ">=0.7.0" },
-    { name = "biston", specifier = ">=0.7.2" },
     { name = "deptry" },
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "gerenuk", specifier = ">=0.3.0" },

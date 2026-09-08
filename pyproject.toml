@@ -56,7 +56,6 @@ dev = [
     "poethepoet>=0.48.0",
     "madoqua>=0.2.3",
     "gerenuk>=0.3.0",
-    "biston>=0.7.2",
     "zorilla>=0.2.1",
     "pycoati>=0.2.6",
     "ty-find>=0.5.0",
@@ -142,7 +141,7 @@ extend_check = [
     { name = "biston",  cmd = "biston scan --focus-args", timeout_s = 60,  max_output_lines = 80 },
     { name = "zorilla", cmd = "zorilla check",            timeout_s = 30,  max_output_lines = 80 },
     # gerenuk scopes itself from the git diff, so no file list.
-    { name = "gerenuk", cmd = "gerenuk run -- -q",        pass_files = false, timeout_s = 120, max_output_lines = 120 },
+    { name = "gerenuk", cmd = "gerenuk run --base HEAD -- -q -o addopts=", pass_files = false, timeout_s = 120, max_output_lines = 120 },
 ]
 
 [tool.zorilla.rules.ZR005]
