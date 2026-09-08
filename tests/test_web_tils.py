@@ -59,33 +59,49 @@ async def test_tils_default_lists_only_tils_across_projects(monkeypatch, cfg):
     assert "not a TIL" not in r.text
 
 
-@pytest.mark.anyio
-async def test_tils_project_and_tag_filters(monkeypatch, cfg):
+@pytest.fixture
+def filterable_tils(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
     _til(cfg, "in alpha", project="alpha", tags=["urgent"])
     _til(cfg, "in beta", project="beta", tags=["urgent"])
     _til(cfg, "plain", project="alpha")
 
-    assert "in alpha" in (await _get("/tils?project=alpha")).text
-    assert "in beta" not in (await _get("/tils?project=alpha")).text
+
+@pytest.mark.anyio
+async def test_tils_project_filter(filterable_tils):
+    r = await _get("/tils?project=alpha")
+    assert "in alpha" in r.text
+    assert "in beta" not in r.text
+
+
+@pytest.mark.anyio
+async def test_tils_tag_filter(filterable_tils):
     r = await _get("/tils?tag=urgent")
     assert "in alpha" in r.text
     assert "in beta" in r.text
     assert "plain" not in r.text
 
 
-@pytest.mark.anyio
-async def test_tils_has_grouping_metadata_and_edit_link(monkeypatch, cfg):
+@pytest.fixture
+def editable_til(monkeypatch, cfg):
     _set_home(monkeypatch, cfg)
-    result = _til(cfg, "editable", project="alpha", category="python", source="docs")
+    return _til(cfg, "editable", project="alpha", category="python", source="docs")
 
+
+@pytest.mark.anyio
+async def test_tils_has_grouping_metadata(editable_til):
     r = await _get("/tils")
     assert "alpha" in r.text
     assert "python" in r.text
     assert "docs" in r.text
-    assert f"/entries/{result.entry.id}" in r.text
-    assert f"/entries/{result.entry.id}/edit" in r.text
     assert "status" not in r.text
+
+
+@pytest.mark.anyio
+async def test_tils_has_view_and_edit_links(editable_til):
+    r = await _get("/tils")
+    assert f"/entries/{editable_til.entry.id}" in r.text
+    assert f"/entries/{editable_til.entry.id}/edit" in r.text
 
 
 @pytest.mark.anyio
@@ -128,7 +144,7 @@ async def test_tils_links_preserve_combined_filters(monkeypatch, cfg):
     r = await _get("/tils?q=python+fact&project=alpha&tag=urgent&sort=category&dir=asc")
     body = unescape(r.text)
 
-    assert 'href="/tils?q=python%20fact&sort=category&dir=asc"' in body
+    assert 'class="ghost-btn" href="/tils?sort=category&dir=asc"' in body
     assert (
         'href="/tils?q=python%20fact&project=alpha&tag=urgent&sort=category&dir=asc"'
         in body

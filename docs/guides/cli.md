@@ -11,8 +11,8 @@ Run `bd --help` for the authoritative, auto-generated list, or `bd <command>
 
 ```text
 bd create <type> "<title>" [options]   # type: todo | til | thought | prompt | project
-bd list [type] [--project] [--limit]
-bd search <words...> [--type] [--project] [--status open|done|all] [--tag] [--since] [--until]
+bd list [type] [--project] [--limit] [--sort date|priority] [--direction asc|desc]
+bd search <words...> [--type] [--project] [--status open|done|all] [--sort date|priority]
 bd done <id | query | file_path>
 bd update <id> [--title ...] [--tags a,b] [--project p] [--status s] [--body]
 bd delete <id>
@@ -21,7 +21,7 @@ bd journal today | append | close | show <YYYY-MM-DD>
 bd tags stats | show <tag>
 bd doctor                              # validate indexes
 bd serve [--host 127.0.0.1] [--port 8765]
-bd app   [--host 127.0.0.1] [--port 8765]   # same UI in a native pywebview window
+bd app   [--host 127.0.0.1] [--port 8765]   # native Journal + Todos windows
 ```
 
 ## Creating entries
@@ -44,7 +44,8 @@ Common options:
 | `--project`, `-p` | Set the project (defaults to the git repo / directory name in skills) |
 | `--summary`, `-s` | One-line summary |
 | `--status` | For todos: `pending`, `in-progress`, `done` |
-| `--priority` | For todos |
+| `--priority` | For todos and pitches: `high`, `medium`, or `low` |
+| `--coverage` | For pitches: `uncovered`, `partial`, or `covered` |
 | `--due-date` | For todos (`YYYY-MM-DD`) |
 | `--body-file` | Read the body from a file instead of stdin |
 | `--original-input` / `--original-input-file` | Store verbatim source input |
@@ -72,6 +73,7 @@ bd list todo            # todos only
 bd list til -n 5        # last 5 TILs
 bd list --all           # ignore the active-project focus
 bd list --json          # machine-readable output
+bd list pitch --sort priority --direction asc  # high priority first
 ```
 
 ## Searching
@@ -83,6 +85,7 @@ a ripgrep full-text fallback over the markdown bodies.
 bd search auth login --status open        # open todos mentioning both words
 bd search --tag auth --since 2026-01-01   # filter without a text query
 bd search parse --type til --human        # human-readable instead of JSON
+bd search --coverage unaudited            # pitches with no persisted coverage
 ```
 
 | Option | Purpose |
@@ -90,6 +93,9 @@ bd search parse --type til --human        # human-readable instead of JSON
 | `--type` | Restrict to one type |
 | `--project`, `-p` / `--all` | Scope to a project / ignore the active focus |
 | `--status` | `open`, `done`, or `all` (default `all`) |
+| `--priority` | Filter todos or pitches by `high`, `medium`, or `low` |
+| `--coverage` | Filter pitches by `unaudited` (absent), `uncovered`, `partial`, or `covered` |
+| `--sort` / `--direction` | Sort by `date` or `priority`, ascending or descending |
 | `--tag`, `-t` | Require a tag (repeatable) |
 | `--since` / `--until` | Date bounds (`YYYY-MM-DD`) |
 | `--limit`, `-n` | Max results (default 50) |
@@ -189,5 +195,10 @@ bd doctor                        # validate that JSONL indexes match the markdow
 ```bash
 bd serve                         # http://127.0.0.1:8765/
 bd serve --host 0.0.0.0 --port 9000
-bd app                           # same UI in a native desktop window (needs the [app] extra)
+bd app                           # separate native Journal + Todos windows ([app] extra)
 ```
+
+The two `bd app` windows share one local server and one pywebview event loop.
+When `bd app` owns the server, it stops only after both windows close. When the
+windows attach to an existing `bd serve` or `bd app`, they leave that server
+running when they close.

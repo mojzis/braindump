@@ -13,10 +13,13 @@ EntryType = Literal[
     "project",
     "initiative",
     "pitch",
+    "handoff",
 ]
 
 TODO_STATUSES = ("pending", "in-progress", "in-qa", "done", "cancelled")
 LEGACY_TODO_STATUSES = ("postponed",)
+PRIORITIES = ("high", "medium", "low")
+PITCH_COVERAGES = ("uncovered", "partial", "covered")
 QA_RESULTS = ("pass", "fail")
 PLANNING_STATUSES = ("active", "done")
 SETTLED_STATUSES = ("done", "cancelled")
@@ -32,6 +35,7 @@ TYPE_TO_DIR: dict[str, str] = {
     "project": "projects",
     "initiative": "initiatives",
     "pitch": "pitches",
+    "handoff": "handoffs",
 }
 
 DIR_TO_TYPE: dict[str, str] = {v: k for k, v in TYPE_TO_DIR.items()}
@@ -105,12 +109,16 @@ class Entry(BaseModel):
     # initiative / pitch graph links
     project_ids: list[int] | None = None
     initiative_ids: list[int] | None = None
+    # Optional planning metadata; coverage is pitch-only.
+    coverage: str | None = None
     # compact QA receipt (detailed runs remain outside braindump)
     qa_result: str | None = None
     qa_verified_at: str | None = None
     qa_run_ref: str | None = None
     # imported source provenance
     source_path: str | None = None
+    # handoff
+    branch: str | None = None
 
     def type_dir(self) -> str:
         return TYPE_TO_DIR[self.type]

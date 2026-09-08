@@ -55,15 +55,32 @@ class _StubWebview:
     """Stand-in for the pywebview module."""
 
     def __init__(self):
+        work_area = types.SimpleNamespace(
+            x=lambda: -1920,
+            y=lambda: 125,
+            width=lambda: 1920,
+            height=lambda: 1055,
+        )
+        self.screens = [
+            types.SimpleNamespace(
+                x=-1920,
+                y=100,
+                width=1920,
+                height=1080,
+                frame=types.SimpleNamespace(availableGeometry=lambda: work_area),
+            )
+        ]
         self.windows: list[tuple[str, str]] = []
-        self.window_kwargs: dict = {}
-        self.window = _StubWindow()
+        self.window_objects: list[_StubWindow] = []
+        self.window_kwargs: list[dict] = []
         self.started = False
 
     def create_window(self, title, url, **kwargs):
         self.windows.append((title, url))
-        self.window_kwargs = kwargs
-        return self.window
+        self.window_kwargs.append(kwargs)
+        window = _StubWindow()
+        self.window_objects.append(window)
+        return window
 
     def start(self, **kwargs):
         self.started = True
@@ -196,6 +213,114 @@ def test_launch_detached_still_detects_a_crash_behind_a_running_server(
 # --- run_app ---------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("work_area", "expected"),
+    [
+        (
+            desktop._Rect(0, 0, 1920, 1040),
+            (
+                desktop._Rect(260, 45, 700, 950),
+                desktop._Rect(960, 45, 700, 950),
+            ),
+        ),
+        (
+            desktop._Rect(-1920, 25, 1920, 1055),
+            (
+                desktop._Rect(-1660, 77, 700, 950),
+                desktop._Rect(-960, 77, 700, 950),
+            ),
+        ),
+        (
+            desktop._Rect(100, 50, 800, 600),
+            (
+                desktop._Rect(134, 50, 700, 600),
+                desktop._Rect(166, 50, 700, 600),
+            ),
+        ),
+        (
+            desktop._Rect(-800, -200, 600, 500),
+            (
+                desktop._Rect(-800, -200, 568, 500),
+                desktop._Rect(-768, -200, 568, 500),
+            ),
+        ),
+    ],
+    ids=["large", "large-negative-origin", "small", "small-negative-origin"],
+)
+def test_window_rects_stay_inside_work_area(work_area, expected):
+    rects = desktop._window_rects(work_area)
+
+    assert rects == expected
+    for rect in rects:
+        assert (
+            work_area.x
+            <= rect.x
+            <= rect.x + rect.width
+            <= work_area.x + work_area.width
+        )
+        assert (
+            work_area.y
+            <= rect.y
+            <= rect.y + rect.height
+            <= work_area.y + work_area.height
+        )
+
+
+@pytest.mark.parametrize(
+    ("backend", "frame_factory", "expected_position"),
+    [
+        (
+            "qt",
+            lambda area: types.SimpleNamespace(availableGeometry=lambda: area),
+            (260, 77),
+        ),
+        ("win32", lambda area: area, (-1660, 177)),
+    ],
+)
+def test_qt_and_win32_work_areas_and_origins(
+    monkeypatch, backend, frame_factory, expected_position
+):
+    native_area = types.SimpleNamespace(X=-1920, Y=125, Width=1920, Height=1055)
+    monkeypatch.setattr(sys, "platform", backend)
+    screen = types.SimpleNamespace(
+        x=-1920, y=100, width=1920, height=1080, frame=frame_factory(native_area)
+    )
+
+    work_area = desktop._screen_work_area(screen)
+    first_window = desktop._window_rects(work_area)[0]
+
+    assert work_area == desktop._Rect(-1920, 125, 1920, 1055)
+    assert desktop._pywebview_position(first_window, screen) == expected_position
+
+
+def test_cocoa_work_area_and_origin(monkeypatch):
+    full_frame = types.SimpleNamespace(
+        origin=types.SimpleNamespace(x=-1440, y=-900),
+        size=types.SimpleNamespace(width=1440, height=900),
+    )
+    visible_frame = types.SimpleNamespace(
+        origin=types.SimpleNamespace(x=-1440, y=-850),
+        size=types.SimpleNamespace(width=1440, height=825),
+    )
+    native_screen = types.SimpleNamespace(
+        frame=lambda: full_frame, visibleFrame=lambda: visible_frame
+    )
+    appkit = types.SimpleNamespace(
+        NSScreen=types.SimpleNamespace(screens=lambda: [native_screen])
+    )
+    monkeypatch.setitem(sys.modules, "AppKit", appkit)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    screen = types.SimpleNamespace(
+        x=-1440, y=-900, width=1440, height=900, frame=full_frame
+    )
+
+    work_area = desktop._screen_work_area(screen)
+    first_window = desktop._window_rects(work_area)[0]
+
+    assert work_area == desktop._Rect(-1440, -875, 1440, 825)
+    assert desktop._pywebview_position(first_window, screen) == (20, 25)
+
+
 def test_run_app_attaches_to_an_already_running_server(monkeypatch):
     stub = _StubWebview()
     monkeypatch.setattr(desktop, "_import_webview", lambda: stub)
@@ -208,7 +333,18 @@ def test_run_app_attaches_to_an_already_running_server(monkeypatch):
 
     desktop.run_app(host="127.0.0.1", port=9911)
 
-    assert stub.windows == [("Braindump", "http://127.0.0.1:9911/")]
+    assert stub.windows == [
+        ("Braindump — Journal", "http://127.0.0.1:9911/journal"),
+        ("Braindump — Todos", "http://127.0.0.1:9911/todos"),
+    ]
+    assert [
+        (kwargs["x"], kwargs["y"], kwargs["width"], kwargs["height"])
+        for kwargs in stub.window_kwargs
+    ] == [(260, 77, 700, 950), (960, 77, 700, 950)]
+    assert [kwargs["screen"] for kwargs in stub.window_kwargs] == [
+        stub.screens[0],
+        stub.screens[0],
+    ]
     assert stub.started
 
 
@@ -501,7 +637,7 @@ def test_run_app_asks_for_a_selectable_window(monkeypatch):
 
     desktop.run_app(host="127.0.0.1", port=9911)
 
-    assert stub.window_kwargs["text_select"] is True
+    assert [kwargs["text_select"] for kwargs in stub.window_kwargs] == [True, True]
 
 
 def test_run_app_registers_the_clipboard_hook(monkeypatch):
@@ -511,22 +647,31 @@ def test_run_app_registers_the_clipboard_hook(monkeypatch):
 
     desktop.run_app(host="127.0.0.1", port=9911)
 
-    assert stub.window.events.before_show.handlers == [desktop._on_before_show]
+    assert [window.events.before_show.handlers for window in stub.window_objects] == [
+        [desktop._on_before_show],
+        [desktop._on_before_show],
+    ]
     # pywebview hands the window only to a parameter with this exact name, and
     # calls the handler with no arguments otherwise (webview/event.py).
     assert "window" in inspect.signature(desktop._on_before_show).parameters
 
 
-@pytest.mark.parametrize("page_class", [_FakePage, _FakeQt5Page], ids=["qt6", "qt5"])
-def test_install_qt_clipboard_wires_an_edit_menu(qtpy_stub, page_class):
-    view = _FakeView(page=page_class())
-
+@pytest.fixture(params=[_FakePage, _FakeQt5Page], ids=["qt6", "qt5"])
+def clipboard_view(qtpy_stub, request):
+    view = _FakeView(page=request.param())
     desktop._install_qt_clipboard(view)
+    return view
 
+
+def test_install_qt_clipboard_enables_clipboard_and_menu_signal(clipboard_view):
+    view = clipboard_view
     assert view.page().settings().attributes == {"clipboard": True}
     assert view.policy == "custom"
     assert len(view.customContextMenuRequested.slots) == 1
 
+
+def test_qt_clipboard_menu_shows_edit_actions_at_requested_position(clipboard_view):
+    view = clipboard_view
     view.customContextMenuRequested.slots[0]((3, 4))
     menu = _FakeMenu.last
     assert menu is not None
