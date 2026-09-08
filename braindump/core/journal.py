@@ -30,7 +30,7 @@ JOURNAL_TYPE_DIR = "journal"
 
 
 def current_day(cfg: Config, now: datetime | None = None) -> date:
-    """Return the logical 'today' for journaling, respecting day_cutoff_hour."""
+    """Return the logical 'today', with an optional clock for deterministic callers."""
     now = now or store.local_now()
     if now.hour < cfg.day_cutoff_hour:
         return (now - timedelta(days=1)).date()
