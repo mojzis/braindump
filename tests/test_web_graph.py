@@ -29,8 +29,8 @@ async def _request(monkeypatch, cfg, method: str, url: str, **kwargs):
         return await client.request(method, url, **kwargs)
 
 
-@pytest.mark.anyio
-async def test_graph_capture_edit_and_details(monkeypatch, cfg):
+@pytest.fixture
+def web_graph(monkeypatch, cfg):
     project = entries.create_entry(
         cfg, "project", "Alpha", "body", now=datetime(2026, 4, 11, 10)
     )
@@ -49,54 +49,91 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
         "body",
         type_fields={
             "status": "active",
+            "priority": "high",
+            "coverage": "partial",
             "project_ids": [project.entry.id],
             "initiative_ids": [initiative.entry.id],
         },
         now=datetime(2026, 4, 11, 12),
     )
 
-    capture = await _request(
-        monkeypatch,
-        cfg,
-        "GET",
-        "/capture?type=pitch",
-    )
+    return project, initiative, pitch
+
+
+@pytest.mark.anyio
+async def test_graph_capture_relation_choices(monkeypatch, cfg, web_graph):
+    _, initiative, pitch = web_graph
+    capture = await _request(monkeypatch, cfg, "GET", "/capture?type=pitch")
     assert capture.status_code == 200
     assert f'value="{initiative.entry.id}"' in capture.text
     assert (
         f'value="{pitch.entry.id}"' in capture.text or "active_pitches" in capture.text
     )
 
-    todo = entries.create_entry(
-        cfg,
-        "todo",
-        "Implement",
-        "body",
-        type_fields={"initiative_id": initiative.entry.id, "pitch_id": pitch.entry.id},
-        now=datetime(2026, 4, 11, 13),
-    )
-    detail = await _request(monkeypatch, cfg, "GET", f"/entries/{todo.entry.id}")
-    assert detail.status_code == 200
-    assert f'href="/entries/{initiative.entry.id}"' in detail.text
-    assert f'href="/entries/{pitch.entry.id}"' in detail.text
 
+@pytest.mark.anyio
+async def test_graph_capture_disables_inapplicable_fields(monkeypatch, cfg, web_graph):
+    capture = await _request(monkeypatch, cfg, "GET", "/capture?type=pitch")
+    assert "prioritySelect.disabled = !priorityApplies" in capture.text
+    assert "coverageSelect.disabled = !coverageApplies" in capture.text
+
+
+@pytest.mark.anyio
+async def test_graph_pitch_edit_relations(monkeypatch, cfg, web_graph):
+    _, _, pitch = web_graph
     edit = await _request(monkeypatch, cfg, "GET", f"/entries/{pitch.entry.id}/edit")
     assert edit.status_code == 200
     assert "project_ids" in edit.text
     assert "initiative_ids" in edit.text
 
-    updated = await _request(
+
+@pytest.mark.anyio
+async def test_graph_pitch_edit_and_detail_coverage(monkeypatch, cfg, web_graph):
+    _, _, pitch = web_graph
+    edit = await _request(monkeypatch, cfg, "GET", f"/entries/{pitch.entry.id}/edit")
+    assert "coverage" in edit.text
+    assert "partial" in edit.text
+    pitch_detail = await _request(monkeypatch, cfg, "GET", f"/entries/{pitch.entry.id}")
+    assert "priority high" in pitch_detail.text
+    assert "coverage partial" in pitch_detail.text
+
+
+@pytest.mark.anyio
+async def test_graph_capture_persists_pitch_fields(monkeypatch, cfg):
+    capture_post = await _request(
         monkeypatch,
         cfg,
         "POST",
-        f"/api/entries/{todo.entry.id}",
-        data={"initiative_id": str(initiative.entry.id), "pitch_id": ""},
+        "/capture",
+        data={
+            "entry_type": "pitch",
+            "title": "Captured pitch",
+            "priority": "low",
+            "coverage": "uncovered",
+        },
     )
-    assert updated.status_code == 200
-    updated_todo = entries.find_by_id(cfg, todo.entry.id)
-    assert updated_todo is not None
-    assert updated_todo[1].pitch_id is None
+    assert capture_post.status_code == 303
+    captured = store.read_index(cfg, "pitches")[-1]
+    assert captured.priority == "low"
+    assert captured.coverage == "uncovered"
 
+
+@pytest.mark.anyio
+async def test_graph_pitch_rejects_invalid_coverage(monkeypatch, cfg, web_graph):
+    _, _, pitch = web_graph
+    bad = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{pitch.entry.id}",
+        data={"coverage": "invalid"},
+    )
+    assert bad.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_graph_initiative_list_hides_done(monkeypatch, cfg, web_graph):
+    _, initiative, _ = web_graph
     initiative_index = await _request(monkeypatch, cfg, "GET", "/initiatives")
     assert "Launch" in initiative_index.text
     done_initiative = entries.update_entry(cfg, initiative.entry.id, {"status": "done"})
@@ -104,10 +141,132 @@ async def test_graph_capture_edit_and_details(monkeypatch, cfg):
     initiative_index = await _request(monkeypatch, cfg, "GET", "/initiatives")
     assert "Launch" not in initiative_index.text
 
+
+@pytest.mark.anyio
+async def test_graph_project_page_includes_related_work(monkeypatch, cfg, web_graph):
+    _, initiative, pitch = web_graph
+    entries.update_entry(cfg, initiative.entry.id, {"status": "done"})
     project_page = await _request(monkeypatch, cfg, "GET", "/projects/Alpha")
     assert project_page.status_code == 200
     assert f"/entries/{initiative.entry.id}" in project_page.text
     assert f"/entries/{pitch.entry.id}" in project_page.text
+
+
+@pytest.fixture
+def web_pitches(monkeypatch, cfg):
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Low audited pitch",
+        "body",
+        type_fields={"status": "active", "priority": "low", "coverage": "partial"},
+        now=datetime(2026, 4, 11, 12),
+    )
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "High unaudited pitch",
+        "body",
+        type_fields={"status": "active", "priority": "high"},
+        now=datetime(2026, 4, 11, 11),
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/pitches?sort=priority&dir=asc",
+        "/entries?type=pitch&sort=priority&dir=asc&all=1",
+    ],
+)
+async def test_pitch_list_sorts_priority(monkeypatch, cfg, web_pitches, route):
+    pitches = await _request(monkeypatch, cfg, "GET", route)
+    assert pitches.status_code == 200
+    assert pitches.text.index("High unaudited pitch") < pitches.text.index(
+        "Low audited pitch"
+    )
+    assert "priority ▲" in pitches.text
+
+
+@pytest.mark.anyio
+async def test_pitch_list_filters_unaudited(monkeypatch, cfg, web_pitches):
+    filtered = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries?type=pitch&coverage=unaudited&sort=priority&dir=asc&all=1",
+    )
+    assert "High unaudited pitch" in filtered.text
+    assert "Low audited pitch" not in filtered.text
+    assert '<option value="unaudited" selected>' in filtered.text
+
+
+@pytest.mark.anyio
+async def test_pitch_blank_filters_show_all(monkeypatch, cfg, web_pitches):
+    default_form = await _request(
+        monkeypatch, cfg, "GET", "/entries?type=pitch&priority=&coverage=&all=1"
+    )
+    assert "High unaudited pitch" in default_form.text
+    assert "Low audited pitch" in default_form.text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "filters",
+    [{"priority": "high", "coverage": ""}, {"priority": "", "coverage": "unaudited"}],
+)
+async def test_pitch_blank_filter_preserves_other_filter(
+    monkeypatch, cfg, web_pitches, filters
+):
+    filtered = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries",
+        params={"type": "pitch", "all": "1", **filters},
+    )
+    assert "High unaudited pitch" in filtered.text
+    assert "Low audited pitch" not in filtered.text
+
+
+@pytest.mark.anyio
+async def test_pitch_list_rejects_invalid_sort(monkeypatch, cfg):
+    invalid = await _request(monkeypatch, cfg, "GET", url="/pitches?sort=bogus")
+    assert invalid.status_code == 422
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("entry_type", "type_dir"), (("todo", "todos"), ("pitch", "pitches"))
+)
+async def test_web_edit_preserves_selected_legacy_priority(
+    monkeypatch, cfg, entry_type, type_dir
+):
+    result = entries.create_entry(
+        cfg,
+        entry_type,
+        "Legacy priority",
+        "body",
+        type_fields={"priority": "high"},
+    )
+    result.entry.priority = "urgent"
+    store.rewrite_index_atomic(cfg, type_dir, [result.entry])
+
+    edit = await _request(monkeypatch, cfg, "GET", f"/entries/{result.entry.id}/edit")
+    updated = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{result.entry.id}",
+        data={"title": "Renamed", "priority": "urgent"},
+    )
+
+    assert '<option value="urgent" selected>urgent (legacy)</option>' in edit.text
+    assert updated.status_code == 200
+    stored = entries.find_by_id(cfg, result.entry.id)
+    assert stored is not None
+    assert (stored[1].title, stored[1].priority) == ("Renamed", "urgent")
 
 
 @pytest.mark.anyio
@@ -133,6 +292,99 @@ async def test_graph_missing_relation_is_a_warning(monkeypatch, cfg):
     assert "/entries/999" not in detail.text
 
 
+@pytest.fixture
+def web_handoff(monkeypatch, cfg):
+    handoff = entries.create_entry(
+        cfg,
+        "handoff",
+        "Web handoff",
+        "Web authored body",
+        type_fields={"branch": "feature/web"},
+        now=datetime(2026, 4, 11, 10),
+    )
+
+    return handoff
+
+
+@pytest.mark.anyio
+async def test_generic_handoff_list(monkeypatch, cfg, web_handoff):
+    listing = await _request(
+        monkeypatch, cfg, "GET", "/entries?type=handoff&branch=feature%2Fweb"
+    )
+    assert listing.status_code == 200
+    assert "Web handoff" in listing.text
+    assert "feature/web" in listing.text
+
+
+@pytest.mark.anyio
+async def test_generic_handoff_detail_and_edit_form(monkeypatch, cfg, web_handoff):
+    handoff = web_handoff
+    detail = await _request(monkeypatch, cfg, "GET", f"/entries/{handoff.entry.id}")
+    assert "Web authored body" in detail.text
+    assert "branch feature/web" in detail.text
+    edit = await _request(monkeypatch, cfg, "GET", f"/entries/{handoff.entry.id}/edit")
+    assert 'name="branch"' in edit.text
+
+
+@pytest.mark.anyio
+async def test_generic_handoff_update_branch(monkeypatch, cfg, web_handoff):
+    handoff = web_handoff
+    updated = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{handoff.entry.id}",
+        data={"branch": "release/web", "body": "Updated web body"},
+    )
+    assert updated.status_code == 200
+    persisted = entries.find_by_id(cfg, handoff.entry.id)
+    assert persisted is not None
+    assert persisted[1].branch == "release/web"
+
+
+@pytest.fixture
+def web_branch_entries(monkeypatch, cfg):
+    entries.create_entry(cfg, "todo", "Ordinary entry", "body")
+    entries.create_entry(cfg, "handoff", "Branchless handoff", "body")
+    entries.create_entry(
+        cfg,
+        "handoff",
+        "Named branch handoff",
+        "body",
+        type_fields={"branch": "feature/web"},
+    )
+
+
+@pytest.mark.anyio
+async def test_generic_entries_blank_branch_control_is_not_a_filter(
+    monkeypatch, cfg, web_branch_entries
+):
+    blank_branch = await _request(
+        monkeypatch, cfg, "GET", "/entries", params={"branch": "", "all": "1"}
+    )
+    assert blank_branch.status_code == 200
+    assert "Ordinary entry" in blank_branch.text
+    assert "Branchless handoff" in blank_branch.text
+    assert "Named branch handoff" in blank_branch.text
+
+
+@pytest.mark.anyio
+async def test_generic_entries_named_branch_control_filters(
+    monkeypatch, cfg, web_branch_entries
+):
+    named_branch = await _request(
+        monkeypatch,
+        cfg,
+        "GET",
+        "/entries",
+        params={"branch": "feature/web", "all": "1"},
+    )
+    assert named_branch.status_code == 200
+    assert "Named branch handoff" in named_branch.text
+    assert "Ordinary entry" not in named_branch.text
+    assert "Branchless handoff" not in named_branch.text
+
+
 @pytest.mark.anyio
 async def test_initiative_parse_route_creates_linked_todos_once(monkeypatch, cfg):
     project = entries.create_entry(cfg, "project", "Alpha", "body")
@@ -153,8 +405,10 @@ async def test_initiative_parse_route_creates_linked_todos_once(monkeypatch, cfg
         "POST",
         f"/api/initiatives/{initiative.entry.id}/parse",
     )
-    assert parsed.status_code == 200
-    assert parsed.headers["hx-redirect"] == f"/entries/{initiative.entry.id}"
+    assert (parsed.status_code, parsed.headers["hx-redirect"]) == (
+        200,
+        f"/entries/{initiative.entry.id}",
+    )
     assert len(store.read_index(cfg, "todos")) == 1
 
     await _request(
@@ -164,3 +418,42 @@ async def test_initiative_parse_route_creates_linked_todos_once(monkeypatch, cfg
         f"/api/initiatives/{initiative.entry.id}/parse",
     )
     assert len(store.read_index(cfg, "todos")) == 1
+
+
+@pytest.fixture
+def web_linked_todo(cfg, web_graph):
+    _, initiative, pitch = web_graph
+    todo = entries.create_entry(
+        cfg,
+        "todo",
+        "Implement",
+        "body",
+        type_fields={"initiative_id": initiative.entry.id, "pitch_id": pitch.entry.id},
+        now=datetime(2026, 4, 11, 13),
+    )
+    return todo, initiative, pitch
+
+
+@pytest.mark.anyio
+async def test_graph_todo_detail_links_relations(monkeypatch, cfg, web_linked_todo):
+    todo, initiative, pitch = web_linked_todo
+    detail = await _request(monkeypatch, cfg, "GET", f"/entries/{todo.entry.id}")
+    assert detail.status_code == 200
+    assert f'href="/entries/{initiative.entry.id}"' in detail.text
+    assert f'href="/entries/{pitch.entry.id}"' in detail.text
+
+
+@pytest.mark.anyio
+async def test_graph_todo_clears_pitch_link(monkeypatch, cfg, web_linked_todo):
+    todo, initiative, _ = web_linked_todo
+    updated = await _request(
+        monkeypatch,
+        cfg,
+        "POST",
+        f"/api/entries/{todo.entry.id}",
+        data={"initiative_id": str(initiative.entry.id), "pitch_id": ""},
+    )
+    assert updated.status_code == 200
+    updated_todo = entries.find_by_id(cfg, todo.entry.id)
+    assert updated_todo is not None
+    assert updated_todo[1].pitch_id is None

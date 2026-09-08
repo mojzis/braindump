@@ -70,16 +70,17 @@ bd journal today|append|close|show <YYYY-MM-DD>
 bd tags stats|show <tag>
 bd doctor                                # validate indexes
 bd serve [--host 127.0.0.1] [--port 8765]
-bd app   [--host 127.0.0.1] [--port 8765] [-f]   # same UI in a native pywebview window (detached unless -f)
+bd app   [--host 127.0.0.1] [--port 8765] [-f]   # native Journal + Todos windows (detached unless -f)
 ```
 
 ## Web UI
 
 `bd serve` starts a local FastAPI server (default `http://127.0.0.1:8765/`). `bd app`
-starts the same server in a background thread and points a native pywebview window at
-it (see `braindump/web/desktop.py`) — a convenience wrapper, not a packaged build;
+starts the same server in a background thread and opens native Journal and Todos
+pywebview windows on one event loop (see `braindump/web/desktop.py`) — a convenience wrapper, not a packaged build;
 needs the `[app]` extra (which pins a Qt backend, since an isolated uv tool env
-can't see system GTK bindings). `bd app` detaches by default, re-execing itself
+can't see system GTK bindings). An owned server stops only after both windows
+close. `bd app` detaches by default, re-execing itself
 as `bd app --foreground` in a new session with output redirected to
 `~/braindump/.bd-app.log`; it attaches to an already-running server on the port
 rather than starting a second one. On macOS `desktop._brand_macos_app` patches

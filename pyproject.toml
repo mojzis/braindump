@@ -15,6 +15,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mcp = [
+    "mcp>=1.9.0,<2",
+]
 web = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
@@ -30,7 +33,7 @@ app = [
     # wire the window's copy menu, so it's a dependency of ours too.
     "qtpy>=2.4.3",
     # Same story on macOS: pywebview pulls pyobjc in there regardless, but
-    # desktop.py imports Foundation itself to rename the app bundle.
+    # desktop.py imports AppKit/Foundation for screen geometry and app naming.
     "pyobjc-framework-Cocoa>=12.2.2; sys_platform=='darwin'",
 ]
 
@@ -40,6 +43,7 @@ docs = [
     "mkdocs-llmstxt>=0.5.0",
 ]
 dev = [
+    "mcp>=1.9.0,<2",
     "pytest>=9.1.1",
     "pytest-cov",
     "freezegun>=1.5.5",
@@ -50,7 +54,7 @@ dev = [
     "biston>=0.7.0",
     "deptry",
     "poethepoet>=0.48.0",
-    "madoqua>=0.2.1",
+    "madoqua>=0.2.3",
     "gerenuk>=0.3.0",
     "biston>=0.7.2",
     "zorilla>=0.2.1",
@@ -60,6 +64,7 @@ dev = [
 
 [project.scripts]
 bd = "braindump.cli.main:main"
+bd-mcp = "braindump.mcp:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -82,6 +87,7 @@ max-returns = 8
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["PLR2004", "PLR0913", "S", "DTZ", "PLC0415"]
+"braindump/mcp.py" = ["PLR0913", "PLR0917"]
 # Typer's API requires typer.Option()/Argument() calls as defaults (B008) and
 # gives commands many parameters (PLR0913/PLR0917) — Typer binds them from flags,
 # so nobody ever passes them positionally. Idiomatic, not smells.
@@ -115,7 +121,7 @@ exclude = ["scripts/**", "tests/**", "**/conftest.py"]
 # optional-extra deps loaded lazily inside desktop.py — teach deptry the
 # mapping so they aren't flagged. (pyobjc-framework-Cocoa ships more modules
 # than Foundation; only the one braindump imports is worth listing.)
-package_module_name_map = {"pywebview" = ["webview"], "pyobjc-framework-Cocoa" = ["Foundation"]}
+package_module_name_map = {"pywebview" = ["webview"], "pyobjc-framework-Cocoa" = ["AppKit", "Foundation"]}
 
 [tool.deptry.per_rule_ignores]
 # braindump self-references its own `web` extra from the `app` extra.

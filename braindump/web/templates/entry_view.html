@@ -27,9 +27,16 @@
     {% if entry.type in ("todo", "initiative", "pitch") and entry.status %}
       <span class="state-pill {% if entry.status in ('done', 'cancelled') %}state-archived{% elif entry.status in ('pending', 'in-progress', 'in-qa') %}state-active{% endif %}">{{ entry.status }}</span>
     {% endif %}
+    {% if entry.type in ("todo", "pitch") and entry.priority %}
+      <span class="state-pill">priority {{ entry.priority }}</span>
+    {% endif %}
+    {% if entry.type == "pitch" %}
+      <span class="state-pill">coverage {{ entry.coverage or "unaudited" }}</span>
+    {% endif %}
     {% if entry.project %}
       <span>·</span><a href="/projects/{{ entry.project }}">{{ entry.project }}</a>
     {% endif %}
+    {% if entry.branch %}<span>·</span><span>branch {{ entry.branch }}</span>{% endif %}
   </p>
 
   {% if entry.tags %}

@@ -11,7 +11,8 @@ def _fake_now() -> datetime:
     return datetime(2026, 4, 11, 14, 15)
 
 
-def test_create_todo_round_trip(cfg):
+@pytest.fixture
+def created_todo(cfg):
     r = entries.create_entry(
         cfg,
         "todos",
@@ -24,24 +25,70 @@ def test_create_todo_round_trip(cfg):
         original_input="raw user text",
         now=_fake_now(),
     )
+    return r
+
+
+def test_created_todo_identity_and_path(created_todo):
+    r = created_todo
     assert r.entry.id == 1
     assert r.entry.file_path.startswith("2026/04/fix-auth-bug--")
     assert r.full_path.exists()
 
-    text = r.full_path.read_text()
+
+def test_created_todo_authored_content(created_todo):
+    text = created_todo.full_path.read_text()
     assert "# Fix auth bug" in text
     assert "Details about the bug." in text
     assert "<details>" in text
     assert "raw user text" in text
+
+
+def test_created_todo_frontmatter(created_todo):
+    text = created_todo.full_path.read_text()
     assert 'tags: ["auth", "bug"]' in text
     assert "status: pending" in text
-    # summary lives in JSONL, not frontmatter
     assert "summary" not in text.split("---", 2)[1]
 
+
+def test_created_todo_index_metadata(created_todo, cfg):
     stored = store.read_index(cfg, "todos")
     assert len(stored) == 1
     assert stored[0].summary == "Fixes the login flow"
     assert stored[0].status == "pending"
+
+
+def test_pitch_priority_and_coverage_round_trip_and_validation(cfg):
+    result = entries.create_entry(
+        cfg,
+        "pitch",
+        "Launch pitch",
+        "body",
+        type_fields={"priority": "high", "coverage": "partial"},
+        now=_fake_now(),
+    )
+
+    assert (result.entry.priority, result.entry.coverage) == ("high", "partial")
+    text = result.full_path.read_text()
+    assert "priority: high" in text
+    assert "coverage: partial" in text
+    assert store.read_index(cfg, "pitches")[0].coverage == "partial"
+
+    with pytest.raises(ValueError, match="pitch priority"):
+        entries.create_entry(
+            cfg, "pitch", "bad priority", "body", type_fields={"priority": "urgent"}
+        )
+    with pytest.raises(ValueError, match="pitch coverage"):
+        entries.create_entry(
+            cfg, "pitch", "bad coverage", "body", type_fields={"coverage": "unknown"}
+        )
+    with pytest.raises(ValueError, match="only valid for pitches"):
+        entries.create_entry(
+            cfg, "todo", "bad coverage", "body", type_fields={"coverage": "partial"}
+        )
+    with pytest.raises(ValueError, match="only valid for todos and pitches"):
+        entries.create_entry(
+            cfg, "til", "bad priority", "body", type_fields={"priority": "urgent"}
+        )
 
 
 def test_parse_source_document_tracks_headings_and_checked_items():
@@ -71,23 +118,61 @@ def test_create_til_sets_category(cfg):
     assert r.entry.source == "docs"
 
 
-def test_update_entry_rewrites_title_and_index(cfg):
+@pytest.fixture
+def renamed_todo(cfg):
     r = entries.create_entry(
         cfg, "todos", "old title", "body", tags=["a"], project="p", now=_fake_now()
     )
     updated = entries.update_entry(
         cfg, r.entry.id, {"title": "new title", "tags": ["b"]}
     )
+    return r, updated
+
+
+def test_update_returns_renamed_todo(renamed_todo):
+    _, updated = renamed_todo
     assert updated.title == "new title"
     assert updated.tags == ["b"]
+
+
+def test_update_rewrites_todo_markdown(renamed_todo):
+    r, _ = renamed_todo
     text = r.full_path.read_text()
     assert "title: new title" in text
     assert "# new title" in text
     assert 'tags: ["b"]' in text
+
+
+def test_update_rewrites_todo_index(renamed_todo, cfg):
     stored = store.read_index(cfg, "todos")
     assert stored[0].title == "new title"
     assert stored[0].tags == ["b"]
     assert stored[0].updated_at is not None
+
+
+@pytest.mark.parametrize(
+    ("entry_type", "type_dir"), (("todo", "todos"), ("pitch", "pitches"))
+)
+def test_update_preserves_unchanged_legacy_priority(cfg, entry_type, type_dir):
+    result = entries.create_entry(
+        cfg,
+        entry_type,
+        "Legacy priority",
+        "body",
+        type_fields={"priority": "high"},
+        now=_fake_now(),
+    )
+    result.entry.priority = "urgent"
+    store.rewrite_index_atomic(cfg, type_dir, [result.entry])
+
+    renamed = entries.update_entry(cfg, result.entry.id, {"title": "Renamed"})
+    unchanged = entries.update_entry(cfg, result.entry.id, {"priority": "urgent"})
+
+    assert renamed.priority == "urgent"
+    assert unchanged.priority == "urgent"
+    assert "priority: urgent" in result.full_path.read_text()
+    with pytest.raises(ValueError, match=f"{entry_type} priority"):
+        entries.update_entry(cfg, result.entry.id, {"priority": "critical"})
 
 
 def test_update_entry_replaces_body(cfg):
@@ -129,7 +214,8 @@ def test_set_status_and_find_by_id(cfg):
     assert entry.status == "done"
 
 
-def test_create_project_entry_roundtrip(cfg):
+@pytest.fixture
+def created_project(cfg, tmp_path):
     r = entries.create_entry(
         cfg,
         "project",
@@ -140,39 +226,56 @@ def test_create_project_entry_roundtrip(cfg):
         type_fields={
             "description": "The alpha project.",
             "state": "active",
-            "local_dir": "/tmp/alpha",
+            "local_dir": str(tmp_path / "alpha"),
             "tech_stack": ["python", "fastapi"],
         },
         now=_fake_now(),
     )
-    assert r.entry.type == "project"
-    # project entries never belong to a project themselves
-    assert r.entry.project is None
+    return r
 
+
+def test_project_does_not_belong_to_itself(created_project):
+    assert created_project.entry.type == "project"
+    assert created_project.entry.project is None
+
+
+def test_project_index_metadata(created_project, cfg):
     stored = store.read_index(cfg, "projects")
     assert len(stored) == 1
     persisted = stored[0]
     assert persisted.title == "Alpha"
     assert persisted.description == "The alpha project."
     assert persisted.state == "active"
-    assert persisted.local_dir == "/tmp/alpha"
+
+
+def test_project_index_location_and_stack(created_project, cfg, tmp_path):
+    persisted = store.read_index(cfg, "projects")[0]
+    assert persisted.local_dir == str(tmp_path / "alpha")
     assert persisted.tech_stack == ["python", "fastapi"]
     assert isinstance(persisted.tech_stack, list)
     assert persisted.project is None
 
-    text = r.full_path.read_text()
+
+def test_project_frontmatter_identity(created_project):
+    text = created_project.full_path.read_text()
     assert "type: project" in text
     assert "description: The alpha project." in text
     assert "state: active" in text
-    assert "local_dir: /tmp/alpha" in text
+
+
+def test_project_frontmatter_location_and_stack(created_project, tmp_path):
+    text = created_project.full_path.read_text()
+    assert f"local_dir: {tmp_path / 'alpha'}" in text
     assert 'tech_stack: ["python", "fastapi"]' in text
 
-    found = entries.find_by_id(cfg, r.entry.id)
+
+def test_project_lookup(created_project, cfg):
+    found = entries.find_by_id(cfg, created_project.entry.id)
     assert found is not None
-    _, e = found
-    assert e.description == "The alpha project."
-    assert e.tech_stack == ["python", "fastapi"]
-    assert e.project is None
+    _, entry = found
+    assert entry.description == "The alpha project."
+    assert entry.tech_stack == ["python", "fastapi"]
+    assert entry.project is None
 
 
 def test_project_title_none_forbidden(cfg):
@@ -238,7 +341,44 @@ def test_update_drops_the_tag_when_the_project_moves(cfg):
     assert updated.tags == []
 
 
-def test_planning_graph_round_trip_and_typed_relations(cfg):
+@pytest.fixture
+def created_handoff(cfg):
+    result = entries.create_entry(
+        cfg,
+        "handoff",
+        "Resume auth",
+        "Continue investigating the token bug.",
+        type_fields={"branch": "feature/auth"},
+        now=_fake_now(),
+    )
+
+    return result
+
+
+def test_handoff_identity_and_path(created_handoff):
+    result = created_handoff
+    assert result.entry.type == "handoff"
+    assert result.entry.branch == "feature/auth"
+    assert result.entry.file_path.startswith("2026/04/")
+    assert "handoffs" in result.full_path.parts
+
+
+def test_handoff_markdown_and_index(created_handoff, cfg):
+    result = created_handoff
+    assert "branch: feature/auth" in result.full_path.read_text()
+    assert "Continue investigating the token bug." in result.full_path.read_text()
+    assert store.read_index(cfg, "handoffs")[0].branch == "feature/auth"
+
+
+def test_handoff_branch_clearing(created_handoff, cfg):
+    result = created_handoff
+    updated = entries.update_entry(cfg, result.entry.id, {"branch": None})
+    assert updated.branch is None
+    assert "branch:" not in result.full_path.read_text()
+
+
+@pytest.fixture
+def planning_graph(cfg, tmp_path):
     project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
     initiative = entries.create_entry(
         cfg,
@@ -257,7 +397,7 @@ def test_planning_graph_round_trip_and_typed_relations(cfg):
             "status": "active",
             "project_ids": [project.entry.id],
             "initiative_ids": [initiative.entry.id],
-            "source_path": "/tmp/source.md",
+            "source_path": str(tmp_path / "source.md"),
         },
         now=_fake_now(),
     )
@@ -276,11 +416,21 @@ def test_planning_graph_round_trip_and_typed_relations(cfg):
         now=_fake_now(),
     )
 
+    return project, initiative, pitch, todo
+
+
+def test_planning_graph_persists_relations(planning_graph, cfg):
+    project, initiative, pitch, _ = planning_graph
     persisted = store.read_index(cfg, "pitches")[0]
     assert persisted.project_ids == [project.entry.id]
     assert persisted.initiative_ids == [initiative.entry.id]
     assert "project_ids: [1]" in pitch.full_path.read_text()
     assert store.read_index(cfg, "todos")[0].qa_run_ref == "run-1"
+
+
+def test_planning_graph_resolves_initiative_links(planning_graph, cfg):
+    _, initiative, _, todo = planning_graph
+    persisted = store.read_index(cfg, "pitches")[0]
     related_initiative = entries.resolve_relations(cfg, persisted, "initiative_ids")[0]
     assert related_initiative is not None
     assert related_initiative.id == initiative.entry.id
@@ -375,10 +525,12 @@ def test_record_qa_result_stores_receipt_and_transitions_todo(cfg, result, statu
         now=datetime(2026, 4, 11, 15, 16),
     )
 
-    assert updated.qa_result == result.lower()
-    assert updated.qa_verified_at == "2026-04-11T15:16:00Z"
-    assert updated.qa_run_ref == "run-42"
-    assert updated.status == status
+    assert (
+        updated.qa_result,
+        updated.qa_verified_at,
+        updated.qa_run_ref,
+        updated.status,
+    ) == (result.lower(), "2026-04-11T15:16:00Z", "run-42", status)
     persisted = store.read_index(cfg, "todos")[0]
     assert persisted.qa_result == result.lower()
     assert persisted.status == status
@@ -396,7 +548,8 @@ def test_record_qa_result_can_omit_run_reference(cfg):
     assert updated.qa_run_ref is None
 
 
-def test_pitch_import_preserves_source_intent_and_verifies(cfg, tmp_path):
+@pytest.fixture
+def imported_pitch(cfg, tmp_path):
     project = entries.create_entry(cfg, "project", "Alpha", "body", now=_fake_now())
     initiative = entries.create_entry(
         cfg, "initiative", "Launch", "body", now=_fake_now()
@@ -427,18 +580,36 @@ Preserve this heading too.
         initiative_ids=[initiative.entry.id],
     )
 
+    return result, source, project, initiative
+
+
+def test_pitch_import_verifies(imported_pitch, cfg):
+    result, _, _, _ = imported_pitch
     assert result.verified
+    assert entries.verify_pitch_import(cfg, result) == []
+
+
+def test_pitch_import_preserves_source_metadata(imported_pitch):
+    result, source, _, _ = imported_pitch
     assert result.entry is not None
     assert result.entry.title == "Launch proposal"
     assert result.entry.source_path == str(source.resolve())
+
+
+def test_pitch_import_links_planning_graph(imported_pitch):
+    result, _, project, initiative = imported_pitch
+    assert result.entry is not None
     assert result.entry.project_ids == [project.entry.id]
     assert result.entry.initiative_ids == [initiative.entry.id]
+
+
+def test_pitch_import_preserves_authored_markdown(imported_pitch):
+    result, _, _, _ = imported_pitch
     assert result.full_path is not None
     imported_markdown = result.full_path.read_text()
     assert "Keep this authored body exactly." in imported_markdown
     assert "type: pitch" in imported_markdown
     assert "summary: A durable proposal" not in imported_markdown
-    assert entries.verify_pitch_import(cfg, result) == []
 
 
 def test_pitch_import_dry_run_writes_nothing_and_validates_relations(cfg, tmp_path):

@@ -2,13 +2,14 @@
 # Braindump Installation Script
 # Installs:
 #   - the `bd` CLI (Python package) via uv tool install
-#   - Claude skills to ~/.claude/skills
+#   - shared skills to ~/.claude/skills and ~/.codex/skills
 #   - data directory layout at ~/braindump/
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
+CODEX_DIR="$HOME/.codex"
 BRAINDUMP_DIR="${BRAINDUMP_DIR:-$HOME/braindump}"
 
 echo "Braindump Installer"
@@ -23,14 +24,23 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 echo "Installing bd CLI via uv tool..."
-uv tool install --force --reinstall --no-cache "${SCRIPT_DIR}[web]" >/dev/null
+uv tool install --force --reinstall --no-cache "${SCRIPT_DIR}[web,mcp]" >/dev/null
 echo "  - bd CLI installed (run 'bd --help' to verify)"
 
 # --- 2. Install Claude skills ---------------------------------------------
 
 echo ""
-echo "Installing Claude skills to $CLAUDE_DIR/skills..."
-mkdir -p "$CLAUDE_DIR/skills"
+SKILLS_SOURCE="$SCRIPT_DIR/claude/skills"
+
+install_skills() {
+    local client_dir="$1"
+    echo "Installing skills to $client_dir/skills..."
+    mkdir -p "$client_dir/skills"
+    cp -r "$SKILLS_SOURCE/." "$client_dir/skills/"
+}
+
+install_skills "$CLAUDE_DIR"
+install_skills "$CODEX_DIR"
 
 # Clean up stale commands from previous installations
 if [ -d "$CLAUDE_DIR/commands" ]; then
@@ -39,10 +49,7 @@ if [ -d "$CLAUDE_DIR/commands" ]; then
     done
 fi
 
-if [ -d "$SCRIPT_DIR/claude/skills" ]; then
-    cp -r "$SCRIPT_DIR/claude/skills/"* "$CLAUDE_DIR/skills/"
-    echo "  - Skills installed"
-fi
+echo "  - Claude and Codex skills installed from $SKILLS_SOURCE"
 
 # --- 3. Seed data directory -----------------------------------------------
 

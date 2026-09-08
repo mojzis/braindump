@@ -18,14 +18,14 @@ cd ~/git/braindump
 ```
 
 This will:
-1. `uv tool install` the `bd` CLI (with the `web` extra for the local UI)
-2. Copy Claude skills to `~/.claude/skills/`
+1. `uv tool install` the `bd` CLI and stdio MCP server (with `web` for the local UI)
+2. Install the shared skills to `~/.claude/skills/` and `~/.codex/skills/`
 3. Seed the data directory at `~/braindump/` with empty indexes for each type
 4. Drop optional session-tracking scripts into `~/braindump/scripts/`
 
 ### How the `uv tool` install works
 
-`bd` is installed as a [uv tool](https://docs.astral.sh/uv/concepts/tools/): uv
+`bd` and `bd-mcp` are installed as [uv tools](https://docs.astral.sh/uv/concepts/tools/): uv
 builds the package from this directory and drops it into its **own isolated
 environment** under `~/.local/share/uv/tools/braindump/`, then puts a `bd`
 shim on your `PATH` at `~/.local/bin/bd`.
@@ -44,13 +44,14 @@ extras:
 
 ```bash
 cd ~/git/braindump
-uv tool install --force --reinstall --no-cache ".[web]"      # CLI + bd serve
-uv tool install --force --reinstall --no-cache ".[app]"      # + bd app desktop window
+uv tool install --force --reinstall --no-cache ".[mcp]"        # CLI + MCP stdio server
+uv tool install --force --reinstall --no-cache ".[web,mcp]"    # CLI + bd serve + MCP
+uv tool install --force --reinstall --no-cache ".[app,mcp]"    # + bd app desktop windows + MCP
 ```
 
 Extras are not cumulative across installs — each `uv tool install` replaces the
 environment, so pass every extra you want in one go (`".[app]"` already pulls in
-`[web]`). Missing extras show up as import errors at run time:
+`[web]`; add `mcp` when you need the server). Missing extras show up as import errors at run time:
 `ModuleNotFoundError: No module named 'uvicorn'` means a `bd` installed without
 `[web]`. Running `./install.sh` does the `[web]` install for you.
 
@@ -71,13 +72,19 @@ bd --help                             # overview
 bd list                               # recent entries
 bd search auth login --status open    # multi-word AND search
 bd create todo "Fix auth" --tag auth  # create (body from stdin)
+bd create handoff "Session handoff" --branch feature/auth  # capture a handoff
 bd done 42                            # mark todo done
 bd update 42 --tags a,b --project foo # patch metadata
 bd project focus braindump            # scope all queries to a project
 bd journal today                      # today's journal state
 bd serve                              # local web UI at http://127.0.0.1:8765/
-bd app                                # same UI in a native desktop window (detached)
+bd app                                # same UI in native Journal + Todos windows (detached)
 ```
+
+Handoffs are ordinary entries stored under `handoffs/`. Their authored body is
+kept in Markdown and an optional `branch` records the code branch to resume
+from. They use the generic create, list, search, show, update, and web entry
+paths; there is no separate handoff lifecycle.
 
 ### Web UI
 
@@ -91,16 +98,19 @@ bd app                                # same UI in a native desktop window (deta
 - Per-project dashboards with open todos, recent activity, and tag counts
 - Active-project focus mode applied across every view
 
-Keyboard shortcuts: `g d`, `g j`, `g c`, `g e`, `g p`, `/` to focus search, `?` for help.
+Keyboard shortcuts: `g d`, `g j`, `g t` for todos, `g l` for TILs, `g c`,
+`g e`, `g i` to focus entry ID, `g p`, `/` to focus search, `?` for help.
 
-### Desktop window
+### Desktop windows
 
-`bd app` runs the exact same web UI, but inside a native [pywebview](https://pywebview.flet.dev/)
-window instead of a browser tab — a lightweight way to keep braindump open as its
-own app locally. It's not a packaged/bundled build: it just starts the server and
-points a window at it.
+`bd app` runs the exact same web UI, but inside two native
+[pywebview](https://pywebview.flet.dev/) windows instead of browser tabs — a
+lightweight way to keep braindump open as its own app locally. The Journal and
+Todos windows open side by side by default, using one local server and one event
+loop. It's not a packaged/bundled build: it just starts the server and points
+both windows at it.
 
-It **detaches by default** — the command returns immediately, the window keeps
+It **detaches by default** — the command returns immediately, the windows keep
 running after you close the terminal, and anything the process prints goes to
 `~/braindump/.bd-app.log`:
 
@@ -109,15 +119,18 @@ bd app                  # detach, print the pid, hand the shell back
 bd app --foreground     # stay attached (use this when debugging a crash)
 ```
 
-On macOS the window calls itself **Braindump** — in the menu bar and in the
-⌘-tab switcher — rather than the interpreter running it. Unbundled Python has no
-.app of its own, so `bd app` overwrites the bundle name macOS would otherwise
-read (`Python 3.14`) before the process registers with the window server.
+On macOS the app calls itself **Braindump** — in the menu bar and in the
+⌘-tab switcher — rather than the interpreter running it. The two windows have
+distinct **Braindump — Journal** and **Braindump — Todos** titles. Unbundled
+Python has no .app of its own, so `bd app` overwrites the bundle name macOS
+would otherwise read (`Python 3.14`) before the process registers with the
+window server.
 
 If something is already serving on the port (a running `bd serve`, or another
-`bd app`), the window attaches to that server instead of starting a second one.
-The server belongs to whichever process started it, so closing *that* window
-also stops the server for any window that attached to it.
+`bd app`), both windows attach to that server instead of starting a second one.
+The server belongs to whichever process started it: a process that starts the
+server shuts it down after both windows close, while an attached pair leaves
+the existing server running.
 
 Requires the `[app]` extra:
 
@@ -156,6 +169,40 @@ Start a new Claude Code session after installation. Available:
 
 All of them delegate to the same `bd` CLI, so what you see in the web UI is exactly what the skills produce.
 
+### MCP clients
+
+The installer includes the `bd-mcp` stdio server. Point an MCP client at this
+checkout (or at the installed `bd-mcp` command) and set `BRAINDUMP_DIR` if your
+data is not in `~/braindump`.
+
+Claude Code project configuration (`.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "braindump": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/braindump", "--extra", "mcp", "bd-mcp"]
+    }
+  }
+}
+```
+
+Codex configuration (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.braindump]
+command = "uv"
+args = ["run", "--directory", "/path/to/braindump", "--extra", "mcp", "bd-mcp"]
+```
+
+The MCP tools use the same service contract as the CLI for entry, project, tag,
+and journal operations. Test with an isolated store before using real data:
+
+```bash
+BRAINDUMP_DIR="$(mktemp -d)" bd-mcp
+```
+
 ## Data layout
 
 ```
@@ -164,6 +211,7 @@ All of them delegate to the same `bd` CLI, so what you see in the web UI is exac
 ├── til/        …
 ├── thoughts/   …
 ├── prompts/    …
+├── handoffs/   index.jsonl + YYYY/MM/<slug>--<timestamp>.md
 ├── journal/    index.jsonl + YYYY/MM/<YYYY-MM-DD>.md  (one file per day)
 ├── sessions/   Claude Code session hooks output
 ├── scripts/    session hooks only
@@ -208,11 +256,15 @@ Authored content…
 
 ```bash
 uv venv
-uv pip install -e ".[dev,web]"
+uv pip install -e ".[dev,web,mcp]"
 pytest                   # core test suite
 bd serve --reload        # local UI with autoreload
 uv run poe setup         # enable the repository pre-commit hook
 ```
+
+The optional `mcp` extra also installs the `bd-mcp` stdio adapter. It exposes
+the same create, list, search, show, and update contract as the CLI, including
+handoff bodies and branches.
 
 The agent-friendly pre-commit hook formats and re-stages staged Python files,
 then runs Ruff, ty, and Biston on those files. Use

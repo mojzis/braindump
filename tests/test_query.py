@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import shutil
 from datetime import date, datetime
+
+import pytest
 
 from braindump.core import entries, query
 
@@ -92,6 +95,46 @@ def test_search_filter_by_tags_and_type(cfg):
     assert hits[0].entry.title == "Ripgrep glob trick"
 
 
+def test_search_filter_by_priority_and_pitch_coverage(cfg):
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Covered high pitch",
+        "body",
+        type_fields={"priority": "high", "coverage": "covered"},
+        now=datetime(2026, 4, 11, 9),
+    )
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Partial low pitch",
+        "body",
+        type_fields={"priority": "low", "coverage": "partial"},
+        now=datetime(2026, 4, 11, 10),
+    )
+
+    high = query.search(cfg, query.SearchFilters(priority="high"))
+    covered = query.search(cfg, query.SearchFilters(coverage="covered"))
+    assert [hit.entry.title for hit in high] == ["Covered high pitch"]
+    assert [hit.entry.title for hit in covered] == ["Covered high pitch"]
+
+
+def test_search_filter_by_unaudited_pitch_coverage(cfg):
+    entries.create_entry(cfg, "pitch", "Unaudited pitch", "body")
+    entries.create_entry(
+        cfg,
+        "pitch",
+        "Audited pitch",
+        "body",
+        type_fields={"coverage": "covered"},
+    )
+    entries.create_entry(cfg, "todo", "Todo has no coverage", "body")
+
+    hits = query.search(cfg, query.SearchFilters(coverage="unaudited"))
+
+    assert [hit.entry.title for hit in hits] == ["Unaudited pitch"]
+
+
 def test_search_date_range(cfg):
     _seed(cfg)
     hits = query.search(
@@ -109,6 +152,50 @@ def test_search_sorts_newest_first(cfg):
     assert titles == ["Ripgrep glob trick", "Fix auth bug", "Ship deploy pipeline"]
 
 
+@pytest.fixture
+def priority_todos(cfg):
+    for minute, (title, priority) in enumerate(
+        (("low", "low"), ("medium", "medium"), ("high", "high")), start=1
+    ):
+        entries.create_entry(
+            cfg,
+            "todo",
+            title,
+            "body",
+            type_fields={"priority": priority},
+            now=datetime(2026, 4, 11, 14, minute),
+        )
+
+    return cfg
+
+
+def test_search_sorts_priority_before_limiting(priority_todos):
+    cfg = priority_todos
+    highest = query.search(
+        cfg,
+        query.SearchFilters(sort="priority", direction="asc", limit=1),
+    )
+    lowest = query.search(
+        cfg,
+        query.SearchFilters(sort="priority", direction="desc", limit=1),
+    )
+
+    assert [hit.entry.title for hit in highest] == ["high"]
+    assert [hit.entry.title for hit in lowest] == ["low"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (("sort", "bogus", "sort must be"), ("direction", "sideways", "direction must be")),
+)
+def test_search_rejects_invalid_sort_options(cfg, field, value, message):
+    filters = query.SearchFilters()
+    setattr(filters, field, value)
+
+    with pytest.raises(ValueError, match=message):
+        query.search(cfg, filters)
+
+
 def test_search_multi_word_and(cfg):
     _seed(cfg)
     # both words must appear across title/summary/tags
@@ -117,16 +204,11 @@ def test_search_multi_word_and(cfg):
     assert hits[0].entry.title == "Ship deploy pipeline"
 
 
+@pytest.mark.skipif(shutil.which("rg") is None, reason="fulltext requires ripgrep")
 def test_fulltext_finds_body_match(cfg):
     _seed(cfg)
     # "kubernetes" only appears in the markdown body, not title/summary/tags
     hits = query.search(cfg, query.SearchFilters(q="kubernetes"))
-    if not hits:
-        # ripgrep may not be available on CI — skip gracefully
-        import shutil
-
-        assert shutil.which("rg") is None
-        return
     assert len(hits) == 1
     assert hits[0].source == "fulltext"
     assert hits[0].entry.title == "Ship deploy pipeline"
@@ -177,3 +259,29 @@ def test_related_entries_keeps_stale_numeric_links(cfg):
     entries.delete_entry(cfg, project.entry.id)
     hits = query.related_entries(cfg, "project", project.entry.id)
     assert [hit.entry.id for hit in hits] == [initiative.entry.id]
+
+
+def test_search_filters_handoffs_by_exact_branch(cfg):
+    entries.create_entry(
+        cfg,
+        "handoff",
+        "Auth handoff",
+        "body",
+        type_fields={"branch": "feature/auth"},
+        now=datetime(2026, 4, 11, 10),
+    )
+    entries.create_entry(
+        cfg,
+        "handoff",
+        "Release handoff",
+        "body",
+        type_fields={"branch": "release"},
+        now=datetime(2026, 4, 11, 11),
+    )
+
+    hits = query.search(
+        cfg,
+        query.SearchFilters(types=["handoff"], branch="feature/auth", fulltext=False),
+    )
+
+    assert [hit.entry.title for hit in hits] == ["Auth handoff"]

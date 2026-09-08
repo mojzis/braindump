@@ -1,22 +1,22 @@
-"""Run the braindump web UI inside a native desktop window via pywebview.
+"""Run the braindump web UI in two native desktop windows via pywebview.
 
 This is a thin convenience wrapper, not a packaged app: it starts the same
 FastAPI server the CLI's `serve` command uses (in a background thread) and
-points a `pywebview` window at it. No bundling, no installers — just a local
-window instead of a browser tab.
+opens separate Journal and Todos windows on that one server and pywebview event
+loop. No bundling, no installers — just local windows instead of browser tabs.
 
-`bd app` detaches by default (see `launch_detached`), so the window outlives
+`bd app` detaches by default (see `launch_detached`), so the windows outlive
 the shell it was started from; `run_app` is the attached/foreground path the
 detached child re-enters.
 
-One thing the window doesn't inherit from a browser tab is getting text back
-out of it. pywebview injects `user-select: none` into the page unless a window
+One thing the windows don't inherit from browser tabs is getting text back out
+of them. pywebview injects `user-select: none` into a page unless its window
 asks for `text_select`, switches the native context menu off outside debug
 mode, and (on Qt) leaves JS clipboard access disabled. `run_app` and
 `_enable_clipboard_on_show` undo all three, and `web/static/clipboard.js` is
 the in-page half of the same fix.
 
-The other thing a window doesn't get for free is its own name: unbundled
+The other thing the app doesn't get for free is its own name: unbundled
 Python introduces itself to macOS as the interpreter, so `_brand_macos_app`
 renames it before the window server ever asks.
 """
@@ -31,7 +31,7 @@ import threading
 import time
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, NamedTuple
 
 import uvicorn
 
@@ -48,12 +48,13 @@ _STARTUP_GRACE = 5.0
 #: name in the menu bar and the app switcher.
 _APP_NAME = "Braindump"
 
-#: Default window geometry. The journal editor plus the rendered days below it
-#: want a lot of vertical room, so start noticeably larger than pywebview's
-#: 800x600 default.
-_WINDOW_WIDTH = 1400
-_WINDOW_HEIGHT = 950
-_WINDOW_MIN_SIZE = (900, 600)
+_WINDOWS = (
+    ("Braindump — Journal", "/journal"),
+    ("Braindump — Todos", "/todos"),
+)
+_WINDOW_SIZE = (700, 950)
+_WINDOW_MIN_SIZE = (500, 600)
+_CASCADE_OFFSET = 32
 
 #: Window/taskbar icon. Same brain the web UI uses as its favicon; pywebview
 #: wants a raster file path, so we ship the rendered PNG next to the SVG.
@@ -69,6 +70,109 @@ class _Server(uvicorn.Server):
 
     def install_signal_handlers(self) -> None:
         pass
+
+
+class _Rect(NamedTuple):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+def _native_rect(rect: Any) -> _Rect:
+    """Read the rectangle shapes exposed by Qt, WinForms, and Cocoa."""
+    if hasattr(rect, "origin") and hasattr(rect, "size"):
+        return _Rect(
+            int(rect.origin.x),
+            int(rect.origin.y),
+            int(rect.size.width),
+            int(rect.size.height),
+        )
+
+    def value(lower: str, upper: str) -> int:
+        attribute = getattr(rect, lower, getattr(rect, upper, None))
+        if attribute is None:
+            raise TypeError(f"rectangle has no {lower}/{upper} attribute")
+        return int(attribute() if callable(attribute) else attribute)
+
+    return _Rect(
+        value("x", "X"),
+        value("y", "Y"),
+        value("width", "Width"),
+        value("height", "Height"),
+    )
+
+
+def _macos_work_area(screen: Any) -> _Rect | None:
+    """Return Cocoa's visible frame in pywebview's top-left coordinates."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        import AppKit  # noqa: PLC0415  # macOS-only, via pyobjc
+
+        full = _Rect(screen.x, screen.y, screen.width, screen.height)
+        nsscreen = getattr(AppKit, "NSScreen")  # noqa: B009  # incomplete stub
+        native_screen = next(
+            item for item in nsscreen.screens() if _native_rect(item.frame()) == full
+        )
+        visible = _native_rect(native_screen.visibleFrame())
+    except (ImportError, StopIteration):
+        return None
+
+    top_inset = full.height - (visible.y - full.y) - visible.height
+    return _Rect(visible.x, full.y + top_inset, visible.width, visible.height)
+
+
+def _screen_work_area(screen: Any) -> _Rect:
+    """Return the selected screen's usable rectangle in logical pixels."""
+    macos_area = _macos_work_area(screen)
+    if macos_area is not None:
+        return macos_area
+
+    frame = getattr(screen, "frame", None)
+    available_geometry = getattr(frame, "availableGeometry", None)
+    if callable(available_geometry):
+        frame = available_geometry()
+    if frame is not None:
+        return _native_rect(frame)
+    return _Rect(screen.x, screen.y, screen.width, screen.height)
+
+
+def _window_rects(work_area: _Rect) -> tuple[_Rect, _Rect]:
+    """Place both windows inside a screen work area, cascading when needed."""
+    preferred_width, preferred_height = _WINDOW_SIZE
+    min_width, min_height = _WINDOW_MIN_SIZE
+    height = min(preferred_height, work_area.height)
+
+    if work_area.width >= min_width * 2:
+        width = min(preferred_width, work_area.width // 2)
+        pair_width = width * 2
+        x = work_area.x + (work_area.width - pair_width) // 2
+        y = work_area.y + (work_area.height - height) // 2
+        return (
+            _Rect(x, y, width, height),
+            _Rect(x + width, y, width, height),
+        )
+
+    offset_x = _CASCADE_OFFSET if work_area.width >= min_width + _CASCADE_OFFSET else 0
+    offset_y = (
+        _CASCADE_OFFSET if work_area.height >= min_height + _CASCADE_OFFSET else 0
+    )
+    width = min(preferred_width, work_area.width - offset_x)
+    height = min(preferred_height, work_area.height - offset_y)
+    x = work_area.x + (work_area.width - width - offset_x) // 2
+    y = work_area.y + (work_area.height - height - offset_y) // 2
+    return (
+        _Rect(x, y, width, height),
+        _Rect(x + offset_x, y + offset_y, width, height),
+    )
+
+
+def _pywebview_position(rect: _Rect, screen: Any) -> tuple[int, int]:
+    """Translate absolute geometry to the backend's create-window coordinates."""
+    if sys.platform == "win32":
+        return rect.x, rect.y
+    return rect.x - screen.x, rect.y - screen.y
 
 
 def _port_open(host: str, port: int, timeout: float = 0.5) -> bool:
@@ -303,21 +407,24 @@ def _brand_macos_app() -> None:
 
 
 def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
-    """Launch the web UI in a pywebview window, blocking until it's closed.
+    """Launch Journal and Todos windows on one pywebview event loop.
 
     If the port is already serving (a `bd serve`, or another `bd app`), we
-    attach a window to that server rather than starting — and later killing —
-    a second one. The server belongs to whichever process started it, so
-    closing *that* window stops it for any window that attached to it.
+    attach both windows to it rather than starting — and later killing — a
+    second server. If this process owns the server, it stops only after both
+    windows close; an attached pair leaves the existing server running.
     """
     # Must stay above _import_webview(): pywebview's Cocoa backend registers
     # the process — and its name is taken — at import time.
     _brand_macos_app()
     webview = _import_webview()
+    screen = webview.screens[0]
+    work_area = _screen_work_area(screen)
+    window_rects = _window_rects(work_area)
 
     cfg = load_config()
     resolved_port = port or cfg.port
-    url = f"http://{host}:{resolved_port}/"
+    url = f"http://{host}:{resolved_port}"
 
     server: _Server | None = None
     thread: threading.Thread | None = None
@@ -338,19 +445,28 @@ def run_app(host: str = "127.0.0.1", port: int | None = None) -> None:
             raise RuntimeError(f"Web server did not start on {host}:{resolved_port}")
 
     try:
-        window = webview.create_window(
-            _APP_NAME,
-            url,
-            width=_WINDOW_WIDTH,
-            height=_WINDOW_HEIGHT,
-            min_size=_WINDOW_MIN_SIZE,
-            # pywebview defaults this to False, which injects
-            # `body { user-select: none; cursor: default }` into the page on
-            # every backend — so nothing in the window could even be selected,
-            # let alone copied. Braindump is a reading app; text selects.
-            text_select=True,
-        )
-        _enable_clipboard_on_show(window)
+        for (title, path), rect in zip(_WINDOWS, window_rects, strict=True):
+            x, y = _pywebview_position(rect, screen)
+            window = webview.create_window(
+                title,
+                f"{url}{path}",
+                x=x,
+                y=y,
+                width=rect.width,
+                height=rect.height,
+                screen=screen,
+                min_size=(
+                    min(_WINDOW_MIN_SIZE[0], rect.width),
+                    min(_WINDOW_MIN_SIZE[1], rect.height),
+                ),
+                # pywebview defaults this to False, which injects
+                # `body { user-select: none; cursor: default }` into the page
+                # on every backend — so nothing in the window could even be
+                # selected, let alone copied. Braindump is a reading app;
+                # text selects.
+                text_select=True,
+            )
+            _enable_clipboard_on_show(window)
         webview.start(icon=str(_ICON_PATH) if _ICON_PATH.exists() else None)
     finally:
         if server is not None:
