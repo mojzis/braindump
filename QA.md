@@ -51,7 +51,7 @@ Use one same-shell disposable store:
     effective_day_line="$(uv run --frozen --no-sync bd journal today)"
     effective_day="${effective_day_line#day: }"
     effective_day="${effective_day%% *}"
-    historical_day="$(uv run --frozen --no-sync python - "$effective_day" <<'PY'"
+    historical_day="$(uv run --frozen --no-sync python - "$effective_day" <<'PY'
     import sys
     from datetime import date, timedelta
     print(date.fromisoformat(sys.argv[1]) - timedelta(days=1))
