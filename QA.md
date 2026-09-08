@@ -1,275 +1,199 @@
-# Handoff QA
+# Functional QA
 
-Run this journey from the final tree. It uses a disposable store and never
-reads or writes `~/braindump`.
+Run from the final task checkout. Development gates and the commit hook are
+separate. Preparation owns environment setup; read-only QA never syncs or
+installs project dependencies.
 
-```bash
-set -eu
-qa_root="$(mktemp -d)"
-trap 'rm -rf "$qa_root"' EXIT
-export BRAINDUMP_DIR="$qa_root/braindump"
+## Setup
 
-handoff_line="$(printf 'Resume the auth work.\n' | uv run bd create handoff 'Auth session' --branch feature/auth)"
-handoff_id="${handoff_line#*#}"
-handoff_id="${handoff_id%% *}"
-test -n "$handoff_id"
+Fresh worktree preparation:
 
-uv run bd list handoff --branch feature/auth --json | tee "$qa_root/list.jsonl"
-test "$(wc -l < "$qa_root/list.jsonl" | tr -d ' ')" = 1
-uv run bd search --type handoff --branch feature/auth --json | grep -q 'Auth session'
-uv run bd show --json "$handoff_id" | grep -q 'Resume the auth work.'
-uv run bd update "$handoff_id" --branch release/auth
-uv run bd show "$handoff_id" | grep -q 'branch: release/auth'
+    uv sync --all-extras --all-groups
+    uv run madoqua install
 
-branchless_line="$(printf 'Branchless initial body\n' | uv run bd create handoff 'Branchless session')"
-branchless_id="${branchless_line#*#}"
-branchless_id="${branchless_id%% *}"
-test -n "$branchless_id"
+Confirm the prepared Madoqua 0.2.3 floor in pyproject.toml and uv.lock; do not
+resolve or edit the lock. Keep reports outside the repository.
 
-uv run bd show --json "$branchless_id" | tee "$qa_root/branchless-show.json"
-uv run bd list handoff --all --json | tee "$qa_root/branchless-list.jsonl"
-uv run bd search 'Branchless session' --type handoff --all --json \
-  | tee "$qa_root/branchless-search.jsonl"
-printf 'Branchless updated body\n' \
-  | uv run bd update "$branchless_id" --title 'Branchless session updated' --body
-uv run bd show --json "$branchless_id" | tee "$qa_root/branchless-updated.json"
+Use one same-shell disposable store:
 
-uv run python - "$branchless_id" "$qa_root" <<'PY'
-import json
-import sys
-from pathlib import Path
+    set -eu
+    qa_root="$(mktemp -d)"
+    export BRAINDUMP_DIR="$qa_root/store"
+    export BRAINDUMP_CLAUDE_BIN=/nonexistent/braindump-qa-claude
+    mkdir -p "$qa_root/screenshots"
+    server_pid=
+    cleanup() {
+      if [ -n "$server_pid" ]; then
+        kill -INT "$server_pid" 2>/dev/null || true
+        wait "$server_pid" 2>/dev/null || true
+      fi
+      rm -rf "$qa_root"
+    }
+    trap cleanup EXIT
 
+    find_free_port() {
+      uv run --frozen --no-sync python - <<'PY'
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        print(sock.getsockname()[1])
+    PY
+    }
 
-entry_id = int(sys.argv[1])
-qa_root = Path(sys.argv[2])
+    cli_line="$(printf 'CLI QA body\n' | uv run --frozen --no-sync bd create todo 'QA CLI navigation' --priority high)"
+    cli_id="${cli_line#*#}"
+    cli_id="${cli_id%% *}"
+    browser_line="$(printf 'Browser QA body\n' | uv run --frozen --no-sync bd create todo 'QA browser navigation' --priority high)"
+    browser_id="${browser_line#*#}"
+    browser_id="${browser_id%% *}"
+    test -n "$cli_id" -a -n "$browser_id"
 
+    effective_day_line="$(uv run --frozen --no-sync bd journal today)"
+    effective_day="${effective_day_line#day: }"
+    effective_day="${effective_day%% *}"
+    historical_day="$(uv run --frozen --no-sync python - "$effective_day" <<'PY'"
+    import sys
+    from datetime import date, timedelta
+    print(date.fromisoformat(sys.argv[1]) - timedelta(days=1))
+    PY
+    )"
+    printf 'QA historical day\n' | uv run --frozen --no-sync bd journal append --day "$historical_day"
+    printf 'QA effective current day\n' | uv run --frozen --no-sync bd journal append --day "$effective_day"
 
-def read_json(name: str) -> dict:
-    return json.loads((qa_root / name).read_text())
+Record both IDs. The fixtures are synthetic and isolated. Historical day is
+relative to the effective journal day (including the 04:00 cutoff), never a
+hard-coded wall-clock date. Do not import data, invoke Parse, dispatch tasks,
+change client configuration, use real credentials, or perform external writes.
+The CLI and browser todos are distinct because CLI rename/done must not break
+browser navigation. Delete only this scratch directory after evidence and
+owned-server cleanup.
 
+## Route selection
 
-def read_jsonl(name: str) -> list[dict]:
-    return [json.loads(line) for line in (qa_root / name).read_text().splitlines()]
+| Changed behavior | Required journey |
+| --- | --- |
+| CLI/storage contract | CLI round trip plus affected consumer journeys |
+| Templates, CSS, JavaScript, web behavior | Applicable browser journey |
+| Handoff metadata/filtering | docs/qa/handoff.md plus changed surface |
+| MCP adapter/transport | Real stdio consumer route from the task; in-process is supplemental |
+| Native windows/menu/clipboard/lifecycle | Native journey; HTTP is insufficient |
+| Docs/refactor without behavior change | Explain why Functional QA is inapplicable; retain gates |
 
+The check brief must link QA.md, name the selected journey, and add feature
+actions/pass conditions. Resolve an absent route; do not substitute unit tests.
 
-shown = read_json("branchless-show.json")
-assert shown["id"] == entry_id
-assert shown["body"] == "Branchless initial body"
-assert shown.get("branch") is None
+## CLI round trip
 
-listed = read_jsonl("branchless-list.jsonl")
-listed_entry = next(item for item in listed if item["id"] == entry_id)
-assert listed_entry.get("branch") is None
+With cli_id, use only uv run --frozen --no-sync:
 
-searched = read_jsonl("branchless-search.jsonl")
-assert [item["id"] for item in searched] == [entry_id]
-assert searched[0].get("branch") is None
+    uv run --frozen --no-sync bd show --json "$cli_id" | tee "$qa_root/cli-before.json"
+    printf 'CLI QA updated body\n' | uv run --frozen --no-sync bd update "$cli_id" --title 'QA CLI navigation updated' --body
+    uv run --frozen --no-sync bd list todo --all --json | tee "$qa_root/cli-list.jsonl"
+    uv run --frozen --no-sync bd search 'QA CLI navigation updated' --type todo --all --json | tee "$qa_root/cli-search.jsonl"
+    uv run --frozen --no-sync bd done "$cli_id" | tee "$qa_root/cli-done.txt"
+    uv run --frozen --no-sync bd show --json "$cli_id" | tee "$qa_root/cli-after.json"
 
-updated = read_json("branchless-updated.json")
-assert updated["id"] == entry_id
-assert updated["title"] == "Branchless session updated"
-assert updated["body"] == "Branchless updated body"
-assert updated.get("branch") is None
-PY
+Final show retains the updated body and reports done; list/search identify the
+intended entry. JSON lists are JSONL. Record literal commands, IDs, and status.
 
-printf 'Alpha project\n' | uv run bd create project Alpha >/dev/null
-printf 'Beta project\n' | uv run bd create project Beta >/dev/null
-printf 'Alpha feature body\n' | uv run bd create handoff 'Alpha feature' --project Alpha --branch feature/auth >/dev/null
-printf 'Alpha release body\n' | uv run bd create handoff 'Alpha release' --project Alpha --branch release/auth >/dev/null
-printf 'Beta feature body\n' | uv run bd create handoff 'Beta feature' --project Beta --branch feature/auth >/dev/null
-printf 'Beta release body\n' | uv run bd create handoff 'Beta release' --project Beta --branch release/auth >/dev/null
+## Browser
 
-uv run bd project focus Alpha >/dev/null
-uv run bd list handoff --branch feature/auth --json | tee "$qa_root/alpha-feature.jsonl"
-test "$(wc -l < "$qa_root/alpha-feature.jsonl" | tr -d ' ')" = 1
-grep -q 'Alpha feature' "$qa_root/alpha-feature.jsonl"
-! grep -q 'Beta feature' "$qa_root/alpha-feature.jsonl"
-uv run bd list handoff --branch release/auth --json | tee "$qa_root/alpha-release.jsonl"
-test "$(wc -l < "$qa_root/alpha-release.jsonl" | tr -d ' ')" = 1
-grep -q 'Alpha release' "$qa_root/alpha-release.jsonl"
-! grep -q 'Beta release' "$qa_root/alpha-release.jsonl"
+Choose a free loopback port, never attach to a personal server:
 
-uv run bd project focus Beta >/dev/null
-uv run bd list handoff --branch feature/auth --json | tee "$qa_root/beta-feature.jsonl"
-test "$(wc -l < "$qa_root/beta-feature.jsonl" | tr -d ' ')" = 1
-grep -q 'Beta feature' "$qa_root/beta-feature.jsonl"
-! grep -q 'Alpha feature' "$qa_root/beta-feature.jsonl"
-uv run bd project focus --clear >/dev/null
+    qa_port="$(find_free_port)"
+    server_log="$qa_root/server.log"
+    uv run --frozen --no-sync bd serve --host 127.0.0.1 --port "$qa_port" >"$server_log" 2>&1 &
+    server_pid=$!
+    export QA_BASE_URL="http://127.0.0.1:$qa_port"
+    export QA_ROOT="$qa_root"
+    export QA_HISTORICAL_DAY="$historical_day"
 
-old_line="$(printf 'Older explicit-ID body\n' | uv run bd create handoff 'Older explicit ID' --project Alpha --branch feature/limit)"
-old_id="${old_line#*#}"
-old_id="${old_id%% *}"
-sleep 1
-printf 'Newer limited body\n' | uv run bd create handoff 'Newer limited' --project Alpha --branch feature/limit >/dev/null
-uv run bd list handoff --project Alpha --branch feature/limit --limit 1 --json | tee "$qa_root/limited.jsonl"
-test "$(wc -l < "$qa_root/limited.jsonl" | tr -d ' ')" = 1
-grep -q 'Newer limited' "$qa_root/limited.jsonl"
-! grep -q 'Older explicit ID' "$qa_root/limited.jsonl"
-uv run bd show --json "$old_id" | grep -q 'Older explicit-ID body'
+Verify the owned PID serves and record PID, URL, port, and log. Use the exact
+real-browser route below; no HTML/curl substitute:
 
-uv run python - "$handoff_id" <<'PY'
-import asyncio
-import sys
+    uv run --no-project --with playwright python - <<'PY'
+    import json, os
+    from pathlib import Path
+    from playwright.sync_api import sync_playwright
 
-import httpx
-
-from braindump.core import entries
-from braindump.core.config import load_config
-from braindump.web.app import app
-
-
-async def main() -> None:
-    entry_id = int(sys.argv[1])
-    cfg = load_config()
-    found = entries.find_by_id(cfg, entry_id)
-    assert found is not None
-    type_dir, entry = found
-    index_path = cfg.index_path(type_dir)
-    markdown_path = cfg.type_dir(type_dir) / entry.file_path
-    before = (index_path.read_bytes(), markdown_path.read_bytes())
-
-    transport = httpx.ASGITransport(app=app)
-    async with (
-        app.router.lifespan_context(app),
-        httpx.AsyncClient(transport=transport, base_url="http://test") as client,
-    ):
-        blank_branch = await client.get(
-            "/entries",
-            params={"type": "handoff", "branch": "", "all": "1"},
+    base = os.environ["QA_BASE_URL"]
+    root = Path(os.environ["QA_ROOT"])
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            executable_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            headless=True,
         )
-        assert blank_branch.status_code == 200
-        assert "Branchless session updated" in blank_branch.text
-        assert "Alpha feature" in blank_branch.text
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.goto(base + "/entries", wait_until="networkidle")
+        page.get_by_text("QA browser navigation", exact=True).click()
+        assert "Browser QA body" in page.locator("body").inner_text()
+        page.locator('a[href="/entries"]').first.click()
+        assert page.url.rstrip("/") == base + "/entries"
+        assert "QA browser navigation" in page.locator("body").inner_text()
+        page.screenshot(path=str(root / "screenshots" / "entries.png"), full_page=True)
+        page.goto(base + "/journal", wait_until="networkidle")
+        page.locator("#earlier-days-btn").click()
+        page.wait_for_timeout(500)
+        first = page.locator("#past-days .day-block").first
+        assert first.is_visible() and "QA historical day" in first.inner_text()
+        toolbar_box = page.locator(".journal-toolbar").bounding_box()
+        first_box = first.bounding_box()
+        assert toolbar_box is not None and first_box is not None
+        page.screenshot(path=str(root / "screenshots" / "journal-desktop.png"), full_page=True)
+        page.locator("#earlier-days-btn").click()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(base + "/journal", wait_until="networkidle")
+        page.locator("#earlier-days-btn").click()
+        page.wait_for_timeout(500)
+        assert page.locator("#past-days .day-block").first.is_visible()
+        page.screenshot(path=str(root / "screenshots" / "journal-narrow.png"), full_page=True)
+        print(json.dumps({
+            "url": base,
+            "historical_day": os.environ["QA_HISTORICAL_DAY"],
+            "desktop_toolbar_box": toolbar_box,
+            "desktop_first_day_box": first_box,
+        }, sort_keys=True))
+        browser.close()
+    PY
 
-        filtered = await client.get(
-            "/entries",
-            params={
-                "type": "handoff",
-                "project": "Alpha",
-                "branch": "release/auth",
-            },
-        )
-        assert filtered.status_code == 200
-        assert "Alpha release" in filtered.text
-        assert "Alpha feature" not in filtered.text
-        assert "Beta release" not in filtered.text
+This uses Chrome at the stated executable through ephemeral Playwright and adds
+no project dependency/framework. Record executable, browser, viewports, URLs,
+visible text, screenshots, and boxes. Inspect both screenshots: the clicked
+earlier-days control reveals the historical heading/content with no sticky
+toolbar overlap; collapse/expand again at narrow width. Chrome or Playwright
+launch failure, including sandbox failure, is a setup gap and remains
+unverified, not a product failure.
 
-        viewed = await client.get(f"/entries/{entry_id}")
-        assert viewed.status_code == 200
-        assert "Auth session" in viewed.text
-        assert "branch release/auth" in viewed.text
+Entry pass: /entries shows the browser fixture, its detail shows its body, and
+the visible back link returns to /entries without raw JSON/blank page. If editing
+changed, edit/save/reload and record persistence. Returning to /todos with
+sort/filter state is #212's separate acceptance condition.
 
-        assert (index_path.read_bytes(), markdown_path.read_bytes()) == before
+Journal pass: click the exact control, verify the effective-relative fixture,
+and inspect desktop/narrow screenshots. If autosave changed, edit today's text,
+wait, reload, verify; never click Parse.
 
+## Native windows
 
-asyncio.run(main())
-PY
+For native changes only, choose another free port and reuse the store:
 
-uv run python <<'PY'
-import asyncio
-import json
-import time
+    native_port="$(find_free_port)"
+    uv run --frozen --no-sync bd app --host 127.0.0.1 --port "$native_port" --foreground >"$qa_root/native.log" 2>&1 &
+    native_pid=$!
 
-from braindump.mcp import mcp
+Observe Journal/Todos focus, selection/copy, and the changed action. Closing one
+owned window leaves the other usable; closing both stops the owned server.
+Attachment to a separate scratch server must leave that server running. Record
+macOS/backend; headless reports this gap. Stop only the owned native process.
 
+## Evidence and fixes
 
-def call(name: str, arguments: dict):
-    _content, structured = asyncio.run(mcp.call_tool(name, arguments))
-    if isinstance(structured, dict):
-        return structured.get("result", structured)
-    return structured
+Report source SHA, selected route, separate IDs, scratch store, owned PID/ports,
+literal actions/results, screenshots or client output, browser/viewport, and
+cleanup. Distinguish missing route, setup blocker, and behavior failure. After
+a fix rerun affected behavior on the final tree and name what was superseded.
+Never mark an unexercised browser/native/transport route verified.
 
-
-target = call(
-    "create",
-    {
-        "entry_type": "handoff",
-        "title": "MCP target",
-        "body": "MCP initial body",
-        "project": "Alpha",
-        "branch": "feature/mcp",
-    },
-)
-target_id = target["entry"]["id"]
-
-# These newer records would win limit=1 if project/branch filtering happened late.
-time.sleep(1)
-call(
-    "create",
-    {
-        "entry_type": "handoff",
-        "title": "MCP wrong branch",
-        "body": "MCP branch decoy",
-        "project": "Alpha",
-        "branch": "release/mcp",
-    },
-)
-call(
-    "create",
-    {
-        "entry_type": "handoff",
-        "title": "MCP wrong project",
-        "body": "MCP project decoy",
-        "project": "Beta",
-        "branch": "feature/mcp",
-    },
-)
-
-filters = {
-    "types": ["handoff"],
-    "project": "Alpha",
-    "branch": "feature/mcp",
-    "limit": 1,
-}
-listed = call("list", filters)
-assert [hit["entry"]["id"] for hit in listed] == [target_id]
-
-searched = call("search", {"query": "MCP", **filters})
-assert [hit["entry"]["id"] for hit in searched] == [target_id]
-
-shown = call("show", {"ids": [target_id]})
-assert shown["missing_ids"] == []
-assert shown["entries"][0]["body"] == "MCP initial body"
-assert shown["entries"][0]["entry"]["branch"] == "feature/mcp"
-
-updated = call(
-    "update",
-    {
-        "entry_id": target_id,
-        "patch": {"branch": None},
-        "body": "MCP updated body",
-    },
-)
-assert updated.get("branch") is None
-
-shown_after_update = call("show", {"ids": [target_id]})
-updated_view = shown_after_update["entries"][0]
-assert updated_view["body"] == "MCP updated body"
-assert updated_view["entry"].get("branch") is None
-
-print(
-    json.dumps(
-        {
-            "target_id": target_id,
-            "list_ids": [hit["entry"]["id"] for hit in listed],
-            "search_ids": [hit["entry"]["id"] for hit in searched],
-            "shown_before_update": shown,
-            "shown_after_update": shown_after_update,
-        },
-        indent=2,
-        sort_keys=True,
-    )
-)
-PY
-```
-
-Expected evidence: a `handoffs/index.jsonl` record, authored bodies in their
-Markdown files, exact branch filtering, a branchless CLI create/show/list/
-search/update round trip, and public MCP create/list/search/show/update calls
-using the same isolated store. Automated generic web list/view/edit coverage
-is included here:
-
-```bash
-uv run pytest -q tests/test_entries.py tests/test_query.py tests/test_cli.py \
-  tests/test_service.py tests/test_mcp.py tests/test_web_graph.py
-```
+docs/qa/handoff.md retains the complete handoff route. Its CLI and in-process
+FastAPI/MCP assertions are supplemental and do not prove browser, native-window,
+or stdio-transport evidence.

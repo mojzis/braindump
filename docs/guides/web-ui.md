@@ -3,6 +3,12 @@
 `bd serve` starts a local FastAPI + Jinja2 + htmx server, by default at
 [http://127.0.0.1:8765/](http://127.0.0.1:8765/).
 
+For a fresh worktree, prepare the locked environment once with
+`uv sync --all-extras --all-groups` and `uv run madoqua install`; QA commands use
+the prepared environment without syncing. For browser behavior changes, use the
+[central Functional QA route](../../QA.md), including its isolated store and
+real-browser evidence requirements.
+
 ```bash
 bd serve                         # default host/port
 bd serve --host 0.0.0.0 --port 9000

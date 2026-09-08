@@ -13,6 +13,11 @@ There are **three ways to use it**, all backed by the same Python core in `brain
 
 When changing data behavior, change `braindump/core/` and all three surfaces inherit the fix.
 
+## QA
+
+For behavior changes, select and execute the applicable route in [QA.md](QA.md).
+Handoff-specific coverage lives in [docs/qa/handoff.md](docs/qa/handoff.md).
+
 ## Installation
 
 ```bash
@@ -234,10 +239,10 @@ Scripts: `~/braindump/scripts/session-start.sh`, `session-end.sh`, `forgotten-se
 ## Development
 
 ```bash
-uv venv
-uv pip install -e ".[dev,web]"
-pytest                 # run the core test suite
-bd serve               # local web UI
+uv sync --all-extras --all-groups
+uv run madoqua install   # once per fresh worktree
+uv run --frozen --no-sync pytest
+uv run --frozen --no-sync bd serve
 ```
 
 When you finish a coding task in this repo, commit the change first, then run
