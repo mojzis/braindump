@@ -153,7 +153,12 @@ body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: 
 }
 .save-error-banner strong { font-weight: 700; }
 
-.past-days-section { margin-top: 24px; }
+.past-days-section {
+  margin-top: 24px;
+  /* Keep scrollIntoView from placing the section beneath the sticky toolbar. */
+  scroll-margin-top: 80px;
+  scroll-margin-bottom: 80px;
+}
 
 .parse-status { margin-top: 12px; font-family: system-ui, sans-serif; font-size: 13px; }
 .parse-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
