@@ -146,19 +146,27 @@ real-browser route below; no HTML/curl substitute:
         toolbar_box = page.locator(".journal-toolbar").bounding_box()
         first_box = first.bounding_box()
         assert toolbar_box is not None and first_box is not None
+        assert first_box["y"] >= toolbar_box["y"] + toolbar_box["height"]
         page.screenshot(path=str(root / "screenshots" / "journal-desktop.png"), full_page=True)
         page.locator("#earlier-days-btn").click()
         page.set_viewport_size({"width": 390, "height": 844})
         page.goto(base + "/journal", wait_until="networkidle")
         page.locator("#earlier-days-btn").click()
         page.wait_for_timeout(500)
-        assert page.locator("#past-days .day-block").first.is_visible()
+        first = page.locator("#past-days .day-block").first
+        assert first.is_visible() and "QA historical day" in first.inner_text()
+        narrow_toolbar_box = page.locator(".journal-toolbar").bounding_box()
+        narrow_first_box = first.bounding_box()
+        assert narrow_toolbar_box is not None and narrow_first_box is not None
+        assert narrow_first_box["y"] >= narrow_toolbar_box["y"] + narrow_toolbar_box["height"]
         page.screenshot(path=str(root / "screenshots" / "journal-narrow.png"), full_page=True)
         print(json.dumps({
             "url": base,
             "historical_day": os.environ["QA_HISTORICAL_DAY"],
             "desktop_toolbar_box": toolbar_box,
             "desktop_first_day_box": first_box,
+            "narrow_toolbar_box": narrow_toolbar_box,
+            "narrow_first_day_box": narrow_first_box,
         }, sort_keys=True))
         browser.close()
     PY

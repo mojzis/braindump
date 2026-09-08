@@ -159,9 +159,13 @@ body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: 
 
 .past-days-section {
   margin-top: 24px;
-  /* Keep scrollIntoView from placing the section beneath the sticky toolbar. */
+  /* Reserve the space occupied by the overlaid sticky toolbar before the first day. */
+  padding-top: 80px;
   scroll-margin-top: 80px;
-  scroll-margin-bottom: 80px;
+}
+
+@media (max-width: 600px) {
+  .past-days-section { padding-top: 128px; }
 }
 
 .parse-status { margin-top: 12px; font-family: system-ui, sans-serif; font-size: 13px; }
