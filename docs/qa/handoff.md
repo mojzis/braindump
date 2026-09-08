@@ -267,7 +267,7 @@ print(
 PY
 ```
 
-The Python httpx ASGI and in-process MCP sections below are unit/in-process
+The Python httpx ASGI and in-process MCP sections above are unit/in-process
 coverage, not a browser, native, or stdio consumer journey.
 
 Expected evidence: a `handoffs/index.jsonl` record, authored bodies in their

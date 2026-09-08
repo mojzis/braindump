@@ -79,7 +79,7 @@ owned-server cleanup.
 | --- | --- |
 | CLI/storage contract | CLI round trip plus affected consumer journeys |
 | Templates, CSS, JavaScript, web behavior | Applicable browser journey |
-| Handoff metadata/filtering | docs/qa/handoff.md plus changed surface |
+| Handoff metadata/filtering | [Handoff route](docs/qa/handoff.md) plus changed surface |
 | MCP adapter/transport | Real stdio consumer route from the task; in-process is supplemental |
 | Native windows/menu/clipboard/lifecycle | Native journey; HTTP is insufficient |
 | Docs/refactor without behavior change | Explain why Functional QA is inapplicable; retain gates |
