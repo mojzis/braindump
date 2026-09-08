@@ -22,10 +22,15 @@ Use one same-shell disposable store:
     export BRAINDUMP_CLAUDE_BIN=/nonexistent/braindump-qa-claude
     mkdir -p "$qa_root/screenshots"
     server_pid=
+    native_pid=
     cleanup() {
       if [ -n "$server_pid" ]; then
         kill -INT "$server_pid" 2>/dev/null || true
         wait "$server_pid" 2>/dev/null || true
+      fi
+      if [ -n "$native_pid" ]; then
+        kill -INT "$native_pid" 2>/dev/null || true
+        wait "$native_pid" 2>/dev/null || true
       fi
       rm -rf "$qa_root"
     }
@@ -127,7 +132,9 @@ real-browser route below; no HTML/curl substitute:
         page.goto(base + "/entries", wait_until="networkidle")
         page.get_by_text("QA browser navigation", exact=True).click()
         assert "Browser QA body" in page.locator("body").inner_text()
-        page.locator('a[href="/entries"]').first.click()
+        back_link = page.locator(".entry-foot a")
+        assert back_link.inner_text().strip() == "← all entries"
+        back_link.click()
         assert page.url.rstrip("/") == base + "/entries"
         assert "QA browser navigation" in page.locator("body").inner_text()
         page.screenshot(path=str(root / "screenshots" / "entries.png"), full_page=True)
