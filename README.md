@@ -258,7 +258,7 @@ Authored content…
 uv sync --all-extras --all-groups
 pytest                   # core test suite
 bd serve --reload        # local UI with autoreload
-madoqua install          # enable the repository pre-commit hook
+uv run madoqua install   # enable the repository pre-commit hook
 ```
 
 The optional `mcp` extra also installs the `bd-mcp` stdio adapter. It exposes
@@ -268,7 +268,7 @@ handoff bodies and branches.
 The agent-friendly pre-commit hook formats and re-stages staged Python files,
 then runs Ruff, ty, Biston, Zorilla, and Gerenuk. Biston remains part of
 `uv run poe check`; Zorilla and Gerenuk are staged-file and impacted-test hook
-checks. Use `madoqua guide triage` when a commit is blocked. `uv run poe biston`
+checks. Use `uv run madoqua guide triage` when a commit is blocked. `uv run poe biston`
 detects structural duplicate code and checks the whole tree.
 
 The `braindump.core` package has no I/O except through `store.py`, and every mutation is atomic (`fcntl.flock` + temp-file rename). See `tests/` for the round-trip coverage.
