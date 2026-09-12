@@ -90,6 +90,6 @@
     renderMermaid(document);
   });
   document.addEventListener("htmx:afterSwap", function (event) {
-    renderMermaid(event.detail.target);
+    renderMermaid(event.target);
   });
 })();
