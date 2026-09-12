@@ -70,6 +70,11 @@ visible as missing-reference warnings. The web UI does not import or remove
 external pitch files: curated import and its separate source-removal
 confirmation are CLI operations.
 
+Rendered entry and journal Markdown turns fenced `mermaid` blocks into diagrams
+in both the browser and desktop app. A malformed diagram keeps its source
+visible with an inline error, and the entry edit page always contains the
+original Markdown source.
+
 Pitch coverage is entered and audited manually. Missing coverage is unaudited;
 `covered` asserts that each remaining deliverable has a linked Braindump todo or
 Linear ticket. The web UI does not calculate coverage or integrate with Linear.

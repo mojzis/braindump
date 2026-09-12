@@ -137,8 +137,10 @@ def _render_markdown(text: str) -> Markup:
         text or "",
         extensions=["fenced_code", "tables", "sane_lists"],
     )
-    # nh3.clean sanitizes the HTML above before it is wrapped as safe Markup.
-    return Markup(nh3.clean(html))  # noqa: S704
+    # Keep only the class that identifies Mermaid fences. Other classes and
+    # unsafe HTML attributes remain subject to the existing nh3 policy.
+    clean_html = nh3.clean(html, allowed_classes={"code": {"language-mermaid"}})
+    return Markup(clean_html)  # noqa: S704
 
 
 _REF_CHIP_RE = re.compile(

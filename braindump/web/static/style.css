@@ -264,6 +264,15 @@ body[data-parse-running="1"] .paper .CodeMirror { opacity: 0.5; pointer-events: 
 .prose code { background: var(--bg-tint); border: 1px solid var(--border-soft); border-radius: 4px; padding: 1px 5px; font-family: var(--mono); font-size: 0.9em; }
 .prose pre { background: var(--bg-tint); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow: auto; }
 .prose pre code { background: none; border: none; padding: 0; }
+.mermaid-diagram {
+  margin: 1em 0; padding: 16px; overflow: auto; text-align: center;
+  background: var(--bg-tint); border: 1px solid var(--border); border-radius: 8px;
+}
+.mermaid-diagram svg { display: inline-block; max-width: 100%; height: auto; }
+.mermaid-error { border-color: var(--danger) !important; }
+.mermaid-error-message {
+  margin: -0.4em 0 1em; color: var(--danger); font-size: 0.9em;
+}
 .prose blockquote { border-left: 3px solid var(--border); margin: 0.8em 0; padding: 2px 0 2px 16px; color: var(--muted); }
 .prose hr { border: none; border-top: 1px solid var(--border); margin: 1.6em 0; }
 .prose table { border-collapse: collapse; margin: 0.8em 0; }
