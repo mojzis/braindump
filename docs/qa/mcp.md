@@ -37,7 +37,8 @@ receipt omits the full body.
 
 Expected observable output is one JSON object on stdout with `status: "pass"`,
 `transport: "stdio"`, the tool names exercised, compact receipts, revisions,
-and `body_present_in_long_partial_arguments: false`. Any failed assertion exits
+`contention_observed_while_external_lock_held: true`, and
+`body_present_in_long_partial_arguments: false`. Any failed assertion exits
 non-zero and prints the failure; successful output contains no full long body.
 
 The route is complete only when the command exits 0 from the final checkout and

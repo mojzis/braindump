@@ -17,6 +17,7 @@ from mcp.client.stdio import stdio_client
 from mcp.types import TextContent
 
 EDIT_COUNT = 3
+CONTENTION_OBSERVATION_SECONDS = 1.0
 
 
 def _text(result) -> str:
@@ -196,8 +197,17 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
             lock_file = lock_path.open("a+")
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
             try:
+                requests_ready = [asyncio.Event(), asyncio.Event()]
+                start_requests = asyncio.Event()
+
+                async def call_after_start(client, name, arguments, ready):
+                    ready.set()
+                    await start_requests.wait()
+                    return await client.call_tool(name, arguments)
+
                 blocked_update = asyncio.create_task(
-                    concurrent_sessions[0].call_tool(
+                    call_after_start(
+                        concurrent_sessions[0],
                         "update",
                         {
                             "entry_id": entry_id,
@@ -210,19 +220,29 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
                                 }
                             ],
                         },
+                        requests_ready[0],
                     )
                 )
                 blocked_create = asyncio.create_task(
-                    concurrent_sessions[1].call_tool(
+                    call_after_start(
+                        concurrent_sessions[1],
                         "create",
                         {
                             "entry_type": "todo",
                             "title": "Concurrent unrelated row",
                             "body": "must survive",
                         },
+                        requests_ready[1],
                     )
                 )
-                await asyncio.sleep(0.1)
+                await asyncio.gather(*(ready.wait() for ready in requests_ready))
+                start_requests.set()
+                done, pending = await asyncio.wait(
+                    {blocked_update, blocked_create},
+                    timeout=CONTENTION_OBSERVATION_SECONDS,
+                )
+                assert not done, "mutation completed while external lock was held"
+                assert pending == {blocked_update, blocked_create}
             finally:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
                 lock_file.close()
@@ -321,6 +341,7 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
             "entry_id": entry_id,
             "pitch_id": pitch_id,
             "receipts": [receipt, intervening, long_receipt],
+            "contention_observed_while_external_lock_held": True,
             "body_present_in_long_partial_arguments": "body" in captured[-1],
         }
 

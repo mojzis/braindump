@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+from contextlib import contextmanager
 from datetime import datetime
 
 import pytest
@@ -32,9 +33,22 @@ def _paused_update_worker(home, entry_id, ready, release, result_queue):
         result_queue.put(("error", repr(exc)))
 
 
-def _create_worker(home, started, result_queue):
+def _install_observed_mutation_lock(attempting, acquired):
+    original = store.mutation_lock
+
+    @contextmanager
+    def observed(cfg):
+        attempting.set()
+        with original(cfg):
+            acquired.set()
+            yield
+
+    setattr(store, "mutation_lock", observed)  # noqa: B010
+
+
+def _create_worker(home, attempting, acquired, result_queue):
     cfg = Config(home=home)
-    started.set()
+    _install_observed_mutation_lock(attempting, acquired)
     try:
         result = entries.create_entry(cfg, "todo", "created", "body", now=_fake_now())
         result_queue.put(("ok", result.entry.id))
@@ -60,9 +74,9 @@ def _partial_update_worker(  # noqa: PLR0917
         result_queue.put((type(exc).__name__, str(exc)))
 
 
-def _delete_worker(home, entry_id, started, result_queue):
+def _delete_worker(home, entry_id, attempting, acquired, result_queue):
     cfg = Config(home=home)
-    started.set()
+    _install_observed_mutation_lock(attempting, acquired)
     try:
         result = entries.delete_entry(cfg, entry_id)
         result_queue.put(("ok", result.id))
@@ -75,6 +89,17 @@ def _start_and_join(workers):
         worker.start()
     for worker in workers:
         worker.join(10)
+
+
+def _assert_lock_contention(attempting, acquired, operation):
+    assert attempting.wait(10), f"{operation} never attempted the mutation lock"
+    assert not acquired.wait(0.5), (
+        f"{operation} acquired the mutation lock while update still held it"
+    )
+
+
+def _assert_lock_acquired(acquired, operation):
+    assert acquired.is_set(), f"{operation} did not acquire the lock after release"
 
 
 @pytest.fixture
@@ -256,22 +281,32 @@ def test_cross_process_update_does_not_drop_concurrent_create(cfg):
     ctx = mp.get_context("spawn")
     ready = ctx.Event()
     release = ctx.Event()
-    create_started = ctx.Event()
+    create_attempting_lock = ctx.Event()
+    create_acquired_lock = ctx.Event()
     result_queue = ctx.Queue()
     updater = ctx.Process(
         target=_paused_update_worker,
         args=(cfg.home, original.entry.id, ready, release, result_queue),
     )
     updater.start()
-    ready.wait(10)
+    assert ready.wait(10)
     creator = ctx.Process(
-        target=_create_worker, args=(cfg.home, create_started, result_queue)
+        target=_create_worker,
+        args=(
+            cfg.home,
+            create_attempting_lock,
+            create_acquired_lock,
+            result_queue,
+        ),
     )
     creator.start()
-    assert create_started.wait(10)
-    release.set()
-    updater.join(10)
-    creator.join(10)
+    try:
+        _assert_lock_contention(create_attempting_lock, create_acquired_lock, "create")
+    finally:
+        release.set()
+        updater.join(10)
+        creator.join(10)
+    _assert_lock_acquired(create_acquired_lock, "create")
     assert updater.exitcode == creator.exitcode == 0
     assert {result_queue.get(timeout=2)[0] for _ in range(2)} == {"ok"}
 
@@ -315,7 +350,8 @@ def test_cross_process_update_does_not_resurrect_deleted_entry(cfg):
     ctx = mp.get_context("spawn")
     ready = ctx.Event()
     release = ctx.Event()
-    delete_started = ctx.Event()
+    delete_attempting_lock = ctx.Event()
+    delete_acquired_lock = ctx.Event()
     result_queue = ctx.Queue()
     updater = ctx.Process(
         target=_paused_update_worker,
@@ -325,13 +361,22 @@ def test_cross_process_update_does_not_resurrect_deleted_entry(cfg):
     assert ready.wait(10)
     deleter = ctx.Process(
         target=_delete_worker,
-        args=(cfg.home, original.entry.id, delete_started, result_queue),
+        args=(
+            cfg.home,
+            original.entry.id,
+            delete_attempting_lock,
+            delete_acquired_lock,
+            result_queue,
+        ),
     )
     deleter.start()
-    delete_started.wait(10)
-    release.set()
-    updater.join(10)
-    deleter.join(10)
+    try:
+        _assert_lock_contention(delete_attempting_lock, delete_acquired_lock, "delete")
+    finally:
+        release.set()
+        updater.join(10)
+        deleter.join(10)
+    _assert_lock_acquired(delete_acquired_lock, "delete")
     assert updater.exitcode == deleter.exitcode == 0
     assert {result_queue.get(timeout=2)[0] for _ in range(2)} == {"ok"}
     assert entries.find_by_id(cfg, original.entry.id) is None
