@@ -287,8 +287,20 @@ test cleanup session (it runs the suite with `--cov`, so pytest-cov must be
 installed):
 
 ```bash
-uv run pycoati . --format pretty
+uv run --frozen --no-sync pycoati . --format pretty
+uv run --frozen --no-sync pycoati . --format json --no-accept -o /private/tmp/braindump-pycoati-raw.json
+uv run --frozen --no-sync pycoati . --format json -o /private/tmp/braindump-pycoati-actionable.json
+uv run --frozen --no-sync pycoati . --format json --include-accepted -o /private/tmp/braindump-pycoati-full.json
+uv run --frozen --no-sync python scripts/qa_pycoati_acceptance.py
 ```
+
+Review `tool.ran_pytest`, `tool.ran_coverage`, suite metrics, stderr warnings,
+every ranked test and its active signals. The raw scan is the comparison source;
+the default scan applies only reviewed exact-nodeid entries in
+`.pycoati-accept.toml`, and `--include-accepted` restores them to the shortlist.
+Stale `unknown_test`, `signal_not_active`, and `content_changed` entries are
+actionable review work. The command authority, evidence record, and safe-output
+and cleanup rules are in [docs/audits/pycoati-0.2.9.md](docs/audits/pycoati-0.2.9.md).
 
 **Refresh the toolbox** (`--refresh` matters: without it uv may serve a cached
 index and miss a release published minutes ago):

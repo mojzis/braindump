@@ -1,0 +1,15 @@
+schema_version = "1"
+
+[[accept]]
+test = "tests/test_desktop.py::test_brand_macos_app_does_nothing_off_darwin"
+signal = "zero_asserts"
+reason = "The off-macOS contract is that branding returns without importing Foundation; the monkeypatched failure sentinel makes an unexpected import fail the test."
+reviewed = "2026-09-14"
+fingerprint = "957aaec1d6c702c4"
+
+[[accept]]
+test = "tests/test_desktop.py::test_run_app_brands_before_pywebview_is_imported"
+signal = "mock_overuse"
+reason = "This is an interaction-boundary test: three seam stubs isolate the server, webview import, and branding call so the observable ordering contract can be asserted without launching a desktop window."
+reviewed = "2026-09-14"
+fingerprint = "98fb7f661f193f61"
