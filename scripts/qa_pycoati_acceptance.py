@@ -17,7 +17,12 @@ PROJECT_NAME = "pycoati_acceptance_probe"
 LIVE_TEST = "tests/test_probe.py::test_smoke_without_assertion"
 HEALTHY_TEST = "tests/test_probe.py::test_has_an_assertion"
 CHANGED_TEST = "tests/test_probe.py::test_changed_since_review"
+MULTI_SIGNAL_TEST = "tests/test_probe.py::test_multiple_active_signals"
+MULTI_SIGNAL_PATCHES = 3
 LIVE_REASON = "Smoke contract: the child operation must complete without raising."
+MULTI_SIGNAL_REASON = (
+    "Reviewed mock-only assertions and patch setup as intentional test doubles."
+)
 
 
 def _write_probe(root: Path) -> None:
@@ -40,6 +45,18 @@ testpaths = ["tests"]
 
 def write_marker(path: Path) -> None:
     path.write_text("ok", encoding="utf-8")
+
+
+def operation_a() -> None:
+    pass
+
+
+def operation_b() -> None:
+    pass
+
+
+def operation_c() -> None:
+    pass
 """,
         encoding="utf-8",
     )
@@ -47,6 +64,7 @@ def write_marker(path: Path) -> None:
     tests.mkdir()
     (tests / "test_probe.py").write_text(
         """from pathlib import Path
+from unittest.mock import patch
 
 from pycoati_acceptance_probe import write_marker
 
@@ -61,6 +79,13 @@ def test_has_an_assertion() -> None:
 
 def test_changed_since_review() -> None:
     Path(".").resolve()
+
+
+@patch("pycoati_acceptance_probe.operation_a")
+@patch("pycoati_acceptance_probe.operation_b")
+@patch("pycoati_acceptance_probe.operation_c")
+def test_multiple_active_signals(mock_c, mock_b, mock_a) -> None:
+    assert mock_a.assert_called_once
 """,
         encoding="utf-8",
     )
@@ -113,7 +138,7 @@ def _assert_stale_states(inventory: dict) -> None:
     assert stale == {"unknown_test", "signal_not_active", "content_changed"}
 
 
-def main() -> int:
+def main() -> int:  # noqa: PLR0915
     if shutil.which(os.environ.get("PYCOATI_BIN", "pycoati")) is None:
         print("FAIL pycoati executable not found", file=sys.stderr)
         return 1
@@ -128,9 +153,16 @@ def main() -> int:
             assert "WARN" not in raw_stderr.upper()
             raw_live = _test_record(raw, LIVE_TEST)
             raw_changed = _test_record(raw, CHANGED_TEST)
+            raw_multi = _test_record(raw, MULTI_SIGNAL_TEST)
             assert raw_live["assertion_count"] == 0
             assert raw_live["external_verification_count"] == 0
             assert LIVE_TEST in raw["top_suspicious"]["test_functions"]
+            assert raw_multi["only_asserts_on_mock"] is True
+            assert raw_multi["patch_decorator_count"] == MULTI_SIGNAL_PATCHES
+            assert {hit["category"] for hit in raw_multi["smell_hits"]} == {
+                "mock_only_assertions",
+                "mock_overuse",
+            }
 
             fingerprint = raw_live["fingerprint"]
             (root / ".pycoati-accept.toml").write_text(
@@ -142,6 +174,13 @@ signal = "zero_asserts"
 reason = "{LIVE_REASON}"
 reviewed = "2026-09-14"
 fingerprint = "{fingerprint}"
+
+[[accept]]
+test = "{MULTI_SIGNAL_TEST}"
+signal = "mock_only_assertions"
+reason = "{MULTI_SIGNAL_REASON}"
+reviewed = "2026-09-14"
+fingerprint = "{raw_multi["fingerprint"]}"
 
 [[accept]]
 test = "{HEALTHY_TEST}"
@@ -178,16 +217,54 @@ fingerprint = "0000000000000000"
                     "reason": LIVE_REASON,
                     "reviewed": "2026-09-14",
                     "fingerprint": fingerprint,
-                }
+                },
+                {
+                    "test": MULTI_SIGNAL_TEST,
+                    "signal": "mock_only_assertions",
+                    "reason": MULTI_SIGNAL_REASON,
+                    "reviewed": "2026-09-14",
+                    "fingerprint": raw_multi["fingerprint"],
+                },
             ]
             assert LIVE_TEST not in default["top_suspicious"]["test_functions"]
             assert CHANGED_TEST in default["top_suspicious"]["test_functions"]
+            assert MULTI_SIGNAL_TEST in default["top_suspicious"]["test_functions"]
             default_live = _test_record(default, LIVE_TEST)
             for key, value in raw_live.items():
                 if key != "accepted_signals":
                     assert default_live[key] == value
             default_changed = _test_record(default, CHANGED_TEST)
             assert default_changed["assertion_count"] == raw_changed["assertion_count"]
+            default_multi = _test_record(default, MULTI_SIGNAL_TEST)
+            for key, value in raw_multi.items():
+                if key != "accepted_signals":
+                    assert default_multi[key] == value
+            assert default_multi["accepted_signals"] == ["mock_only_assertions"]
+
+            with (root / ".pycoati-accept.toml").open("a", encoding="utf-8") as accepts:
+                accepts.write(
+                    f'''\n[[accept]]
+test = "{MULTI_SIGNAL_TEST}"
+signal = "mock_overuse"
+reason = "{MULTI_SIGNAL_REASON}"
+reviewed = "2026-09-14"
+fingerprint = "{raw_multi["fingerprint"]}"
+'''
+                )
+            fully_accepted, _ = _run_scan(root)
+            _assert_runtime(fully_accepted)
+            fully_accepted_multi = _test_record(fully_accepted, MULTI_SIGNAL_TEST)
+            assert fully_accepted_multi["accepted_signals"] == [
+                "mock_only_assertions",
+                "mock_overuse",
+            ]
+            for key, value in raw_multi.items():
+                if key != "accepted_signals":
+                    assert fully_accepted_multi[key] == value
+            assert (
+                MULTI_SIGNAL_TEST
+                not in fully_accepted["top_suspicious"]["test_functions"]
+            )
 
             included, _ = _run_scan(root, "--include-accepted")
             _assert_runtime(included)
@@ -198,7 +275,10 @@ fingerprint = "0000000000000000"
             print("PASS accepted reason and unchanged raw evidence")
             print("PASS fingerprint invalidation")
             print("PASS stale states: unknown_test, signal_not_active, content_changed")
-            print("PASS active-signal actionability and include-accepted mode")
+            print(
+                "PASS partial multi-signal acceptance, full suppression, and "
+                "include-accepted mode"
+            )
             print("PASS pycoati acceptance helper")
     except (AssertionError, OSError, json.JSONDecodeError) as error:
         print(f"FAIL pycoati acceptance helper: {error}", file=sys.stderr)

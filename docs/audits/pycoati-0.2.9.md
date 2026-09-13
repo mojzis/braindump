@@ -2,7 +2,7 @@
 
 ## Scope and source record
 
-- Working directory: `/Users/mojzis/worktrees/braindump--adopt-pycoati-accepted-findings-in-brain`
+- Historical audit checkout: `/Users/mojzis/worktrees/braindump--adopt-pycoati-accepted-findings-in-brain`
 - Pre-integration task source: `cc51dc3e1554ed96bb5e5e163c0f0fbfcf5255f1`
 - Local `main` merged, no remote contact: `d7a749a7e92268e66a1193d24d70fcacf0918eca`
 - Post-integration source used for the initial audit: `57d5704599660f4d72def7cb8652b1b637ff1892`
@@ -14,8 +14,9 @@ Madoqua and CI. Run from the final prepared checkout and compare the checkout
 first:
 
 ```bash
-cd /Users/mojzis/worktrees/braindump--adopt-pycoati-accepted-findings-in-brain
-test "$(git rev-parse --show-toplevel)" = "$PWD"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+test "$(git rev-parse --show-toplevel)" = "$REPO_ROOT"
 git status --short
 git rev-parse HEAD
 git diff --check
