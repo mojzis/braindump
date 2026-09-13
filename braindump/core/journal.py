@@ -74,6 +74,16 @@ def get_or_create_day(
     *,
     project: str | None = None,
 ) -> Entry:
+    with store.mutation_lock(cfg):
+        return _get_or_create_day_locked(cfg, d, project=project)
+
+
+def _get_or_create_day_locked(
+    cfg: Config,
+    d: date,
+    *,
+    project: str | None = None,
+) -> Entry:
     """Journal entry for day `d`, creating the file and index row if missing."""
     existing = get_day_entry(cfg, d)
     if existing:
@@ -104,7 +114,7 @@ def get_or_create_day(
     )
     md = store.build_markdown(fm, d.isoformat(), "")
     store.atomic_write_text(full, md)
-    store.append_index(cfg, JOURNAL_TYPE_DIR, entry)
+    store._append_index_locked(cfg, JOURNAL_TYPE_DIR, entry)
     return entry
 
 
@@ -116,31 +126,32 @@ def append_text(
     project: str | None = None,
 ) -> Entry:
     """Append a free-form chunk to a day's journal and refresh the index row."""
-    entry = get_or_create_day(cfg, d, project=project)
-    full = day_full_path(cfg, d)
-    fm, body = store.read_markdown(full)
-    stripped = text.rstrip()
-    if not stripped:
-        return entry
-    body = body.rstrip("\n")
-    new_body = f"{body}\n\n{stripped}\n" if body else f"{stripped}\n"
-    new_word_count = _count_words(_extract_body_after_heading(new_body))
-    now_iso = store.utcnow_iso()
-    fm["updated_at"] = now_iso
-    fm["word_count"] = new_word_count
-    store.rewrite_markdown(full, fm, new_body)
+    with store.mutation_lock(cfg):
+        entry = _get_or_create_day_locked(cfg, d, project=project)
+        full = day_full_path(cfg, d)
+        fm, body = store.read_markdown(full)
+        stripped = text.rstrip()
+        if not stripped:
+            return entry
+        body = body.rstrip("\n")
+        new_body = f"{body}\n\n{stripped}\n" if body else f"{stripped}\n"
+        new_word_count = _count_words(_extract_body_after_heading(new_body))
+        now_iso = store.utcnow_iso()
+        fm["updated_at"] = now_iso
+        fm["word_count"] = new_word_count
+        store.rewrite_markdown(full, fm, new_body)
 
-    # update index row
-    all_entries = store.read_index(cfg, JOURNAL_TYPE_DIR)
-    for i, e in enumerate(all_entries):
-        if e.id == entry.id:
-            updated = e.model_copy(
-                update={"updated_at": now_iso, "word_count": new_word_count}
-            )
-            all_entries[i] = updated
-            store.rewrite_index_atomic(cfg, JOURNAL_TYPE_DIR, all_entries)
-            return updated
-    return entry
+        # update index row
+        all_entries = store.read_index(cfg, JOURNAL_TYPE_DIR)
+        for i, e in enumerate(all_entries):
+            if e.id == entry.id:
+                updated = e.model_copy(
+                    update={"updated_at": now_iso, "word_count": new_word_count}
+                )
+                all_entries[i] = updated
+                store._rewrite_index_atomic_locked(cfg, JOURNAL_TYPE_DIR, all_entries)
+                return updated
+        return entry
 
 
 def replace_body(
@@ -151,7 +162,18 @@ def replace_body(
     project: str | None = None,
 ) -> Entry:
     """Overwrite the authored body of a day's journal. Used by the web editor."""
-    entry = get_or_create_day(cfg, d, project=project)
+    with store.mutation_lock(cfg):
+        return _replace_body_locked(cfg, d, body, project=project)
+
+
+def _replace_body_locked(
+    cfg: Config,
+    d: date,
+    body: str,
+    *,
+    project: str | None = None,
+) -> Entry:
+    entry = _get_or_create_day_locked(cfg, d, project=project)
     full = day_full_path(cfg, d)
     fm, _ = store.read_markdown(full)
     body = body.rstrip("\n") + "\n" if body.strip() else ""
@@ -169,7 +191,7 @@ def replace_body(
                 update={"updated_at": now_iso, "word_count": word_count}
             )
             all_entries[i] = updated
-            store.rewrite_index_atomic(cfg, JOURNAL_TYPE_DIR, all_entries)
+            store._rewrite_index_atomic_locked(cfg, JOURNAL_TYPE_DIR, all_entries)
             return updated
     return entry
 
@@ -195,20 +217,23 @@ def close_today(cfg: Config, *, project: str | None = None) -> Entry:
     # Local import: digest imports journal for run_parse, avoiding a module-level cycle.
     from braindump.core import digest  # noqa: PLC0415
 
-    today = current_day(cfg)
-    get_or_create_day(cfg, today, project=project)
-    next_day = today + timedelta(days=1)
-    next_entry = get_or_create_day(cfg, next_day, project=project)
+    with store.mutation_lock(cfg):
+        today = current_day(cfg)
+        _get_or_create_day_locked(cfg, today, project=project)
+        next_day = today + timedelta(days=1)
+        next_entry = _get_or_create_day_locked(cfg, next_day, project=project)
 
-    scratchpad = digest.carry_forward_scratchpad(read_body(cfg, today))
-    next_body = read_body(cfg, next_day)
-    if scratchpad and scratchpad not in next_body:
-        seeded = (
-            f"{next_body.rstrip()}\n\n{scratchpad}" if next_body.strip() else scratchpad
-        )
-        next_entry = replace_body(cfg, next_day, seeded, project=project)
+        scratchpad = digest.carry_forward_scratchpad(read_body(cfg, today))
+        next_body = read_body(cfg, next_day)
+        if scratchpad and scratchpad not in next_body:
+            seeded = (
+                f"{next_body.rstrip()}\n\n{scratchpad}"
+                if next_body.strip()
+                else scratchpad
+            )
+            next_entry = _replace_body_locked(cfg, next_day, seeded, project=project)
 
-    return next_entry
+        return next_entry
 
 
 def previous_day_with_content(

@@ -138,6 +138,29 @@ def test_mcp_partial_update_returns_compact_receipt(mcp_todo):
     assert call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == "new body"
 
 
+def test_mcp_partial_update_rejects_identity_and_unsupported_relation(mcp_todo):
+    _runner, entry_id = mcp_todo
+    shown = call_tool("show", {"ids": [entry_id]})
+    revision = shown["entries"][0]["body_revision"]
+    for patch, message in (
+        ({"id": 999}, "cannot patch immutable fields"),
+        ({"project_ids": [1]}, "not valid for todo"),
+    ):
+        with pytest.raises(Exception, match=message):
+            call_tool(
+                "update",
+                {
+                    "entry_id": entry_id,
+                    "patch": patch,
+                    "body_revision": revision,
+                    "edits": [{"match": "body from MCP", "replacement": "new"}],
+                },
+            )
+    assert call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == (
+        "body from MCP"
+    )
+
+
 @pytest.fixture
 def mcp_pitches(cfg, monkeypatch):
     monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))

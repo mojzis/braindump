@@ -29,7 +29,8 @@ and a working local `bd-mcp` entry point. The script launches
 The consumer creates disposable entries and reads their `body_revision`, then
 proves replace, insert, delete, ordered multi-edit, Unicode/multiline matching,
 missing and ambiguous match errors, failure atomicity, stale revision rejection
-after an intervening update, and a concurrent-safe revision sequence. It also
+after an intervening update, competing stdio-client updates with one stale
+rejection, and update/create contention while preserving both index rows. It also
 proves legacy whole-body and metadata updates, the `update` tool schema, and a
 long-pitch partial request whose captured arguments omit `body` and whose
 receipt omits the full body.

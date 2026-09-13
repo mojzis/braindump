@@ -360,6 +360,11 @@ def iter_all_indexes(cfg: Config) -> Iterator[Entry]:
 
 
 def append_index(cfg: Config, type_or_dir: str, entry: Entry) -> None:
+    with mutation_lock(cfg):
+        _append_index_locked(cfg, type_or_dir, entry)
+
+
+def _append_index_locked(cfg: Config, type_or_dir: str, entry: Entry) -> None:
     type_dir = type_to_dir(type_or_dir)
     path = cfg.index_path(type_dir)
     line = json.dumps(entry.to_index_json(), ensure_ascii=False)
@@ -376,6 +381,13 @@ def append_index(cfg: Config, type_or_dir: str, entry: Entry) -> None:
 
 
 def rewrite_index_atomic(cfg: Config, type_or_dir: str, entries: list[Entry]) -> None:
+    with mutation_lock(cfg):
+        _rewrite_index_atomic_locked(cfg, type_or_dir, entries)
+
+
+def _rewrite_index_atomic_locked(
+    cfg: Config, type_or_dir: str, entries: list[Entry]
+) -> None:
     """Atomically replace an index file with the given entries.
 
     Used for updates and deletes. The index is locked for the duration so

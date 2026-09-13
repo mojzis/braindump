@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import os
 import shutil
 import tempfile
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 from mcp import ClientSession, StdioServerParameters
@@ -136,11 +138,112 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
         assert stale_after_intervening.isError
         assert "stale body revision" in _text(stale_after_intervening)
 
+        params_for_clients = StdioServerParameters(
+            command="uv",
+            args=["run", "--frozen", "--no-sync", "bd-mcp"],
+            env=env,
+        )
+        async with AsyncExitStack() as clients:
+            concurrent_sessions = []
+            for _ in range(2):
+                client_read, client_write = await clients.enter_async_context(
+                    stdio_client(params_for_clients)
+                )
+                client = await clients.enter_async_context(
+                    ClientSession(client_read, client_write)
+                )
+                await client.initialize()
+                concurrent_sessions.append(client)
+
+            concurrent_views = await asyncio.gather(
+                *(
+                    client.call_tool("show", {"ids": [entry_id]})
+                    for client in concurrent_sessions
+                )
+            )
+            concurrent_revision = _payload(concurrent_views[0])["entries"][0][
+                "body_revision"
+            ]
+            concurrent_updates = await asyncio.gather(
+                *(
+                    client.call_tool(
+                        "update",
+                        {
+                            "entry_id": entry_id,
+                            "patch": {},
+                            "body_revision": concurrent_revision,
+                            "edits": [
+                                {
+                                    "match": "current line",
+                                    "replacement": "parallel line",
+                                }
+                            ],
+                        },
+                    )
+                    for client in concurrent_sessions
+                )
+            )
+            assert sum(not result.isError for result in concurrent_updates) == 1
+            assert sum(result.isError for result in concurrent_updates) == 1
+            assert any(
+                result.isError and "stale body revision" in _text(result)
+                for result in concurrent_updates
+            )
+
+            after_concurrent = await call("show", {"ids": [entry_id]})
+            latest_revision = after_concurrent["entries"][0]["body_revision"]
+            lock_path = store_dir / ".mutation.lock"
+            lock_file = lock_path.open("a+")
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                blocked_update = asyncio.create_task(
+                    concurrent_sessions[0].call_tool(
+                        "update",
+                        {
+                            "entry_id": entry_id,
+                            "patch": {},
+                            "body_revision": latest_revision,
+                            "edits": [
+                                {
+                                    "match": "parallel line",
+                                    "replacement": "serialized line",
+                                }
+                            ],
+                        },
+                    )
+                )
+                blocked_create = asyncio.create_task(
+                    concurrent_sessions[1].call_tool(
+                        "create",
+                        {
+                            "entry_type": "todo",
+                            "title": "Concurrent unrelated row",
+                            "body": "must survive",
+                        },
+                    )
+                )
+                await asyncio.sleep(0.1)
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+            update_result, create_result = await asyncio.gather(
+                blocked_update, blocked_create
+            )
+            assert not update_result.isError
+            assert not create_result.isError
+            unrelated_id = _payload(create_result)["entry"]["id"]
+            preserved = await call("show", {"ids": [entry_id, unrelated_id]})
+            assert {item["entry"]["id"] for item in preserved["entries"]} == {
+                entry_id,
+                unrelated_id,
+            }
+
         async def expected_error(arguments: dict[str, object], text: str) -> None:
             failed = await session.call_tool("update", arguments)
             assert failed.isError and text in _text(failed)
 
-        current = intervening["body_revision"]
+        final_state = await call("show", {"ids": [entry_id]})
+        current = final_state["entries"][0]["body_revision"]
         await expected_error(
             {
                 "entry_id": entry_id,
@@ -165,14 +268,14 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
                 "patch": {},
                 "body": "whole body",
                 "body_revision": current,
-                "edits": [{"match": "current", "replacement": "x"}],
+                "edits": [{"match": "serialized", "replacement": "x"}],
             },
             "mutually exclusive",
         )
         unchanged = await call("show", {"ids": [entry_id]})
         assert (
             unchanged["entries"][0]["body"]
-            == "current line\nsecond line\ninserted\nsecond line"
+            == "serialized line\nsecond line\ninserted\nsecond line"
         )
 
         legacy = await call(

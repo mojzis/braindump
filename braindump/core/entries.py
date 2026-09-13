@@ -388,6 +388,34 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
     type_fields: dict[str, Any] | None = None,
     now: datetime | None = None,
 ) -> CreateResult:
+    with store.mutation_lock(cfg):
+        return _create_entry_locked(
+            cfg,
+            type_name,
+            title,
+            body,
+            tags=tags,
+            project=project,
+            summary=summary,
+            original_input=original_input,
+            type_fields=type_fields,
+            now=now,
+        )
+
+
+def _create_entry_locked(  # noqa: PLR0913
+    cfg: Config,
+    type_name: str,
+    title: str,
+    body: str,
+    *,
+    tags: list[str] | None = None,
+    project: str | None = None,
+    summary: str | None = None,
+    original_input: str | None = None,
+    type_fields: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> CreateResult:
     """Create a new entry of the given type.
 
     - `body` is the authored content only (no frontmatter, no title heading,
@@ -450,7 +478,7 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
     full_body = wrap_with_original(body, original_input)
     md_text = store.build_markdown(frontmatter, title, full_body)
     store.atomic_write_text(full_path, md_text)
-    store.append_index(cfg, type_dir, entry)
+    store._append_index_locked(cfg, type_dir, entry)
     return CreateResult(entry=entry, full_path=full_path)
 
 
@@ -671,19 +699,7 @@ def _update_entry_locked(
         raise EntryNotFoundError(entry_id)
     type_dir, entry = found
 
-    bad = set(patch) - _MUTABLE_FIELDS
-    if bad:
-        raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
-
-    relation_fields_for_type = set(RELATION_TARGET_TYPES.get(entry.type, {}))
-    unsupported_relations = (
-        set(patch) & _ALL_RELATION_FIELDS
-    ) - relation_fields_for_type
-    if unsupported_relations:
-        raise ValueError(
-            f"relation fields {sorted(unsupported_relations)} are not valid for "
-            f"{entry.type}"
-        )
+    relation_fields_for_type = _validate_patch(entry, patch)
 
     merged = entry.model_dump()
     merged.update(patch)
@@ -717,7 +733,7 @@ def _update_entry_locked(
         if e.id == entry_id:
             all_entries[i] = updated
             break
-    store.rewrite_index_atomic(cfg, type_dir, all_entries)
+    store._rewrite_index_atomic_locked(cfg, type_dir, all_entries)
     return updated
 
 
@@ -737,6 +753,7 @@ def update_entry_partial(
         if body_revision is None:
             raise ValueError("body_revision is required for partial edits")
         type_dir, entry = found
+        relation_fields_for_type = _validate_patch(entry, patch)
         full_path = store.full_path_for(cfg, type_dir, entry.file_path)
         current_frontmatter, current_md_body = store.read_markdown(full_path)
         _heading, authored, details = split_body(current_md_body)
@@ -772,7 +789,7 @@ def update_entry_partial(
             cfg,
             entry.type,
             merged,
-            relation_fields=set(patch) & set(RELATION_TARGET_TYPES.get(entry.type, {})),
+            relation_fields=set(patch) & relation_fields_for_type,
             validate_priority=(
                 "priority" in patch and patch["priority"] != entry.priority
             ),
@@ -790,12 +807,29 @@ def update_entry_partial(
             if indexed.id == entry_id:
                 all_entries[i] = updated
                 break
-        store.rewrite_index_atomic(cfg, type_dir, all_entries)
+        store._rewrite_index_atomic_locked(cfg, type_dir, all_entries)
         return {
             "entry_id": updated.id,
             "body_revision": _body_revision(new_authored),
             "edits_applied": len(normalized_edits),
         }
+
+
+def _validate_patch(entry: Entry, patch: Mapping[str, Any]) -> set[str]:
+    bad = set(patch) - _MUTABLE_FIELDS
+    if bad:
+        raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
+
+    relation_fields_for_type = set(RELATION_TARGET_TYPES.get(entry.type, {}))
+    unsupported_relations = (
+        set(patch) & _ALL_RELATION_FIELDS
+    ) - relation_fields_for_type
+    if unsupported_relations:
+        raise ValueError(
+            f"relation fields {sorted(unsupported_relations)} are not valid for "
+            f"{entry.type}"
+        )
+    return relation_fields_for_type
 
 
 def _updated_frontmatter(current: dict[str, Any], entry: Entry) -> dict[str, Any]:
@@ -879,12 +913,13 @@ def record_qa_result(
 
 def delete_entry(cfg: Config, entry_id: int) -> Entry:
     """Soft delete: move the markdown file to .trash/ and drop the index line."""
-    found = find_by_id(cfg, entry_id)
-    if found is None:
-        raise EntryNotFoundError(entry_id)
-    type_dir, entry = found
+    with store.mutation_lock(cfg):
+        found = find_by_id(cfg, entry_id)
+        if found is None:
+            raise EntryNotFoundError(entry_id)
+        type_dir, entry = found
 
-    store.move_to_trash(cfg, type_dir, entry.file_path)
-    remaining = [e for e in store.read_index(cfg, type_dir) if e.id != entry_id]
-    store.rewrite_index_atomic(cfg, type_dir, remaining)
-    return entry
+        store.move_to_trash(cfg, type_dir, entry.file_path)
+        remaining = [e for e in store.read_index(cfg, type_dir) if e.id != entry_id]
+        store._rewrite_index_atomic_locked(cfg, type_dir, remaining)
+        return entry
