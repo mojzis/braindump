@@ -82,13 +82,24 @@ def _guard(path: Path, action: str) -> Iterator[None]:
 def _locked(path: Path, mode: str = "a+") -> Iterator[Any]:
     """Open `path` with an exclusive fcntl lock. Ensures parent exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch(exist_ok=True)
+    if mode == "r+" and not path.exists():
+        path.touch()
     with path.open(mode) as f:
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             yield f
         finally:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def mutation_lock(cfg: Config) -> Iterator[None]:
+    """Serialize read-modify-write mutations across processes."""
+    with (
+        _guard(cfg.home / ".mutation.lock", "write"),
+        _locked(cfg.home / ".mutation.lock"),
+    ):
+        yield
 
 
 # --- IDs -------------------------------------------------------------------

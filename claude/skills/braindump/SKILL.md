@@ -228,7 +228,7 @@ All commands go through the `bd` CLI.
 
 5. **Mark a todo done:** `bd done <id|query|file_path>`.
 
-6. **Edit an entry:** `bd update <id> [--title ...] [--tags a,b] [--project p] [--status s] [--body]` (use `--body` with stdin to replace the authored body).
+6. **Edit an entry:** `bd update <id> [--title ...] [--tags a,b] [--project p] [--status s] [--body]` (use `--body` with stdin to replace the authored body). For long entries, prefer the MCP `show` → `update` partial-edit flow: pass the returned `body_revision` and ordered exact `{match, replacement}` edits so the full body need not be resent.
 
 7. **Projects:** `bd project list`, `bd project show <name>`, `bd project focus <name>` / `--clear`.
 

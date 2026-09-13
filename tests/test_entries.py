@@ -185,6 +185,87 @@ def test_update_entry_replaces_body(cfg):
     assert "old body content" not in text
 
 
+def test_partial_body_edits_replace_insert_delete_and_preserve_original(cfg):
+    result = entries.create_entry(
+        cfg,
+        "todo",
+        "partial",
+        "alpha\nkeep\nomega",
+        original_input="the original prompt",
+        now=_fake_now(),
+    )
+    revision = entries.body_revision("alpha\nkeep\nomega")
+    receipt = entries.update_entry_partial(
+        cfg,
+        result.entry.id,
+        {},
+        edits=[
+            {"match": "alpha", "replacement": "ALPHA\ninserted"},
+            {"match": "keep\n", "replacement": ""},
+        ],
+        body_revision=revision,
+    )
+    assert (receipt["entry_id"], receipt["edits_applied"]) == (result.entry.id, 2)
+    assert entries.body_revision("ALPHA\ninserted\nomega") == receipt["body_revision"]
+    text = result.full_path.read_text()
+    assert (
+        "ALPHA\ninserted\nomega" in text,
+        "the original prompt" in text,
+        store.read_index(cfg, "todos")[0].input == "the original prompt",
+    ) == (True, True, True)
+
+
+def test_partial_body_edits_are_atomic_and_report_edit_number(cfg):
+    result = entries.create_entry(cfg, "todo", "partial", "one\ntwo", now=_fake_now())
+    revision = entries.body_revision("one\ntwo")
+    with pytest.raises(ValueError, match=r"edit 2: exact match not found"):
+        entries.update_entry_partial(
+            cfg,
+            result.entry.id,
+            {"title": "must not persist"},
+            edits=[
+                {"match": "one", "replacement": "ONE"},
+                {"match": "missing", "replacement": "x"},
+            ],
+            body_revision=revision,
+        )
+    assert entries.split_body(store.read_markdown(result.full_path)[1])[1] == "one\ntwo"
+    with pytest.raises(ValueError, match=r"edit 1: exact match is ambiguous"):
+        entries.update_entry_partial(
+            cfg,
+            result.entry.id,
+            {},
+            edits=[{"match": "o", "replacement": "x"}],
+            body_revision=revision,
+        )
+
+
+def test_partial_body_edit_rejects_stale_revision_and_preserves_file_only_frontmatter(
+    cfg,
+):
+    result = entries.create_entry(cfg, "todo", "partial", "old", now=_fake_now())
+    text = result.full_path.read_text().replace(
+        "---\n\n# partial", "qa-note: keep me\n---\n\n# partial"
+    )
+    result.full_path.write_text(text)
+    with pytest.raises(ValueError, match="stale body revision"):
+        entries.update_entry_partial(
+            cfg,
+            result.entry.id,
+            {},
+            edits=[{"match": "old", "replacement": "new"}],
+            body_revision=entries.body_revision("other"),
+        )
+    entries.update_entry_partial(
+        cfg,
+        result.entry.id,
+        {},
+        edits=[{"match": "old", "replacement": "new"}],
+        body_revision=entries.body_revision("old"),
+    )
+    assert "qa-note: keep me" in result.full_path.read_text()
+
+
 def test_update_entry_rejects_immutable_fields(cfg):
     r = entries.create_entry(cfg, "todos", "t", "b", project="p", now=_fake_now())
     with pytest.raises(ValueError):

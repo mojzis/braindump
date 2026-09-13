@@ -152,7 +152,10 @@ def create(
 
 @mcp.tool(
     name="show",
-    description="Show entries by numeric ID, including authored markdown bodies.",
+    description=(
+        "Show entries by numeric ID, including authored markdown bodies and a "
+        "body_revision. Pass that revision to update for ordered partial edits."
+    ),
     annotations=_READ,
 )
 def show(ids: list[int]) -> dict[str, Any]:
@@ -160,7 +163,14 @@ def show(ids: list[int]) -> dict[str, Any]:
     found = service.get_entries(ids)
     return {
         "entries": [
-            _jsonable(found[entry_id]) for entry_id in ids if entry_id in found
+            {
+                "entry": _jsonable(found[entry_id].entry),
+                "type_dir": found[entry_id].type_dir,
+                "body": found[entry_id].body,
+                "body_revision": found[entry_id].body_revision,
+            }
+            for entry_id in ids
+            if entry_id in found
         ],
         "missing_ids": [entry_id for entry_id in ids if entry_id not in found],
     }
@@ -277,13 +287,32 @@ def list_entries(
 
 @mcp.tool(
     name="update",
-    description="Patch entry metadata and optionally replace its authored body.",
+    description=(
+        "Patch metadata or replace the authored body. For partial edits, pass "
+        "body_revision from show and edits=[{match, replacement}] in order; "
+        "each exact match must occur once. body and edits are mutually exclusive. "
+        "Partial updates return a compact receipt without the body."
+    ),
     annotations=_MUTATION,
 )
 def update(
-    entry_id: int, patch: dict[str, Any], body: str | None = None
+    entry_id: int,
+    patch: dict[str, Any],
+    body: str | None = None,
+    edits: list[dict[str, str]] | None = None,
+    body_revision: str | None = None,
 ) -> dict[str, Any]:
-    return _jsonable(_service().update(UpdateRequest(entry_id, patch, body)))
+    return _jsonable(
+        _service().update(
+            UpdateRequest(
+                entry_id,
+                patch,
+                body,
+                tuple(edits) if edits is not None else None,
+                body_revision,
+            )
+        )
+    )
 
 
 @mcp.tool(

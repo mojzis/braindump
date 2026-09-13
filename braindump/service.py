@@ -16,7 +16,7 @@ from typing import Any
 
 from braindump.core import entries, journal, projects, query, store, tags
 from braindump.core.config import Config
-from braindump.core.errors import BraindumpError
+from braindump.core.errors import BraindumpError, MutuallyExclusiveBodyUpdateError
 from braindump.core.query import SortDirection, SortField, StatusFilter
 from braindump.core.schema import ALL_TYPE_DIRS, Entry
 
@@ -65,11 +65,13 @@ class SearchRequest:
 
 @dataclass(frozen=True)
 class UpdateRequest:
-    """Input for a metadata patch and optional authored-body replacement."""
+    """Input for metadata, whole-body, or ordered partial-body updates."""
 
     entry_id: int
     patch: Mapping[str, Any] = field(default_factory=dict)
     body: str | None = None
+    edits: tuple[Mapping[str, str], ...] | None = None
+    body_revision: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,9 +82,14 @@ class EntryView:
     type_dir: str
     body: str
 
+    @property
+    def body_revision(self) -> str:
+        return entries.body_revision(self.body)
+
     def to_json(self) -> dict[str, Any]:
         data = self.entry.to_index_json()
         data["body"] = self.body
+        data["body_revision"] = self.body_revision
         return data
 
 
@@ -172,7 +179,17 @@ class BraindumpService:
 
     show = get_entries
 
-    def update(self, request: UpdateRequest) -> Entry:
+    def update(self, request: UpdateRequest) -> Any:
+        if request.edits is not None:
+            if request.body is not None:
+                raise MutuallyExclusiveBodyUpdateError
+            return entries.update_entry_partial(
+                self.cfg,
+                request.entry_id,
+                dict(request.patch),
+                edits=list(request.edits),
+                body_revision=request.body_revision,
+            )
         return entries.update_entry(
             self.cfg, request.entry_id, dict(request.patch), body=request.body
         )
