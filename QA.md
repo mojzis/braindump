@@ -84,6 +84,8 @@ owned-server cleanup.
 | Native windows/menu/clipboard/lifecycle | Native journey; HTTP is insufficient |
 | Docs/refactor without behavior change | Explain why Functional QA is inapplicable; retain gates |
 
+The MCP route is [Partial body edits over real stdio](docs/qa/mcp.md).
+
 The check brief must link QA.md, name the selected journey, and add feature
 actions/pass conditions. Resolve an absent route; do not substitute unit tests.
 

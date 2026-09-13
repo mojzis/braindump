@@ -47,6 +47,49 @@ class EntryNotFoundError(BraindumpError):
         self.entry_id = entry_id
 
 
+class BodyEditError(BraindumpError, ValueError):
+    """Base for a failed ordered authored-body edit."""
+
+    def __init__(self, edit_number: int, message: str) -> None:
+        self.edit_number = edit_number
+        super().__init__(f"edit {edit_number}: {message}")
+
+
+class BodyEditMissingError(BodyEditError):
+    """An edit's exact match does not occur in the authored body."""
+
+    def __init__(self, edit_number: int) -> None:
+        super().__init__(edit_number, "exact match not found")
+
+
+class BodyEditAmbiguousError(BodyEditError):
+    """An edit's exact match occurs more than once."""
+
+    def __init__(self, edit_number: int, occurrences: int) -> None:
+        super().__init__(
+            edit_number, f"exact match is ambiguous ({occurrences} matches)"
+        )
+        self.occurrences = occurrences
+
+
+class StaleBodyRevisionError(BraindumpError, ValueError):
+    """The body changed after a caller read its revision."""
+
+    def __init__(self, expected: str, actual: str) -> None:
+        super().__init__(
+            f"stale body revision: expected {expected!r}, current {actual!r}"
+        )
+        self.expected = expected
+        self.actual = actual
+
+
+class MutuallyExclusiveBodyUpdateError(BraindumpError, ValueError):
+    """A whole-body replacement and partial edits were supplied together."""
+
+    def __init__(self) -> None:
+        super().__init__("body and edits are mutually exclusive")
+
+
 class StorageError(BraindumpError):
     """The braindump directory could not be read or written."""
 

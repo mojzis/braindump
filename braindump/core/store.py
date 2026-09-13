@@ -82,13 +82,24 @@ def _guard(path: Path, action: str) -> Iterator[None]:
 def _locked(path: Path, mode: str = "a+") -> Iterator[Any]:
     """Open `path` with an exclusive fcntl lock. Ensures parent exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.touch(exist_ok=True)
+    if mode == "r+" and not path.exists():
+        path.touch()
     with path.open(mode) as f:
         fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         try:
             yield f
         finally:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def mutation_lock(cfg: Config) -> Iterator[None]:
+    """Serialize read-modify-write mutations across processes."""
+    with (
+        _guard(cfg.home / ".mutation.lock", "write"),
+        _locked(cfg.home / ".mutation.lock"),
+    ):
+        yield
 
 
 # --- IDs -------------------------------------------------------------------
@@ -349,6 +360,11 @@ def iter_all_indexes(cfg: Config) -> Iterator[Entry]:
 
 
 def append_index(cfg: Config, type_or_dir: str, entry: Entry) -> None:
+    with mutation_lock(cfg):
+        _append_index_locked(cfg, type_or_dir, entry)
+
+
+def _append_index_locked(cfg: Config, type_or_dir: str, entry: Entry) -> None:
     type_dir = type_to_dir(type_or_dir)
     path = cfg.index_path(type_dir)
     line = json.dumps(entry.to_index_json(), ensure_ascii=False)
@@ -365,6 +381,13 @@ def append_index(cfg: Config, type_or_dir: str, entry: Entry) -> None:
 
 
 def rewrite_index_atomic(cfg: Config, type_or_dir: str, entries: list[Entry]) -> None:
+    with mutation_lock(cfg):
+        _rewrite_index_atomic_locked(cfg, type_or_dir, entries)
+
+
+def _rewrite_index_atomic_locked(
+    cfg: Config, type_or_dir: str, entries: list[Entry]
+) -> None:
     """Atomically replace an index file with the given entries.
 
     Used for updates and deletes. The index is locked for the duration so

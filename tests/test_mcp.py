@@ -37,8 +37,11 @@ def test_mcp_handoff_create_search_show_and_update(cfg, monkeypatch):
     searched = call_tool("search", {"types": ["handoff"], "branch": "feature/mcp"})
     assert [hit["entry"]["id"] for hit in searched] == [entry_id]
     shown = call_tool("show", {"ids": [entry_id]})
-    assert shown["entries"][0]["body"] == "MCP body"
-    assert shown["entries"][0]["entry"]["branch"] == "feature/mcp"
+    assert (
+        shown["entries"][0]["body"],
+        len(shown["entries"][0]["body_revision"]),
+        shown["entries"][0]["entry"]["branch"],
+    ) == ("MCP body", 64, "feature/mcp")
 
     updated = call_tool(
         "update", {"entry_id": entry_id, "patch": {"branch": "release/mcp"}}
@@ -117,6 +120,45 @@ def test_mcp_todo_update_and_cli_done(mcp_todo):
     cli_done = runner.invoke(app, ["done", str(entry_id)])
     assert cli_done.exit_code == 0
     assert call_tool("done", {"arg": entry_id})["status"] == "done"
+
+
+def test_mcp_partial_update_returns_compact_receipt(mcp_todo):
+    _runner, entry_id = mcp_todo
+    shown = call_tool("show", {"ids": [entry_id]})
+    receipt = call_tool(
+        "update",
+        {
+            "entry_id": entry_id,
+            "patch": {},
+            "body_revision": shown["entries"][0]["body_revision"],
+            "edits": [{"match": "body from MCP", "replacement": "new body"}],
+        },
+    )
+    assert set(receipt) == {"entry_id", "body_revision", "edits_applied"}
+    assert call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == "new body"
+
+
+def test_mcp_partial_update_rejects_identity_and_unsupported_relation(mcp_todo):
+    _runner, entry_id = mcp_todo
+    shown = call_tool("show", {"ids": [entry_id]})
+    revision = shown["entries"][0]["body_revision"]
+    for patch, message in (
+        ({"id": 999}, "cannot patch immutable fields"),
+        ({"project_ids": [1]}, "not valid for todo"),
+    ):
+        with pytest.raises(Exception, match=message):
+            call_tool(
+                "update",
+                {
+                    "entry_id": entry_id,
+                    "patch": patch,
+                    "body_revision": revision,
+                    "edits": [{"match": "body from MCP", "replacement": "new"}],
+                },
+            )
+    assert call_tool("show", {"ids": [entry_id]})["entries"][0]["body"] == (
+        "body from MCP"
+    )
 
 
 @pytest.fixture

@@ -203,6 +203,27 @@ and journal operations. Test with an isolated store before using real data:
 BRAINDUMP_DIR="$(mktemp -d)" bd-mcp
 ```
 
+`show` returns each entry as `entry`, `body`, and `body_revision`. The revision
+is the lowercase SHA-256 hex digest of the normalized authored body (excluding
+the title and Original input details). `update` preserves the legacy
+`entry_id`, `patch`, and optional whole `body` fields and returns the updated
+Entry for those calls. For a long entry, read first and send ordered exact
+`edits` plus the returned `body_revision`:
+
+```json
+{"entry_id": 42, "patch": {}, "body_revision": "<64 hex chars>",
+ "edits": [{"match": "old paragraph", "replacement": "new paragraph"}]}
+```
+
+Each edit is applied to the in-memory result of the previous edit and its
+`match` must occur exactly once. A successful partial update returns only the
+compact receipt `{"entry_id": 42, "body_revision": "<new revision>",
+"edits_applied": 1}`; it never returns the full body. Missing and ambiguous
+matches identify `edit 1`, `edit 2`, and so on; stale revisions report expected
+and current revisions. `body_revision` is required for partial updates, and
+`body` plus `edits` is rejected as mutually exclusive. Failed validation makes
+no change.
+
 ## Data layout
 
 ```

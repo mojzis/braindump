@@ -1,14 +1,105 @@
 from __future__ import annotations
 
+import multiprocessing as mp
+from contextlib import contextmanager
 from datetime import datetime
 
 import pytest
 
 from braindump.core import entries, store
+from braindump.core.config import Config
+from braindump.core.schema import Entry
 
 
 def _fake_now() -> datetime:
     return datetime(2026, 4, 11, 14, 15)
+
+
+def _paused_update_worker(home, entry_id, ready, release, result_queue):
+    cfg = Config(home=home)
+    original = store._rewrite_index_atomic_locked
+
+    def paused_rewrite(cfg: Config, type_or_dir: str, entries: list[Entry]) -> None:
+        ready.set()
+        if not release.wait(10):
+            raise RuntimeError("test release timed out")
+        return original(cfg, type_or_dir, entries)
+
+    setattr(store, "_rewrite_index_atomic_locked", paused_rewrite)  # noqa: B010
+    try:
+        result = entries.update_entry(cfg, entry_id, {"title": "updated"})
+        result_queue.put(("ok", result.id))
+    except BaseException as exc:  # pragma: no cover - failure forwarded to parent
+        result_queue.put(("error", repr(exc)))
+
+
+def _install_observed_mutation_lock(attempting, acquired):
+    original = store.mutation_lock
+
+    @contextmanager
+    def observed(cfg):
+        attempting.set()
+        with original(cfg):
+            acquired.set()
+            yield
+
+    setattr(store, "mutation_lock", observed)  # noqa: B010
+
+
+def _create_worker(home, attempting, acquired, result_queue):
+    cfg = Config(home=home)
+    _install_observed_mutation_lock(attempting, acquired)
+    try:
+        result = entries.create_entry(cfg, "todo", "created", "body", now=_fake_now())
+        result_queue.put(("ok", result.entry.id))
+    except BaseException as exc:  # pragma: no cover - failure forwarded to parent
+        result_queue.put(("error", repr(exc)))
+
+
+def _partial_update_worker(  # noqa: PLR0917
+    home, entry_id, revision, barrier, result_queue, replacement
+):
+    cfg = Config(home=home)
+    barrier.wait(10)
+    try:
+        result = entries.update_entry_partial(
+            cfg,
+            entry_id,
+            {},
+            edits=[{"match": "body", "replacement": replacement}],
+            body_revision=revision,
+        )
+        result_queue.put(("ok", result["body_revision"]))
+    except BaseException as exc:
+        result_queue.put((type(exc).__name__, str(exc)))
+
+
+def _delete_worker(home, entry_id, attempting, acquired, result_queue):
+    cfg = Config(home=home)
+    _install_observed_mutation_lock(attempting, acquired)
+    try:
+        result = entries.delete_entry(cfg, entry_id)
+        result_queue.put(("ok", result.id))
+    except BaseException as exc:  # pragma: no cover - failure forwarded to parent
+        result_queue.put(("error", repr(exc)))
+
+
+def _start_and_join(workers):
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(10)
+
+
+def _assert_lock_contention(attempting, acquired, operation):
+    assert attempting.wait(10), f"{operation} never attempted the mutation lock"
+    assert not acquired.wait(0.5), (
+        f"{operation} acquired the mutation lock while update still held it"
+    )
+
+
+def _assert_lock_acquired(acquired, operation):
+    assert acquired.is_set(), f"{operation} did not acquire the lock after release"
 
 
 @pytest.fixture
@@ -183,6 +274,212 @@ def test_update_entry_replaces_body(cfg):
     text = r.full_path.read_text()
     assert "fresh new body content" in text
     assert "old body content" not in text
+
+
+def test_cross_process_update_does_not_drop_concurrent_create(cfg):
+    original = entries.create_entry(cfg, "todo", "original", "body", now=_fake_now())
+    ctx = mp.get_context("spawn")
+    ready = ctx.Event()
+    release = ctx.Event()
+    create_attempting_lock = ctx.Event()
+    create_acquired_lock = ctx.Event()
+    result_queue = ctx.Queue()
+    updater = ctx.Process(
+        target=_paused_update_worker,
+        args=(cfg.home, original.entry.id, ready, release, result_queue),
+    )
+    updater.start()
+    assert ready.wait(10)
+    creator = ctx.Process(
+        target=_create_worker,
+        args=(
+            cfg.home,
+            create_attempting_lock,
+            create_acquired_lock,
+            result_queue,
+        ),
+    )
+    creator.start()
+    try:
+        _assert_lock_contention(create_attempting_lock, create_acquired_lock, "create")
+    finally:
+        release.set()
+        updater.join(10)
+        creator.join(10)
+    _assert_lock_acquired(create_acquired_lock, "create")
+    assert updater.exitcode == creator.exitcode == 0
+    assert {result_queue.get(timeout=2)[0] for _ in range(2)} == {"ok"}
+
+    stored = store.read_index(cfg, "todos")
+    assert {entry.title for entry in stored} == {"updated", "created"}
+
+
+def test_cross_process_partial_updates_reject_one_stale_revision(
+    cfg,
+):
+    original = entries.create_entry(cfg, "todo", "original", "body", now=_fake_now())
+    ctx = mp.get_context("spawn")
+    barrier = ctx.Barrier(2)
+    result_queue = ctx.Queue()
+    workers = [
+        ctx.Process(
+            target=_partial_update_worker,
+            args=(
+                cfg.home,
+                original.entry.id,
+                entries.body_revision("body"),
+                barrier,
+                result_queue,
+                replacement,
+            ),
+        )
+        for replacement in ("one", "two")
+    ]
+    _start_and_join(workers)
+    assert [worker.exitcode for worker in workers] == [0, 0]
+    outcomes = [result_queue.get(timeout=2)[0] for _ in workers]
+    assert sorted(outcomes) == ["StaleBodyRevisionError", "ok"]
+    assert entries.split_body(store.read_markdown(original.full_path)[1])[1] in {
+        "one",
+        "two",
+    }
+
+
+def test_cross_process_update_does_not_resurrect_deleted_entry(cfg):
+    original = entries.create_entry(cfg, "todo", "original", "body", now=_fake_now())
+    ctx = mp.get_context("spawn")
+    ready = ctx.Event()
+    release = ctx.Event()
+    delete_attempting_lock = ctx.Event()
+    delete_acquired_lock = ctx.Event()
+    result_queue = ctx.Queue()
+    updater = ctx.Process(
+        target=_paused_update_worker,
+        args=(cfg.home, original.entry.id, ready, release, result_queue),
+    )
+    updater.start()
+    assert ready.wait(10)
+    deleter = ctx.Process(
+        target=_delete_worker,
+        args=(
+            cfg.home,
+            original.entry.id,
+            delete_attempting_lock,
+            delete_acquired_lock,
+            result_queue,
+        ),
+    )
+    deleter.start()
+    try:
+        _assert_lock_contention(delete_attempting_lock, delete_acquired_lock, "delete")
+    finally:
+        release.set()
+        updater.join(10)
+        deleter.join(10)
+    _assert_lock_acquired(delete_acquired_lock, "delete")
+    assert updater.exitcode == deleter.exitcode == 0
+    assert {result_queue.get(timeout=2)[0] for _ in range(2)} == {"ok"}
+    assert entries.find_by_id(cfg, original.entry.id) is None
+
+
+def test_partial_body_edits_replace_insert_delete_and_preserve_original(cfg):
+    result = entries.create_entry(
+        cfg,
+        "todo",
+        "partial",
+        "alpha\nkeep\nomega",
+        original_input="the original prompt",
+        now=_fake_now(),
+    )
+    revision = entries.body_revision("alpha\nkeep\nomega")
+    receipt = entries.update_entry_partial(
+        cfg,
+        result.entry.id,
+        {},
+        edits=[
+            {"match": "alpha", "replacement": "ALPHA\ninserted"},
+            {"match": "keep\n", "replacement": ""},
+        ],
+        body_revision=revision,
+    )
+    assert (receipt["entry_id"], receipt["edits_applied"]) == (result.entry.id, 2)
+    assert entries.body_revision("ALPHA\ninserted\nomega") == receipt["body_revision"]
+    text = result.full_path.read_text()
+    assert (
+        "ALPHA\ninserted\nomega" in text,
+        "the original prompt" in text,
+        store.read_index(cfg, "todos")[0].input == "the original prompt",
+    ) == (True, True, True)
+
+
+def test_partial_body_edits_are_atomic_and_report_edit_number(cfg):
+    result = entries.create_entry(cfg, "todo", "partial", "one\ntwo", now=_fake_now())
+    revision = entries.body_revision("one\ntwo")
+    with pytest.raises(ValueError, match=r"edit 2: exact match not found"):
+        entries.update_entry_partial(
+            cfg,
+            result.entry.id,
+            {"title": "must not persist"},
+            edits=[
+                {"match": "one", "replacement": "ONE"},
+                {"match": "missing", "replacement": "x"},
+            ],
+            body_revision=revision,
+        )
+    assert entries.split_body(store.read_markdown(result.full_path)[1])[1] == "one\ntwo"
+    with pytest.raises(ValueError, match=r"edit 1: exact match is ambiguous"):
+        entries.update_entry_partial(
+            cfg,
+            result.entry.id,
+            {},
+            edits=[{"match": "o", "replacement": "x"}],
+            body_revision=revision,
+        )
+
+
+def test_partial_body_edit_rejects_stale_revision_and_preserves_file_only_frontmatter(
+    cfg,
+):
+    result = entries.create_entry(cfg, "todo", "partial", "old", now=_fake_now())
+    text = result.full_path.read_text().replace(
+        "---\n\n# partial", "qa-note: keep me\n---\n\n# partial"
+    )
+    result.full_path.write_text(text)
+    with pytest.raises(ValueError, match="stale body revision"):
+        entries.update_entry_partial(
+            cfg,
+            result.entry.id,
+            {},
+            edits=[{"match": "old", "replacement": "new"}],
+            body_revision=entries.body_revision("other"),
+        )
+    entries.update_entry_partial(
+        cfg,
+        result.entry.id,
+        {},
+        edits=[{"match": "old", "replacement": "new"}],
+        body_revision=entries.body_revision("old"),
+    )
+    assert "qa-note: keep me" in result.full_path.read_text()
+
+
+def test_partial_body_edit_rejects_immutable_and_unsupported_relation_fields(cfg):
+    todo = entries.create_entry(cfg, "todo", "partial", "old", now=_fake_now())
+    revision = entries.body_revision("old")
+    for patch, message in (
+        ({"id": 999}, "cannot patch immutable fields"),
+        ({"file_path": "elsewhere.md"}, "cannot patch immutable fields"),
+        ({"project_ids": [1]}, "not valid for todo"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            entries.update_entry_partial(
+                cfg,
+                todo.entry.id,
+                patch,
+                edits=[{"match": "old", "replacement": "new"}],
+                body_revision=revision,
+            )
+    assert entries.split_body(store.read_markdown(todo.full_path)[1])[1] == "old"
 
 
 def test_update_entry_rejects_immutable_fields(cfg):

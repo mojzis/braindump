@@ -6,7 +6,9 @@ files directly. This is the module the CLI and web server both import.
 
 from __future__ import annotations
 
+import hashlib
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +16,12 @@ from typing import Any
 
 from braindump.core import store
 from braindump.core.config import Config
-from braindump.core.errors import EntryNotFoundError
+from braindump.core.errors import (
+    BodyEditAmbiguousError,
+    BodyEditMissingError,
+    EntryNotFoundError,
+    StaleBodyRevisionError,
+)
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     LEGACY_TODO_STATUSES,
@@ -89,6 +96,15 @@ def split_body(text: str) -> tuple[str, str, str]:
         i += 1
     authored = "\n".join(lines[i:]).rstrip("\n")
     return heading, authored, details.rstrip("\n")
+
+
+def body_revision(authored: str) -> str:
+    """Return the stable SHA-256 revision of normalized authored content."""
+    return hashlib.sha256(authored.rstrip("\n").encode("utf-8")).hexdigest()
+
+
+def _body_revision(authored: str) -> str:
+    return body_revision(authored)
 
 
 def join_body(heading: str, authored: str, details: str) -> str:
@@ -372,6 +388,34 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
     type_fields: dict[str, Any] | None = None,
     now: datetime | None = None,
 ) -> CreateResult:
+    with store.mutation_lock(cfg):
+        return _create_entry_locked(
+            cfg,
+            type_name,
+            title,
+            body,
+            tags=tags,
+            project=project,
+            summary=summary,
+            original_input=original_input,
+            type_fields=type_fields,
+            now=now,
+        )
+
+
+def _create_entry_locked(  # noqa: PLR0913
+    cfg: Config,
+    type_name: str,
+    title: str,
+    body: str,
+    *,
+    tags: list[str] | None = None,
+    project: str | None = None,
+    summary: str | None = None,
+    original_input: str | None = None,
+    type_fields: dict[str, Any] | None = None,
+    now: datetime | None = None,
+) -> CreateResult:
     """Create a new entry of the given type.
 
     - `body` is the authored content only (no frontmatter, no title heading,
@@ -434,7 +478,7 @@ def create_entry(  # noqa: PLR0913  # keyword-only entry fields, each maps to a 
     full_body = wrap_with_original(body, original_input)
     md_text = store.build_markdown(frontmatter, title, full_body)
     store.atomic_write_text(full_path, md_text)
-    store.append_index(cfg, type_dir, entry)
+    store._append_index_locked(cfg, type_dir, entry)
     return CreateResult(entry=entry, full_path=full_path)
 
 
@@ -639,24 +683,23 @@ def update_entry(
     - `body` replaces the authored portion of the markdown (between the title
       heading and the `<details>` block). Pass None to leave the body alone.
     """
+    with store.mutation_lock(cfg):
+        return _update_entry_locked(cfg, entry_id, patch, body=body)
+
+
+def _update_entry_locked(
+    cfg: Config,
+    entry_id: int,
+    patch: dict[str, Any],
+    *,
+    body: str | None = None,
+) -> Entry:
     found = find_by_id(cfg, entry_id)
     if found is None:
         raise EntryNotFoundError(entry_id)
     type_dir, entry = found
 
-    bad = set(patch) - _MUTABLE_FIELDS
-    if bad:
-        raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
-
-    relation_fields_for_type = set(RELATION_TARGET_TYPES.get(entry.type, {}))
-    unsupported_relations = (
-        set(patch) & _ALL_RELATION_FIELDS
-    ) - relation_fields_for_type
-    if unsupported_relations:
-        raise ValueError(
-            f"relation fields {sorted(unsupported_relations)} are not valid for "
-            f"{entry.type}"
-        )
+    relation_fields_for_type = _validate_patch(entry, patch)
 
     merged = entry.model_dump()
     merged.update(patch)
@@ -673,7 +716,7 @@ def update_entry(
 
     # rewrite markdown file: new frontmatter + (maybe) new body
     full_path = store.full_path_for(cfg, type_dir, entry.file_path)
-    _, current_md_body = store.read_markdown(full_path)
+    current_frontmatter, current_md_body = store.read_markdown(full_path)
     _heading, authored, details = split_body(current_md_body)
 
     new_title = patch.get("title", entry.title)
@@ -681,7 +724,7 @@ def update_entry(
     new_authored = authored if body is None else body.rstrip("\n")
     new_body = join_body(new_heading, new_authored, details)
 
-    frontmatter = _frontmatter_from_entry(updated)
+    frontmatter = _updated_frontmatter(current_frontmatter, updated)
     store.rewrite_markdown(full_path, frontmatter, new_body)
 
     # rewrite JSONL index in place
@@ -690,8 +733,128 @@ def update_entry(
         if e.id == entry_id:
             all_entries[i] = updated
             break
-    store.rewrite_index_atomic(cfg, type_dir, all_entries)
+    store._rewrite_index_atomic_locked(cfg, type_dir, all_entries)
     return updated
+
+
+def update_entry_partial(
+    cfg: Config,
+    entry_id: int,
+    patch: dict[str, Any],
+    *,
+    edits: list[Mapping[str, Any]],
+    body_revision: str | None,
+) -> dict[str, Any]:
+    """Apply ordered exact authored-body replacements under one mutation lock."""
+    with store.mutation_lock(cfg):
+        found = find_by_id(cfg, entry_id)
+        if found is None:
+            raise EntryNotFoundError(entry_id)
+        if body_revision is None:
+            raise ValueError("body_revision is required for partial edits")
+        type_dir, entry = found
+        relation_fields_for_type = _validate_patch(entry, patch)
+        full_path = store.full_path_for(cfg, type_dir, entry.file_path)
+        current_frontmatter, current_md_body = store.read_markdown(full_path)
+        _heading, authored, details = split_body(current_md_body)
+        actual_revision = _body_revision(authored)
+        if actual_revision != body_revision:
+            raise StaleBodyRevisionError(body_revision, actual_revision)
+
+        new_authored = authored
+        normalized_edits: list[tuple[str, str]] = []
+        for index, edit in enumerate(edits, start=1):
+            if not isinstance(edit, Mapping):
+                raise TypeError(f"edit {index}: expected an object")
+            match = edit.get("match")
+            replacement = edit.get("replacement")
+            if not isinstance(match, str) or not isinstance(replacement, str):
+                raise TypeError(f"edit {index}: match and replacement must be strings")
+            occurrences = _substring_occurrences(new_authored, match)
+            if occurrences == 0:
+                raise BodyEditMissingError(index)
+            if occurrences != 1:
+                raise BodyEditAmbiguousError(index, occurrences)
+            position = new_authored.find(match)
+            new_authored = (
+                new_authored[:position]
+                + replacement
+                + new_authored[position + len(match) :]
+            )
+            normalized_edits.append((match, replacement))
+
+        merged = entry.model_dump()
+        merged.update(patch)
+        _validate_canonical_fields(
+            cfg,
+            entry.type,
+            merged,
+            relation_fields=set(patch) & relation_fields_for_type,
+            validate_priority=(
+                "priority" in patch and patch["priority"] != entry.priority
+            ),
+        )
+        updated = Entry.model_validate(merged)
+        updated.tags = drop_self_project_tag(updated.tags, updated.project)
+        updated.updated_at = store.utcnow_iso()
+        title = patch.get("title", entry.title)
+        new_body = join_body(f"# {title}", new_authored, details)
+        frontmatter = _updated_frontmatter(current_frontmatter, updated)
+        store.rewrite_markdown(full_path, frontmatter, new_body)
+
+        all_entries = store.read_index(cfg, type_dir)
+        for i, indexed in enumerate(all_entries):
+            if indexed.id == entry_id:
+                all_entries[i] = updated
+                break
+        store._rewrite_index_atomic_locked(cfg, type_dir, all_entries)
+        return {
+            "entry_id": updated.id,
+            "body_revision": _body_revision(new_authored),
+            "edits_applied": len(normalized_edits),
+        }
+
+
+def _validate_patch(entry: Entry, patch: Mapping[str, Any]) -> set[str]:
+    bad = set(patch) - _MUTABLE_FIELDS
+    if bad:
+        raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
+
+    relation_fields_for_type = set(RELATION_TARGET_TYPES.get(entry.type, {}))
+    unsupported_relations = (
+        set(patch) & _ALL_RELATION_FIELDS
+    ) - relation_fields_for_type
+    if unsupported_relations:
+        raise ValueError(
+            f"relation fields {sorted(unsupported_relations)} are not valid for "
+            f"{entry.type}"
+        )
+    return relation_fields_for_type
+
+
+def _updated_frontmatter(current: dict[str, Any], entry: Entry) -> dict[str, Any]:
+    """Overlay canonical metadata while retaining file-only frontmatter."""
+    frontmatter = dict(current)
+    canonical = _frontmatter_from_entry(entry)
+    removable = set(Entry.model_fields) | set(entry.model_extra or {})
+    removable -= {"id", "file_path", "summary", "input"}
+    for key in removable:
+        if key in canonical:
+            frontmatter[key] = canonical[key]
+        else:
+            frontmatter.pop(key, None)
+    return frontmatter
+
+
+def _substring_occurrences(text: str, needle: str) -> int:
+    if needle == "":
+        return len(text) + 1
+    count = 0
+    position = text.find(needle)
+    while position >= 0:
+        count += 1
+        position = text.find(needle, position + 1)
+    return count
 
 
 def set_status(cfg: Config, entry_id: int, status: str) -> Entry:
@@ -750,12 +913,13 @@ def record_qa_result(
 
 def delete_entry(cfg: Config, entry_id: int) -> Entry:
     """Soft delete: move the markdown file to .trash/ and drop the index line."""
-    found = find_by_id(cfg, entry_id)
-    if found is None:
-        raise EntryNotFoundError(entry_id)
-    type_dir, entry = found
+    with store.mutation_lock(cfg):
+        found = find_by_id(cfg, entry_id)
+        if found is None:
+            raise EntryNotFoundError(entry_id)
+        type_dir, entry = found
 
-    store.move_to_trash(cfg, type_dir, entry.file_path)
-    remaining = [e for e in store.read_index(cfg, type_dir) if e.id != entry_id]
-    store.rewrite_index_atomic(cfg, type_dir, remaining)
-    return entry
+        store.move_to_trash(cfg, type_dir, entry.file_path)
+        remaining = [e for e in store.read_index(cfg, type_dir) if e.id != entry_id]
+        store._rewrite_index_atomic_locked(cfg, type_dir, remaining)
+        return entry

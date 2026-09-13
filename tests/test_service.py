@@ -102,6 +102,58 @@ def test_service_todo_update_and_done(service_todo):
     assert service.done(created.entry.id).status == "done"
 
 
+def test_service_partial_update_requires_revision_and_returns_receipt(service_todo):
+    service, created = service_todo
+    view = service.get_entry(created.entry.id)
+    assert view is not None
+    receipt = service.update(
+        UpdateRequest(
+            created.entry.id,
+            edits=({"match": "Auth", "replacement": "User"},),
+            body_revision=view.body_revision,
+        )
+    )
+    assert receipt["entry_id"] == created.entry.id
+    assert receipt["edits_applied"] == 1
+    assert service.get_entry(created.entry.id).body == "User body"
+    with pytest.raises(ValueError, match="body_revision is required"):
+        service.update(
+            UpdateRequest(
+                created.entry.id,
+                edits=({"match": "User", "replacement": "Other"},),
+            )
+        )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        service.update(
+            UpdateRequest(
+                created.entry.id,
+                body="whole body",
+                edits=({"match": "User", "replacement": "Other"},),
+                body_revision=service.get_entry(created.entry.id).body_revision,
+            )
+        )
+
+
+def test_service_partial_update_rejects_identity_and_unsupported_relation(service_todo):
+    service, created = service_todo
+    view = service.get_entry(created.entry.id)
+    assert view is not None
+    for patch, message in (
+        ({"id": 999}, "cannot patch immutable fields"),
+        ({"project_ids": [1]}, "not valid for todo"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            service.update(
+                UpdateRequest(
+                    created.entry.id,
+                    patch=patch,
+                    edits=({"match": "Auth", "replacement": "User"},),
+                    body_revision=view.body_revision,
+                )
+            )
+    assert service.get_entry(created.entry.id).body == "Auth body"
+
+
 def test_service_project_and_tag_operations(cfg):
     service = BraindumpService(cfg)
     project = service.create(CreateRequest(entry_type="project", title="Alpha"))
