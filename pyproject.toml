@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 mcp = [
-    "mcp>=1.9.0,<2",
+    "mcp>=2.2.0,<3",
 ]
 web = [
     "fastapi>=0.141.1",
@@ -43,7 +43,7 @@ docs = [
     "mkdocs-llmstxt>=0.5.0",
 ]
 dev = [
-    "mcp>=1.9.0,<2",
+    "mcp>=2.2.0,<3",
     "pytest>=9.1.1",
     "pytest-cov",
     "freezegun>=1.5.5",
