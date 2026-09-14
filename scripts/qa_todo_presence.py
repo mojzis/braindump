@@ -32,7 +32,7 @@ def create(title: str, body: str, *options: str) -> int:
             "--project",
             "presence-qa",
             "--tag",
-            "presence-qa",
+            "presence-filter",
             "--body-file",
             "/dev/stdin",
             *options,
@@ -101,11 +101,11 @@ def main() -> None:
 
         page.goto(f"{base}/todos?presence=agent", wait_until="networkidle")
         assert_only(page, "Presence away fixture", "Presence together fixture")
-        page.get_by_text("Needs my time", exact=True).click()
+        page.get_by_role("link", name="Needs my time", exact=True).click()
         assert_only(page, "Presence together fixture", "Presence away fixture")
 
         page.goto(
-            f"{base}/todos?presence=together&project=presence-qa&tag=presence-qa"
+            f"{base}/todos?presence=together&project=presence-qa&tag=presence-filter"
             f"&priority=high&all=1&q=Presence+together",
             wait_until="networkidle",
         )
@@ -115,13 +115,13 @@ def main() -> None:
         selector = page.locator('select[name="presence"]')
         selector.select_option("personal")
         page.get_by_role("button", name="save").click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_url(f"{base}/entries/{away_id}", wait_until="networkidle")
         assert "I must do it" in page.locator("body").inner_text()
 
         page.goto(f"{base}/entries/{away_id}/edit", wait_until="networkidle")
         page.locator('select[name="presence"]').select_option("")
         page.get_by_role("button", name="save").click()
-        page.wait_for_load_state("networkidle")
+        page.wait_for_url(f"{base}/entries/{away_id}", wait_until="networkidle")
         assert "unclassified" not in page.locator("body").inner_text()
         page.goto(f"{base}/entries/{away_id}", wait_until="networkidle")
         assert "Presence away fixture" in page.locator("body").inner_text()
