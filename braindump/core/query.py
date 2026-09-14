@@ -131,7 +131,6 @@ def _entry_matches_coverage(entry: Entry, coverage: str | None) -> bool:
 def _entry_matches_presence(entry: Entry, presence: str | None) -> bool:
     if presence is None:
         return True
-    _validate_presence(presence)
     if entry.type != "todo":
         return False
     if presence == "unclassified":

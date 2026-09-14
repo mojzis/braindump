@@ -112,6 +112,14 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
         unclassified_id = unclassified["entry"]["id"]
         assert [
             hit["entry"]["id"]
+            for hit in await call("list", {"types": ["todo"], "presence": "agent"})
+        ] == [entry_id]
+        assert [
+            hit["entry"]["id"]
+            for hit in await call("search", {"types": ["todo"], "presence": "together"})
+        ] == [together_id]
+        assert [
+            hit["entry"]["id"]
             for hit in await call(
                 "search", {"types": ["todo"], "presence": "needs-my-time"}
             )
@@ -127,6 +135,12 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
         await call("update", {"entry_id": entry_id, "patch": {"presence": "personal"}})
         classified_after = await call("show", {"ids": [entry_id]})
         assert classified_after["entries"][0]["entry"]["presence"] == "personal"
+        assert {
+            hit["entry"]["id"]
+            for hit in await call(
+                "search", {"types": ["todo"], "presence": "needs-my-time"}
+            )
+        } == {entry_id, together_id}
         assert (
             classified_after["entries"][0]["body"]
             == classified_before["entries"][0]["body"]

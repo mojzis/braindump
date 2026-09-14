@@ -718,19 +718,6 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
     typer.echo(f"updated: #{updated.id} {updated.file_path}")
 
 
-@app.command("clear-presence")
-def clear_presence(entry_id: int = typer.Argument(..., metavar="ID")):
-    """Clear a todo's presence classification."""
-    cfg = load_config()
-    try:
-        updated = BraindumpService(cfg).update(
-            UpdateRequest(entry_id=entry_id, patch={"presence": None})
-        )
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-    typer.echo(f"updated: #{updated.id} {updated.file_path}")
-
-
 @app.command()
 def delete(entry_id: int = typer.Argument(...)):
     """Soft-delete an entry (moves the file to .trash/)."""
