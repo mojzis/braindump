@@ -1087,6 +1087,7 @@ _TODO_LIST = DedicatedListSpec(
         "priority": lambda h: {"high": 0, "medium": 1, "low": 2}.get(
             h.entry.priority, 3
         ),
+        "presence": lambda h: h.entry.presence or "",
     },
     columns=(
         ("id", "#"),

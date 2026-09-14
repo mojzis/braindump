@@ -112,7 +112,7 @@
             {% elif key == "project" %}
               <td>
                 {% if h.entry.project %}
-                  <a href="{{ list_url(project=h.entry.project, tag=tag, priority=priority, sort=sort, dir=dir) }}" class="muted">{{ h.entry.project }}</a>
+                  <a href="{{ list_url(project=h.entry.project, tag=tag, priority=priority, presence=presence, sort=sort, dir=dir) }}" class="muted">{{ h.entry.project }}</a>
                 {% else %}
                   <span class="muted">—</span>
                 {% endif %}

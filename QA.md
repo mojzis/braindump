@@ -17,6 +17,7 @@ resolve or edit the lock. Keep reports outside the repository.
 Use one same-shell disposable store:
 
     set -eu
+    set -o pipefail
     qa_root="$(mktemp -d)"
     export BRAINDUMP_DIR="$qa_root/store"
     export BRAINDUMP_CLAUDE_BIN=/nonexistent/braindump-qa-claude
@@ -118,7 +119,9 @@ Choose a free loopback port, never attach to a personal server:
 Verify the owned PID serves and record PID, URL, port, and log. Use the exact
 real-browser route below; no HTML/curl substitute:
 
-    uv run --no-project --with playwright python - <<'PY'
+    test -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    uv run --frozen --no-sync python -c 'from playwright.sync_api import sync_playwright; print("Playwright import ready")'
+    uv run --frozen --no-sync python - <<'PY'
     import json, os
     from pathlib import Path
     from playwright.sync_api import sync_playwright
@@ -173,9 +176,12 @@ real-browser route below; no HTML/curl substitute:
         browser.close()
     PY
 
-This uses Chrome at the stated executable through ephemeral Playwright and adds
-no project dependency/framework. Record executable, browser, viewports, URLs,
-visible text, screenshots, and boxes. Inspect both screenshots: the clicked
+This uses the prepared, lockfile-pinned Playwright dependency and Chrome at the
+stated executable, always with Playwright's disposable browser profile. A
+restricted automation sandbox may need its normal approval path to launch the
+Chrome child process; scope that approval to this owned loopback server and
+disposable store. Record executable, browser, viewports, URLs, visible text,
+screenshots, and boxes. Inspect both screenshots: the clicked
 earlier-days control reveals the historical heading/content with no sticky
 toolbar overlap; collapse/expand again at narrow width. Chrome or Playwright
 launch failure, including sandbox failure, is a setup gap and remains
@@ -197,8 +203,11 @@ The maintained consumer creates synthetic `presence-qa` fixtures and owns no
 process other than its Playwright browser. It drives `/capture`, `/entries`,
 `/entries/<id>`, and `/todos`, recording
 `$qa_root/screenshots/todos-classified.png` and
-`$qa_root/screenshots/todos-unclassified.png`. Expected JSON has
-`status: "pass"`, the four fixture IDs, and both screenshot paths.
+`$qa_root/screenshots/todos-unclassified.png`. Expected JSON has `status:
+"pass"`, the five fixture IDs, the Chrome executable and version, the tested
+viewport, preserved metadata fields, and both screenshot paths. The setup's
+`set -o pipefail` is required: without it, `tee` could turn a failing consumer
+into an apparent successful pipeline.
 
 Pass conditions: default `/todos` shows classified open fixtures and hides the
 done fixture; visible badges use Agent can handle, Needs us together, and I

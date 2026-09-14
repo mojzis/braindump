@@ -176,3 +176,23 @@ async def test_web_presence_selection_badge_and_unclassified_filter(monkeypatch,
         filtered = await client.get("/todos?presence=unclassified")
         assert "web unclassified" in filtered.text
         assert "web classified" not in filtered.text
+
+
+@pytest.mark.anyio
+async def test_web_presence_filter_survives_project_and_sort_links(monkeypatch, cfg):
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+    _todo(cfg, "web classified", presence="agent")
+    transport = httpx.ASGITransport(app=web_app)
+    async with (
+        web_app.router.lifespan_context(web_app),
+        httpx.AsyncClient(
+            transport=transport,
+            base_url=str(httpx.URL(scheme="http", host="presence-test")),
+        ) as client,
+    ):
+        composed = await client.get(
+            "/todos?presence=agent&project=alpha&tag=presence&sort=presence&dir=asc"
+        )
+        assert composed.status_code == 200
+        assert "sort=presence" in composed.text
+        assert "presence=agent" in composed.text
