@@ -30,6 +30,7 @@ from braindump.core.schema import (
     PRIORITIES,
     PROJECT_STATES,
     QA_RESULTS,
+    TODO_PRESENCES,
     TODO_STATUSES,
     Entry,
     dir_to_type,
@@ -561,7 +562,7 @@ def _validate_canonical_fields(
     _validate_relation_fields(cfg, entry_type, fields, relation_fields)
 
 
-def _validate_status_and_state(
+def _validate_status_and_state(  # noqa: PLR0912 -- canonical validation stays centralized
     entry_type: str,
     fields: dict[str, Any],
     *,
@@ -573,6 +574,12 @@ def _validate_status_and_state(
             raise ValueError("priority is only valid for todos and pitches")
         if priority not in PRIORITIES:
             raise ValueError(f"{entry_type} priority must be one of {list(PRIORITIES)}")
+    presence = fields.get("presence")
+    if presence is not None:
+        if entry_type != "todo":
+            raise ValueError("presence is only valid for todos")
+        if presence not in TODO_PRESENCES:
+            raise ValueError(f"todo presence must be one of {list(TODO_PRESENCES)}")
     coverage = fields.get("coverage")
     if coverage is not None:
         if entry_type != "pitch":
@@ -644,6 +651,7 @@ _MUTABLE_FIELDS = {
     "status",
     "subtype",
     "priority",
+    "presence",
     "coverage",
     "due_date",
     "category",
@@ -819,6 +827,8 @@ def _validate_patch(entry: Entry, patch: Mapping[str, Any]) -> set[str]:
     bad = set(patch) - _MUTABLE_FIELDS
     if bad:
         raise ValueError(f"cannot patch immutable fields: {sorted(bad)}")
+    if "presence" in patch and entry.type != "todo":
+        raise ValueError("presence is only valid for todos")
 
     relation_fields_for_type = set(RELATION_TARGET_TYPES.get(entry.type, {}))
     unsupported_relations = (

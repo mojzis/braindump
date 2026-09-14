@@ -186,6 +186,31 @@ the visible back link returns to /entries without raw JSON/blank page. If editin
 changed, edit/save/reload and record persistence. Returning to /todos with
 sort/filter state is #212's separate acceptance condition.
 
+## Todo presence classification
+
+For this phase, use the same disposable store, owned loopback server, and
+Chrome setup above. After exporting `QA_BASE_URL` and `QA_ROOT`, run:
+
+    uv run --frozen --no-sync python scripts/qa_todo_presence.py | tee "$qa_root/todo-presence.json"
+
+The maintained consumer creates synthetic `presence-qa` fixtures and owns no
+process other than its Playwright browser. It drives `/capture`, `/entries`,
+`/entries/<id>`, and `/todos`, recording
+`$qa_root/screenshots/todos-classified.png` and
+`$qa_root/screenshots/todos-unclassified.png`. Expected JSON has
+`status: "pass"`, the four fixture IDs, and both screenshot paths.
+
+Pass conditions: default `/todos` shows classified open fixtures and hides the
+done fixture; visible badges use Agent can handle, Needs us together, and I
+must do it; exact agent/together, unclassified, While I'm away, and Needs my
+time (together + personal) filters show the expected rows; project/tag/priority/
+lifecycle/search combinations remain active; edit selection persists after
+reload and clearing removes presence without changing body, input, tags,
+project, priority, or lifecycle status; `/entries` exposes the same filter and
+shortcuts. Inspect both PNGs before cleanup. Chrome launch failure leaves the
+browser route unverified. Cleanup remains the setup trap: stop only the server
+PID started for this `QA_ROOT`, then remove that disposable root.
+
 Journal pass: click the exact control, verify the effective-relative fixture,
 and inspect desktop/narrow screenshots. If autosave changed, edit today's text,
 wait, reload, verify; never click Parse.

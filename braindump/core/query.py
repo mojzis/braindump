@@ -25,6 +25,7 @@ from braindump.core.schema import (
     ALL_TYPE_DIRS,
     LEGACY_TODO_STATUSES,
     SETTLED_STATUSES,
+    TODO_PRESENCES,
     TODO_STATUSES,
     Entry,
     type_to_dir,
@@ -41,6 +42,9 @@ StatusFilter = Literal[
     "cancelled",
     "postponed",
     "active",
+]
+PresenceFilter = Literal[
+    "agent", "together", "personal", "unclassified", "needs-my-time"
 ]
 SortField = Literal["date", "priority"]
 SortDirection = Literal["asc", "desc"]
@@ -61,6 +65,7 @@ class SearchFilters:
     initiative_id: int | None = None
     pitch_id: int | None = None
     priority: str | None = None
+    presence: PresenceFilter | None = None
     coverage: str | None = None
     related_id: int | None = None
     related_type: str | None = None
@@ -89,10 +94,14 @@ def _created_date(entry: Entry) -> date | None:
         return None
 
 
-def _entry_matches_structural(entry: Entry, f: SearchFilters) -> bool:
+def _entry_matches_structural(  # noqa: PLR0911 -- each structural filter is explicit
+    entry: Entry, f: SearchFilters
+) -> bool:
     if not _entry_matches_relations(entry, f) or not _entry_matches_status(entry, f):
         return False
     if f.priority is not None and entry.priority != f.priority:
+        return False
+    if not _entry_matches_presence(entry, f.presence):
         return False
     if not _entry_matches_coverage(entry, f.coverage):
         return False
@@ -117,6 +126,27 @@ def _entry_matches_coverage(entry: Entry, coverage: str | None) -> bool:
     if coverage == "unaudited":
         return entry.type == "pitch" and entry.coverage is None
     return entry.coverage == coverage
+
+
+def _entry_matches_presence(entry: Entry, presence: str | None) -> bool:
+    if presence is None:
+        return True
+    _validate_presence(presence)
+    if entry.type != "todo":
+        return False
+    if presence == "unclassified":
+        return entry.presence is None
+    if presence == "needs-my-time":
+        return entry.presence in {"together", "personal"}
+    return entry.presence == presence
+
+
+def _validate_presence(presence: str | None) -> None:
+    if presence is None:
+        return
+    allowed = (*TODO_PRESENCES, "unclassified", "needs-my-time")
+    if presence not in allowed:
+        raise ValueError(f"presence must be one of {list(allowed)}")
 
 
 def _entry_matches_relations(entry: Entry, f: SearchFilters) -> bool:
@@ -221,6 +251,7 @@ def _sort_hits(hits: list[Hit], f: SearchFilters) -> None:
 
 def search(cfg: Config, f: SearchFilters) -> list[Hit]:
     _validate_sort(f)
+    _validate_presence(f.presence)
 
     words = _words(f.q or "")
     type_dirs = _normalize_types(f.types)

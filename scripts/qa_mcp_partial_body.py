@@ -53,7 +53,14 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
         await session.initialize()
         tool_list = await session.list_tools()
         tool_names = {tool.name for tool in tool_list.tools}
-        assert {"create", "show", "update"} <= tool_names
+        assert {
+            "create",
+            "show",
+            "update",
+            "clear_presence",
+            "list",
+            "search",
+        } <= tool_names
         update_tool = next(tool for tool in tool_list.tools if tool.name == "update")
         assert "edits" in json.dumps(update_tool.inputSchema)
         assert "body_revision" in json.dumps(update_tool.inputSchema)
@@ -70,7 +77,7 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
                 "title": "MCP partial QA",
                 "body": "first line\nsecond line\n😀 keep\nsecond line",
                 "original_input": "long original input stays indexed",
-                "type_fields": {"status": "pending"},
+                "type_fields": {"status": "pending", "presence": "agent"},
             },
         )
         entry_id = created["entry"]["id"]
@@ -79,6 +86,73 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
         revision = item["body_revision"]
         original_body = item["body"]
         assert item["entry"]["input"] == "long original input stays indexed"
+        assert item["entry"]["presence"] == "agent"
+
+        together = await call(
+            "create",
+            {
+                "entry_type": "todo",
+                "title": "MCP together presence",
+                "body": "together body",
+                "tags": ["presence-qa"],
+                "project": "presence-qa",
+                "type_fields": {"status": "pending", "presence": "together"},
+            },
+        )
+        unclassified = await call(
+            "create",
+            {
+                "entry_type": "todo",
+                "title": "MCP unclassified presence",
+                "body": "unclassified body",
+                "type_fields": {"status": "pending"},
+            },
+        )
+        together_id = together["entry"]["id"]
+        unclassified_id = unclassified["entry"]["id"]
+        assert [
+            hit["entry"]["id"]
+            for hit in await call(
+                "search", {"types": ["todo"], "presence": "needs-my-time"}
+            )
+        ] == [together_id]
+        assert [
+            hit["entry"]["id"]
+            for hit in await call(
+                "list", {"types": ["todo"], "presence": "unclassified"}
+            )
+        ] == [unclassified_id]
+
+        classified_before = await call("show", {"ids": [entry_id]})
+        await call("update", {"entry_id": entry_id, "patch": {"presence": "personal"}})
+        classified_after = await call("show", {"ids": [entry_id]})
+        assert classified_after["entries"][0]["entry"]["presence"] == "personal"
+        assert (
+            classified_after["entries"][0]["body"]
+            == classified_before["entries"][0]["body"]
+        )
+        assert (
+            classified_after["entries"][0]["entry"]["input"]
+            == classified_before["entries"][0]["entry"]["input"]
+        )
+        cleared = await call("clear_presence", {"entry_id": entry_id})
+        assert "presence" not in cleared
+        assert (
+            "presence"
+            not in (await call("show", {"ids": [entry_id]}))["entries"][0]["entry"]
+        )
+
+        invalid_create = await session.call_tool(
+            "create",
+            {"entry_type": "til", "title": "invalid presence", "presence": "agent"},
+        )
+        assert invalid_create.isError and "only valid for todos" in _text(
+            invalid_create
+        )
+        invalid_update = await session.call_tool(
+            "update", {"entry_id": together_id, "patch": {"presence": "invalid"}}
+        )
+        assert invalid_update.isError and "todo presence" in _text(invalid_update)
 
         receipt = await call(
             "update",

@@ -305,6 +305,9 @@ dialog::backdrop { background: rgba(44, 40, 31, 0.35); }
 .state-active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .state-paused { color: var(--muted); }
 .state-archived { color: var(--muted); text-decoration: line-through; }
+.presence-agent { border-color: #5b8c68; color: #376444; background: #eaf4ec; }
+.presence-together { border-color: #6684a8; color: #3f5f85; background: #edf3fa; }
+.presence-personal { border-color: #a47a53; color: #80582f; background: #fbf0e5; }
 .area-pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 11px; font-family: var(--mono); border: 1px solid var(--border-soft); background: var(--bg-tint); color: var(--muted); vertical-align: middle; }
 .project-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-bottom: 24px; }
 .project-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }

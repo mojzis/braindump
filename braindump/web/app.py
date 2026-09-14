@@ -37,7 +37,7 @@ from braindump.core import claude_cli, digest, entries, journal, projects, query
 from braindump.core import tags as tags_mod
 from braindump.core.config import Config, load_config
 from braindump.core.errors import BraindumpError, EntryNotFoundError, ReadOnlyStoreError
-from braindump.core.query import StatusFilter
+from braindump.core.query import PresenceFilter, StatusFilter
 from braindump.core.schema import (
     ALL_TYPES,
     LEGACY_TODO_STATUSES,
@@ -45,6 +45,8 @@ from braindump.core.schema import (
     PRIORITIES,
     PROJECT_STATES,
     SETTLED_STATUSES,
+    TODO_PRESENCE_LABELS,
+    TODO_PRESENCES,
     TODO_STATUSES,
     Entry,
     type_to_dir,
@@ -326,6 +328,8 @@ def _context(request: Request, **extra) -> dict:
         "request": request,
         "active_project": active,
         "all_types": list(ALL_TYPES),
+        "todo_presences": list(TODO_PRESENCES),
+        "presence_labels": TODO_PRESENCE_LABELS,
     }
     ctx.update(extra)
     return ctx
@@ -618,6 +622,7 @@ def capture_post(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917 -- one Form field 
     tech_stack: str = Form(""),
     status: str = Form(""),
     priority: str = Form(""),
+    presence: str = Form(""),
     coverage: str = Form(""),
     project_ids: str = Form(""),
     initiative_ids: str = Form(""),
@@ -657,6 +662,8 @@ def capture_post(  # noqa: PLR0912, PLR0913, PLR0915, PLR0917 -- one Form field 
         type_fields["status"] = "active"
     if priority.strip():
         type_fields["priority"] = priority.strip()
+    if presence.strip():
+        type_fields["presence"] = presence.strip()
     if coverage.strip():
         type_fields["coverage"] = coverage.strip()
     try:
@@ -732,6 +739,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     initiative_id: int | None = None,
     pitch_id: int | None = None,
     priority: str | None = None,
+    presence: str | None = None,
     coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
@@ -743,6 +751,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
     active = projects.get_active_project(cfg)
     proj_filter = None if all_projects else (project or active)
     priority = _strip_or_none(priority)
+    presence = _strip_or_none(presence)
     coverage = _strip_or_none(coverage)
     branch = _strip_or_none(branch)
     filters = query.SearchFilters(
@@ -755,6 +764,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
         initiative_id=initiative_id,
         pitch_id=pitch_id,
         priority=priority,
+        presence=cast(PresenceFilter, presence),
         coverage=coverage,
         related_id=related_id,
         related_type=related_type,
@@ -785,6 +795,7 @@ def entries_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; split
             initiative_id=initiative_id,
             pitch_id=pitch_id,
             priority=priority,
+            presence=presence,
             coverage=coverage,
             related_id=related_id,
             related_type=related_type or "",
@@ -944,6 +955,7 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
     area: str | None = Form(None),
     body: str | None = Form(None),
     priority: str | None = Form(None),
+    presence: str | None = Form(None),
     coverage: str | None = Form(None),
     initiative_id: str | None = Form(None),
     pitch_id: str | None = Form(None),
@@ -970,7 +982,11 @@ async def api_entry_update(  # noqa: PLR0912, PLR0913, PLR0917 -- one Form field
         patch["status"] = status
     if area is not None:
         patch["area"] = area.strip() or None
-    for key, raw in {"priority": priority, "coverage": coverage}.items():
+    for key, raw in {
+        "priority": priority,
+        "presence": presence,
+        "coverage": coverage,
+    }.items():
         if raw is not None or key in form:
             patch[key] = raw.strip() or None if raw else None
     for key, raw in {
@@ -1077,6 +1093,7 @@ _TODO_LIST = DedicatedListSpec(
         ("date", "date"),
         ("status", "status"),
         ("priority", "priority"),
+        ("presence", "presence"),
         ("project", "project"),
         ("title", "title"),
         ("tags", "tags"),
@@ -1084,7 +1101,7 @@ _TODO_LIST = DedicatedListSpec(
     search_placeholder="search todos…",
     singular_label="todo",
     plural_label="todos",
-    filter_controls=("priority",),
+    filter_controls=("priority", "presence"),
     lifecycle_controls=("all", "postponed"),
     settled_statuses=SETTLED_STATUSES,
 )
@@ -1123,12 +1140,14 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
     sort: str,
     direction: str,
     priority: str | None = None,
+    presence: str | None = None,
     show_all: bool = False,
     show_postponed: bool = False,
 ) -> dict:
     filters = set(spec.filter_controls)
     lifecycle = set(spec.lifecycle_controls)
     priority = _strip_or_none(priority)
+    presence = _strip_or_none(presence)
     sort = sort if sort in spec.sort_keys else "date"
     descending = direction != "asc"
     query_direction = (
@@ -1146,6 +1165,7 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
             project=project or None,
             tags=[tag] if tag else [],
             priority=priority if "priority" in filters else None,
+            presence=cast(PresenceFilter, presence) if "presence" in filters else None,
             status=status,
             sort="priority" if sort == "priority" else "date",
             direction=query_direction,
@@ -1182,6 +1202,7 @@ def _dedicated_list_context(  # noqa: PLR0913 -- one query param per filter; rou
         selected=project or "",
         tag=tag or "",
         priority=priority or "" if "priority" in filters else "",
+        presence=presence or "" if "presence" in filters else "",
         sort=sort,
         dir="desc" if descending else "asc",
         show_all=show_all if "all" in lifecycle else False,
@@ -1197,6 +1218,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
     project: str | None = None,
     tag: str | None = None,
     priority: str | None = None,
+    presence: str | None = None,
     sort: str = "date",
     direction: str = Query("desc", alias="dir"),
     show_all: bool = Query(False, alias="all"),
@@ -1212,6 +1234,7 @@ def todos_list(  # noqa: PLR0913, PLR0917 -- one query param per filter; splitti
             project=project,
             tag=tag,
             priority=priority,
+            presence=presence,
             sort=sort,
             direction=direction,
             show_all=show_all,

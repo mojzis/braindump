@@ -23,7 +23,7 @@ from typer_agentic import agent_errors
 from braindump.core import digest, entries, projects, query, store
 from braindump.core.config import load_config
 from braindump.core.errors import BraindumpError, storage_error
-from braindump.core.query import StatusFilter
+from braindump.core.query import PresenceFilter, StatusFilter
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     PROJECT_STATES,
@@ -143,6 +143,9 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    presence: str | None = typer.Option(
+        None, "--presence", help="Todo presence: agent, together, or personal"
+    ),
     coverage: str | None = typer.Option(
         None, "--coverage", help="Pitch coverage: uncovered, partial, or covered"
     ),
@@ -203,6 +206,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         for k, v in {
             "status": status,
             "priority": priority,
+            "presence": presence,
             "coverage": coverage,
             "subtype": subtype,
             "category": category,
@@ -316,6 +320,11 @@ def list_cmd(
     priority: str | None = typer.Option(
         None, "--priority", help="high, medium, or low"
     ),
+    presence: str | None = typer.Option(
+        None,
+        "--presence",
+        help="agent, together, personal, unclassified, or needs-my-time",
+    ),
     coverage: str | None = typer.Option(
         None,
         "--coverage",
@@ -338,6 +347,7 @@ def list_cmd(
                 pitch_id=pitch_id,
                 branch=branch,
                 priority=priority,
+                presence=cast(PresenceFilter, presence),
                 coverage=coverage,
                 sort=cast(query.SortField, sort),
                 direction=cast(query.SortDirection, direction),
@@ -403,6 +413,11 @@ def search(
     priority: str | None = typer.Option(
         None, "--priority", help="high, medium, or low"
     ),
+    presence: str | None = typer.Option(
+        None,
+        "--presence",
+        help="agent, together, personal, unclassified, or needs-my-time",
+    ),
     coverage: str | None = typer.Option(
         None,
         "--coverage",
@@ -430,6 +445,7 @@ def search(
                 related_type=related_type,
                 branch=branch,
                 priority=priority,
+                presence=cast(PresenceFilter, presence),
                 coverage=coverage,
                 sort=cast(query.SortField, sort),
                 direction=cast(query.SortDirection, direction),
@@ -464,6 +480,7 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
         "status",
         "subtype",
         "priority",
+        "presence",
         "due_date",
         "initiative_id",
         "pitch_id",
@@ -608,6 +625,10 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    presence: str | None = typer.Option(
+        None, "--presence", help="agent, together, personal, or empty to clear"
+    ),
+    clear_presence: bool = typer.Option(False, "--clear-presence"),
     coverage: str | None = typer.Option(None, "--coverage"),
     area: str | None = typer.Option(
         None, "--area", help="Project grouping (project type)"
@@ -647,6 +668,14 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
         patch["status"] = status
     if priority is not None:
         patch["priority"] = priority or None
+    if clear_presence and presence is not None:
+        raise typer.BadParameter(
+            "--presence and --clear-presence are mutually exclusive"
+        )
+    if clear_presence:
+        patch["presence"] = None
+    elif presence is not None:
+        patch["presence"] = presence or None
     if coverage is not None:
         patch["coverage"] = coverage or None
     if area is not None:
@@ -683,6 +712,19 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
     try:
         updated = BraindumpService(cfg).update(
             UpdateRequest(entry_id=entry_id, patch=patch, body=body)
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"updated: #{updated.id} {updated.file_path}")
+
+
+@app.command("clear-presence")
+def clear_presence(entry_id: int = typer.Argument(..., metavar="ID")):
+    """Clear a todo's presence classification."""
+    cfg = load_config()
+    try:
+        updated = BraindumpService(cfg).update(
+            UpdateRequest(entry_id=entry_id, patch={"presence": None})
         )
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc

@@ -2,7 +2,7 @@
 {% block title %}{{ plural_label }}{% endblock %}
 {% block body %}
 {# Shared link builder for dedicated lists; callers replace only the filter being changed. #}
-{% macro list_url(project=none, tag=none, priority=none, sort=none, dir=none) %}
+{% macro list_url(project=none, tag=none, priority=none, presence=none, sort=none, dir=none) %}
   {%- set parts = [] -%}
   {%- if q %}{% set _ = parts.append("q=" ~ q | urlencode) %}{% endif -%}
   {%- if show_all %}{% set _ = parts.append("all=1") %}{% endif -%}
@@ -10,6 +10,7 @@
   {%- if project %}{% set _ = parts.append("project=" ~ project | urlencode) %}{% endif -%}
   {%- if tag %}{% set _ = parts.append("tag=" ~ tag | urlencode) %}{% endif -%}
   {%- if priority %}{% set _ = parts.append("priority=" ~ priority | urlencode) %}{% endif -%}
+  {%- if presence %}{% set _ = parts.append("presence=" ~ presence | urlencode) %}{% endif -%}
   {%- if sort %}{% set _ = parts.append("sort=" ~ sort) %}{% endif -%}
   {%- if dir %}{% set _ = parts.append("dir=" ~ dir) %}{% endif -%}
   {{ list_path }}?{{ parts | join('&') }}
@@ -27,6 +28,16 @@
         <option value="low" {% if priority == "low" %}selected{% endif %}>low</option>
       </select>
     {% endif %}
+    {% if "presence" in filter_controls %}
+      <select name="presence">
+        <option value="">all presence</option>
+        <option value="agent" {% if presence == "agent" %}selected{% endif %}>While I’m away · Agent can handle</option>
+        <option value="together" {% if presence == "together" %}selected{% endif %}>Needs us together</option>
+        <option value="personal" {% if presence == "personal" %}selected{% endif %}>I must do it</option>
+        <option value="needs-my-time" {% if presence == "needs-my-time" %}selected{% endif %}>Needs my time</option>
+        <option value="unclassified" {% if presence == "unclassified" %}selected{% endif %}>unclassified</option>
+      </select>
+    {% endif %}
     <input type="hidden" name="sort" value="{{ sort }}" />
     <input type="hidden" name="dir" value="{{ dir }}" />
     <button type="submit">search</button>
@@ -41,7 +52,15 @@
     <span class="muted">{{ total }} {{ singular_label if total == 1 else plural_label }}</span>
   </form>
 
-  {% if q or selected or tag or priority or show_all or show_postponed %}
+  {% if "presence" in filter_controls %}
+    <nav class="presence-shortcuts" aria-label="todo presence shortcuts">
+      <a href="{{ list_url(project=selected, tag=tag, priority=priority, presence='agent', sort=sort, dir=dir) }}">While I’m away</a>
+      <a href="{{ list_url(project=selected, tag=tag, priority=priority, presence='needs-my-time', sort=sort, dir=dir) }}">Needs my time</a>
+      <a href="{{ list_url(project=selected, tag=tag, priority=priority, presence='unclassified', sort=sort, dir=dir) }}">unclassified</a>
+    </nav>
+  {% endif %}
+
+  {% if q or selected or tag or priority or presence or show_all or show_postponed %}
     <p class="muted active-filters">
       {% if q %}search <strong>{{ q }}</strong>{% endif %}
       {% if q and selected %} · {% endif %}
@@ -49,6 +68,7 @@
       {% if (q or selected) and tag %} · {% endif %}
       {% if tag %}tag <strong>{{ tag }}</strong>{% endif %}
       {% if priority %}{% if q or selected or tag %} · {% endif %}priority <strong>{{ priority }}</strong>{% endif %}
+      {% if presence %}{% if q or selected or tag or priority %} · {% endif %}presence <strong>{{ presence_labels.get(presence, presence) }}</strong>{% endif %}
       <a class="ghost-btn" href="{{ list_path }}?sort={{ sort | urlencode }}&amp;dir={{ dir | urlencode }}">clear filters</a>
     </p>
   {% endif %}
@@ -57,7 +77,7 @@
     <div class="todo-projects">
       {% for project, project_rows in grouped %}
         {% if project != "(none)" %}
-          <a href="{{ list_url(project=project, tag=tag, priority=priority, sort=sort, dir=dir) }}"
+          <a href="{{ list_url(project=project, tag=tag, priority=priority, presence=presence, sort=sort, dir=dir) }}"
              class="chip{% if project == selected %} active{% endif %}">{{ project }} <span class="count">{{ project_rows | length }}</span></a>
         {% else %}
           <span class="chip muted">(no project) <span class="count">{{ project_rows | length }}</span></span>
@@ -68,7 +88,7 @@
     {% macro th(key, label) %}
       {% set next_dir = "desc" if (sort == key and dir == "asc") else "asc" %}
       <th class="{% if sort == key %}sorted{% endif %}">
-        <a href="{{ list_url(project=selected, tag=tag, priority=priority, sort=key, dir=next_dir) }}">
+        <a href="{{ list_url(project=selected, tag=tag, priority=priority, presence=presence, sort=key, dir=next_dir) }}">
           {{ label }}{% if sort == key %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
         </a>
       </th>
@@ -102,9 +122,11 @@
             {% elif key == "tags" %}
               <td class="muted tags-cell">
                 {% for t in h.entry.tags %}
-                  <a href="{{ list_url(project=selected, tag=t, priority=priority, sort=sort, dir=dir) }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
+                  <a href="{{ list_url(project=selected, tag=t, priority=priority, presence=presence, sort=sort, dir=dir) }}">{{ t }}</a>{% if not loop.last %}, {% endif %}
                 {% endfor %}
               </td>
+            {% elif key == "presence" %}
+              <td>{% if h.entry.presence %}<span class="state-pill presence-{{ h.entry.presence }}">{{ presence_labels.get(h.entry.presence, h.entry.presence) }}</span>{% else %}<span class="muted">unclassified</span>{% endif %}</td>
             {% else %}
               <td>{{ h.entry|attr(key) or "" }}</td>
             {% endif %}
