@@ -51,7 +51,7 @@ dev = [
     "ruff>=0.16.5",
     "ty>=0.0.78",
     "vulture",
-    "biston>=0.7.0",
+    "biston>=0.7.3",
     "deptry",
     "poethepoet>=0.48.0",
     "madoqua>=0.2.3",
