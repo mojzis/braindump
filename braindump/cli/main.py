@@ -23,7 +23,7 @@ from typer_agentic import agent_errors
 from braindump.core import digest, entries, projects, query, store
 from braindump.core.config import load_config
 from braindump.core.errors import BraindumpError, storage_error
-from braindump.core.query import StatusFilter
+from braindump.core.query import PresenceFilter, StatusFilter
 from braindump.core.schema import (
     ALL_TYPE_DIRS,
     PROJECT_STATES,
@@ -113,10 +113,6 @@ def _parse_date(value: str | None) -> date | None:
     return date.fromisoformat(value)
 
 
-def _require_date(value: str) -> date:
-    return date.fromisoformat(value)
-
-
 def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
@@ -143,6 +139,9 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    presence: str | None = typer.Option(
+        None, "--presence", help="Todo presence: agent, together, or personal"
+    ),
     coverage: str | None = typer.Option(
         None, "--coverage", help="Pitch coverage: uncovered, partial, or covered"
     ),
@@ -203,6 +202,7 @@ def create(  # noqa: PLR0912 -- one option per supported entry field
         for k, v in {
             "status": status,
             "priority": priority,
+            "presence": presence,
             "coverage": coverage,
             "subtype": subtype,
             "category": category,
@@ -316,6 +316,11 @@ def list_cmd(
     priority: str | None = typer.Option(
         None, "--priority", help="high, medium, or low"
     ),
+    presence: str | None = typer.Option(
+        None,
+        "--presence",
+        help="agent, together, personal, unclassified, or needs-my-time",
+    ),
     coverage: str | None = typer.Option(
         None,
         "--coverage",
@@ -338,6 +343,7 @@ def list_cmd(
                 pitch_id=pitch_id,
                 branch=branch,
                 priority=priority,
+                presence=cast(PresenceFilter, presence),
                 coverage=coverage,
                 sort=cast(query.SortField, sort),
                 direction=cast(query.SortDirection, direction),
@@ -403,6 +409,11 @@ def search(
     priority: str | None = typer.Option(
         None, "--priority", help="high, medium, or low"
     ),
+    presence: str | None = typer.Option(
+        None,
+        "--presence",
+        help="agent, together, personal, unclassified, or needs-my-time",
+    ),
     coverage: str | None = typer.Option(
         None,
         "--coverage",
@@ -430,6 +441,7 @@ def search(
                 related_type=related_type,
                 branch=branch,
                 priority=priority,
+                presence=cast(PresenceFilter, presence),
                 coverage=coverage,
                 sort=cast(query.SortField, sort),
                 direction=cast(query.SortDirection, direction),
@@ -464,6 +476,7 @@ _TYPE_SPECIFIC_FIELDS: dict[str, list[str]] = {
         "status",
         "subtype",
         "priority",
+        "presence",
         "due_date",
         "initiative_id",
         "pitch_id",
@@ -568,18 +581,6 @@ def done(arg: str = typer.Argument(...)):
     typer.echo(f"done: #{updated.id} {updated.file_path}")
 
 
-def _record_qa_result(arg: str, result: str, run_ref: str | None) -> None:
-    cfg = load_config()
-    entry_id = _resolve_todo(cfg, arg)
-    try:
-        updated = entries.record_qa_result(cfg, entry_id, result, run_ref=run_ref)
-    except ValueError as exc:
-        raise typer.BadParameter(str(exc)) from exc
-    typer.echo(
-        f"qa: #{updated.id} {updated.qa_result} -> {updated.status} {updated.file_path}"
-    )
-
-
 @app.command("qa")
 @app.command("qa-result", hidden=True)
 def qa_result(
@@ -590,7 +591,15 @@ def qa_result(
     ),
 ):
     """Record a todo QA result and update its lifecycle status."""
-    _record_qa_result(arg, result, run_ref)
+    cfg = load_config()
+    entry_id = _resolve_todo(cfg, arg)
+    try:
+        updated = entries.record_qa_result(cfg, entry_id, result, run_ref=run_ref)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(
+        f"qa: #{updated.id} {updated.qa_result} -> {updated.status} {updated.file_path}"
+    )
 
 
 @app.command()
@@ -608,6 +617,10 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
         help="Todo status: pending, in-progress, in-qa, done, or cancelled",
     ),
     priority: str | None = typer.Option(None, "--priority"),
+    presence: str | None = typer.Option(
+        None, "--presence", help="agent, together, personal, or empty to clear"
+    ),
+    clear_presence: bool = typer.Option(False, "--clear-presence"),
     coverage: str | None = typer.Option(None, "--coverage"),
     area: str | None = typer.Option(
         None, "--area", help="Project grouping (project type)"
@@ -647,6 +660,14 @@ def update(  # noqa: PLR0912 -- one option per supported entry field
         patch["status"] = status
     if priority is not None:
         patch["priority"] = priority or None
+    if clear_presence and presence is not None:
+        raise typer.BadParameter(
+            "--presence and --clear-presence are mutually exclusive"
+        )
+    if clear_presence:
+        patch["presence"] = None
+    elif presence is not None:
+        patch["presence"] = presence or None
     if coverage is not None:
         patch["coverage"] = coverage or None
     if area is not None:
@@ -745,7 +766,7 @@ def journal_append(
     if not body.strip():
         typer.echo("No text to append.", err=True)
         raise typer.Exit(code=1)
-    d = _require_date(target_day) if target_day else None
+    d = date.fromisoformat(target_day) if target_day else None
     entry = BraindumpService(cfg).journal_append(body, d)
     output_day = d or entry.date
     typer.echo(f"appended: {output_day} words: {entry.word_count or 0}")
@@ -762,7 +783,7 @@ def journal_close():
 @journal_app.command("show")
 def journal_show(day: str = typer.Argument(..., help="YYYY-MM-DD")):
     cfg = load_config()
-    typer.echo(BraindumpService(cfg).journal_show(_require_date(day)))
+    typer.echo(BraindumpService(cfg).journal_show(date.fromisoformat(day)))
 
 
 # --- projects --------------------------------------------------------------

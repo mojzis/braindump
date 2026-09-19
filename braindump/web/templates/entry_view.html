@@ -30,6 +30,9 @@
     {% if entry.type in ("todo", "pitch") and entry.priority %}
       <span class="state-pill">priority {{ entry.priority }}</span>
     {% endif %}
+    {% if entry.type == "todo" and entry.presence %}
+      <span class="state-pill presence-{{ entry.presence }}">{{ presence_labels.get(entry.presence, entry.presence) }}</span>
+    {% endif %}
     {% if entry.type == "pitch" %}
       <span class="state-pill">coverage {{ entry.coverage or "unaudited" }}</span>
     {% endif %}

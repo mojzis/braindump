@@ -71,7 +71,7 @@ title. Journal files are the exception: one file per day at
 
 | Type | Fields |
 |------|--------|
-| **todo** | `subtype`, `status` (pending / in-progress / done), `priority` (high / medium / low), `due_date` |
+| **todo** | `subtype`, `status` (pending / in-progress / done), `priority` (high / medium / low), `presence` (agent / together / personal), `due_date` |
 | **til** | `category`, `source` |
 | **thought** | `mood`, `related_to` |
 | **prompt** | `prompt_type`, `model_target` |
@@ -112,6 +112,11 @@ source_path before a requested removal.
 QA receipts on todos contain qa_result (pass or fail), UTC qa_verified_at, and
 optional qa_run_ref. pass transitions in-qa to done; fail transitions it to
 in-progress. Detailed run history stays outside braindump.
+
+Todo `presence` is optional planning metadata: `agent` means **Agent can
+handle**, `together` means **Needs us together**, and `personal` means **I must
+do it**. Missing presence remains unclassified. It is independent of lifecycle
+status and the temporary needs-your-input state.
 
 ## Key conventions
 

@@ -19,6 +19,12 @@ EntryType = Literal[
 TODO_STATUSES = ("pending", "in-progress", "in-qa", "done", "cancelled")
 LEGACY_TODO_STATUSES = ("postponed",)
 PRIORITIES = ("high", "medium", "low")
+TODO_PRESENCES = ("agent", "together", "personal")
+TODO_PRESENCE_LABELS = {
+    "agent": "Agent can handle",
+    "together": "Needs us together",
+    "personal": "I must do it",
+}
 PITCH_COVERAGES = ("uncovered", "partial", "covered")
 QA_RESULTS = ("pass", "fail")
 PLANNING_STATUSES = ("active", "done")
@@ -85,6 +91,7 @@ class Entry(BaseModel):
     status: str | None = None
     subtype: str | None = None
     priority: str | None = None
+    presence: str | None = None
     due_date: str | None = None
     # til
     category: str | None = None

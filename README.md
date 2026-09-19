@@ -92,9 +92,9 @@ paths; there is no separate handoff lifecycle.
 
 - Dashboard (today's journal preview, open todos, recent activity, top tags, projects)
 - Daily journal editor with yesterday's content in a side panel, autosave, and a "finish the day" button (honors a configurable day cutoff, default `04:00`)
-- Quick-capture form
-- Searchable entry list with type/project/status/tag/date filters
-- Inline-edit for title, tags, project, status, and body
+- Quick-capture form with todo presence classification
+- Searchable entry list with type/project/status/tag/date and todo presence filters
+- Inline-edit for title, tags, project, status, presence, and body
 - Per-project dashboards with open todos, recent activity, and tag counts
 - Active-project focus mode applied across every view
 

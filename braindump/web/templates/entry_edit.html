@@ -25,6 +25,12 @@
           {% endif %}
         </select>
       </label>
+      <label>presence
+        <select name="presence">
+          <option value="">(unclassified)</option>
+          {% for p in todo_presences %}<option value="{{ p }}" {% if entry.presence == p %}selected{% endif %}>{{ presence_labels[p] }}</option>{% endfor %}
+        </select>
+      </label>
       <label>status
         <select name="status">
           {% for s in todo_statuses %}

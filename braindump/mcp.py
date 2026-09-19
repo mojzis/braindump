@@ -8,7 +8,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import date
 from enum import Enum
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar, cast
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -17,7 +17,12 @@ from pydantic import BaseModel
 
 from braindump.core.config import load_config
 from braindump.core.errors import BraindumpError
-from braindump.core.query import SortDirection, SortField, StatusFilter
+from braindump.core.query import (
+    PresenceFilter,
+    SortDirection,
+    SortField,
+    StatusFilter,
+)
 from braindump.service import (
     BraindumpService,
     CreateRequest,
@@ -122,6 +127,7 @@ def _search_request(
     initiative_id: int | None = None,
     pitch_id: int | None = None,
     priority: str | None = None,
+    presence: str | None = None,
     coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
@@ -145,6 +151,7 @@ def _search_request(
         initiative_id=initiative_id,
         pitch_id=pitch_id,
         priority=priority,
+        presence=cast(PresenceFilter, presence),
         coverage=coverage,
         related_id=related_id,
         related_type=related_type,
@@ -169,7 +176,11 @@ def create(
     original_input: str | None = None,
     branch: str | None = None,
     type_fields: dict[str, Any] | None = None,
+    presence: str | None = None,
 ) -> dict[str, Any]:
+    fields = dict(type_fields or {})
+    if presence is not None:
+        fields["presence"] = presence
     result = _service().create(
         CreateRequest(
             entry_type=entry_type,
@@ -180,7 +191,7 @@ def create(
             summary=summary,
             original_input=original_input,
             branch=branch,
-            type_fields=type_fields or {},
+            type_fields=fields,
         )
     )
     return _jsonable(result)
@@ -233,6 +244,7 @@ def search(
     initiative_id: int | None = None,
     pitch_id: int | None = None,
     priority: str | None = None,
+    presence: str | None = None,
     coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
@@ -257,6 +269,7 @@ def search(
             initiative_id=initiative_id,
             pitch_id=pitch_id,
             priority=priority,
+            presence=presence,
             coverage=coverage,
             related_id=related_id,
             related_type=related_type,
@@ -287,6 +300,7 @@ def list_entries(
     initiative_id: int | None = None,
     pitch_id: int | None = None,
     priority: str | None = None,
+    presence: str | None = None,
     coverage: str | None = None,
     related_id: int | None = None,
     related_type: str | None = None,
@@ -310,6 +324,7 @@ def list_entries(
             initiative_id=initiative_id,
             pitch_id=pitch_id,
             priority=priority,
+            presence=presence,
             coverage=coverage,
             related_id=related_id,
             related_type=related_type,
@@ -319,6 +334,15 @@ def list_entries(
         )
     )
     return [_jsonable(hit) for hit in hits]
+
+
+@_tool(
+    name="clear_presence",
+    description="Clear a todo's presence classification without changing other fields.",
+    annotations=_MUTATION,
+)
+def clear_presence(entry_id: int) -> dict[str, Any]:
+    return _jsonable(_service().update(UpdateRequest(entry_id, {"presence": None})))
 
 
 @_tool(

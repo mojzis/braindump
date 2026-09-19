@@ -17,7 +17,7 @@ from typing import Any
 from braindump.core import entries, journal, projects, query, store, tags
 from braindump.core.config import Config
 from braindump.core.errors import BraindumpError, MutuallyExclusiveBodyUpdateError
-from braindump.core.query import SortDirection, SortField, StatusFilter
+from braindump.core.query import PresenceFilter, SortDirection, SortField, StatusFilter
 from braindump.core.schema import ALL_TYPE_DIRS, Entry
 
 
@@ -55,6 +55,7 @@ class SearchRequest:
     initiative_id: int | None = None
     pitch_id: int | None = None
     priority: str | None = None
+    presence: PresenceFilter | None = None
     coverage: str | None = None
     related_id: int | None = None
     related_type: str | None = None
@@ -148,6 +149,7 @@ class BraindumpService:
             initiative_id=request.initiative_id,
             pitch_id=request.pitch_id,
             priority=request.priority,
+            presence=request.presence,
             coverage=request.coverage,
             related_id=request.related_id,
             related_type=request.related_type,

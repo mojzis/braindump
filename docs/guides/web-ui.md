@@ -58,9 +58,9 @@ the right-click menu still works.
 | `/` | Dashboard — today's journal preview, open todos, recent activity, top tags, projects |
 | `/journal` | The running doc: today's editor on top, the last ~7 days rendered below with lazy-load-on-scroll, autosave, `✳ parse`, and a "finish the day" button |
 | `/journal/<YYYY-MM-DD>` | Read-only permalink for a single past day |
-| `/capture` | Quick-capture form (type, title, body, tags, project, priority, and pitch coverage) |
-| `/entries` | Searchable / filterable list, including priority and pitch coverage |
-| `/entries/<id>` | View + edit-in-place (title, tags, project, status, body) |
+| `/capture` | Quick-capture form (type, title, body, tags, project, priority, pitch coverage, and todo presence) |
+| `/entries` | Searchable / filterable list, including priority, pitch coverage, and todo presence |
+| `/entries/<id>` | View + edit-in-place (title, tags, project, status, presence, body) |
 | `/projects`, `/projects/<name>` | Project inventory and per-project dashboards |
 | `/tags` | Tag analytics |
 
@@ -78,6 +78,11 @@ original Markdown source.
 Pitch coverage is entered and audited manually. Missing coverage is unaudited;
 `covered` asserts that each remaining deliverable has a linked Braindump todo or
 Linear ticket. The web UI does not calculate coverage or integrate with Linear.
+
+Todo presence uses the labels **Agent can handle**, **Needs us together**, and
+**I must do it** for the stored values `agent`, `together`, and `personal`.
+The `/todos` and `/entries` lists provide exact, unclassified, **While I’m
+away** (`agent`), and **Needs my time** (`together` + `personal`) filters.
 
 Cockpit-facing state remains local and minimal. A todo in in-qa can receive a
 pass/fail receipt through bd qa; the durable fields are qa_result,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime
 
@@ -594,6 +595,97 @@ def test_delete_entry_moves_file_to_trash(cfg):
     assert store.read_index(cfg, "todos") == []
     trashed = list((cfg.trash_dir / "todos").rglob("*.md"))
     assert len(trashed) == 1
+
+
+def _create_same_title(cfg, n: int) -> list[entries.CreateResult]:
+    return [
+        entries.create_entry(
+            cfg, "todos", "Same title", f"body {i}", project=f"p{i}", now=_fake_now()
+        )
+        for i in range(n)
+    ]
+
+
+def test_same_title_same_minute_gets_suffixed_file_names(cfg):
+    """Regression #200: a loop of same-title creates all shared one file."""
+    created = _create_same_title(cfg, 13)
+
+    stem = "2026/04/same-title--2026-04-11-1415"
+    expected = [f"{stem}.md"] + [f"{stem}-{n}.md" for n in range(2, 14)]
+    assert [r.entry.file_path for r in created] == expected
+    assert [e.file_path for e in store.read_index(cfg, "todos")] == expected
+
+
+def test_same_title_same_minute_keeps_every_body(cfg):
+    """Regression #200: each create overwrote the previous entry's markdown."""
+    created = _create_same_title(cfg, 13)
+
+    on_disk = [store.read_markdown(r.full_path) for r in created]
+    assert [fm["project"] for fm, _ in on_disk] == [f"p{i}" for i in range(13)]
+    assert all(f"body {i}" in body for i, (_, body) in enumerate(on_disk))
+
+
+def test_concurrent_same_title_creates_never_share_a_file(cfg):
+    def create(i: int) -> entries.CreateResult:
+        return entries.create_entry(
+            cfg, "todos", "Race", f"body {i}", project=f"p{i}", now=_fake_now()
+        )
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        created = list(pool.map(create, range(24)))
+
+    assert len({r.entry.file_path for r in created}) == 24
+    for i, r in enumerate(created):
+        assert f"body {i}" in store.read_markdown(r.full_path)[1]
+
+
+def test_delete_succeeds_when_the_file_is_already_gone(cfg):
+    r = entries.create_entry(cfg, "todos", "t", "b", project="p", now=_fake_now())
+    r.full_path.unlink()
+
+    entries.delete_entry(cfg, r.entry.id)
+
+    assert store.read_index(cfg, "todos") == []
+
+
+def test_create_skips_a_name_a_stale_row_still_owns(cfg):
+    """A row whose file went missing keeps its name; don't hand it out again."""
+    stale = entries.create_entry(cfg, "todos", "t", "old", now=_fake_now())
+    stale.full_path.unlink()
+
+    fresh = entries.create_entry(cfg, "todos", "t", "new", now=_fake_now())
+
+    assert fresh.entry.file_path == "2026/04/t--2026-04-11-1415-2.md"
+    assert not stale.full_path.exists()
+
+
+def test_trash_keeps_an_earlier_file_of_the_same_name(cfg):
+    first = entries.create_entry(cfg, "todos", "t", "first", now=_fake_now())
+    entries.delete_entry(cfg, first.entry.id)
+    second = entries.create_entry(cfg, "todos", "t", "second", now=_fake_now())
+    entries.delete_entry(cfg, second.entry.id)
+
+    trash = cfg.trash_dir / "todos" / "2026" / "04"
+    assert "first" in (trash / "t--2026-04-11-1415.md").read_text()
+    assert "second" in (trash / "t--2026-04-11-1415-2.md").read_text()
+
+
+def test_delete_keeps_a_file_another_row_still_points_at(cfg):
+    """Rows left sharing one file by the pre-#200 collision: trash it last."""
+    a = entries.create_entry(cfg, "todos", "t", "a", project="p", now=_fake_now())
+    b = entries.create_entry(cfg, "todos", "t", "b", project="q", now=_fake_now())
+    shared = [
+        a.entry,
+        b.entry.model_copy(update={"file_path": a.entry.file_path}),
+    ]
+    store.rewrite_index_atomic(cfg, "todos", shared)
+
+    entries.delete_entry(cfg, a.entry.id)
+    assert a.full_path.exists()
+
+    entries.delete_entry(cfg, b.entry.id)
+    assert not a.full_path.exists()
+    assert store.read_index(cfg, "todos") == []
 
 
 def test_create_drops_a_tag_that_repeats_the_project(cfg):

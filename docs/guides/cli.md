@@ -27,7 +27,7 @@ bd app   [--host 127.0.0.1] [--port 8765]   # native Journal + Todos windows
 ## Creating entries
 
 ```bash
-bd create todo "Fix auth bug" --tag auth --tag bug --priority high
+bd create todo "Fix auth bug" --tag auth --tag bug --priority high --presence agent
 ```
 
 The **body** is read from stdin unless you pass `--body-file`:
@@ -45,6 +45,7 @@ Common options:
 | `--summary`, `-s` | One-line summary |
 | `--status` | For todos: `pending`, `in-progress`, `done` |
 | `--priority` | For todos and pitches: `high`, `medium`, or `low` |
+| `--presence` | For todos: `agent`, `together`, or `personal` |
 | `--coverage` | For pitches: `uncovered`, `partial`, or `covered` |
 | `--due-date` | For todos (`YYYY-MM-DD`) |
 | `--body-file` | Read the body from a file instead of stdin |
@@ -86,6 +87,8 @@ bd search auth login --status open        # open todos mentioning both words
 bd search --tag auth --since 2026-01-01   # filter without a text query
 bd search parse --type til --human        # human-readable instead of JSON
 bd search --coverage unaudited            # pitches with no persisted coverage
+bd list todo --presence unclassified      # todos without a classification
+bd search --type todo --presence needs-my-time  # together + personal todos
 ```
 
 | Option | Purpose |
@@ -94,6 +97,7 @@ bd search --coverage unaudited            # pitches with no persisted coverage
 | `--project`, `-p` / `--all` | Scope to a project / ignore the active focus |
 | `--status` | `open`, `done`, or `all` (default `all`) |
 | `--priority` | Filter todos or pitches by `high`, `medium`, or `low` |
+| `--presence` | Filter todos by an exact value, `unclassified`, or `needs-my-time` |
 | `--coverage` | Filter pitches by `unaudited` (absent), `uncovered`, `partial`, or `covered` |
 | `--sort` / `--direction` | Sort by `date` or `priority`, ascending or descending |
 | `--tag`, `-t` | Require a tag (repeatable) |
@@ -110,6 +114,8 @@ bd done "auth bug"               # … or by query …
 bd done 2026/01/fix-auth-bug--2026-01-21-1430.md   # … or by file path
 
 bd update 42 --tags a,b --project foo --status in-progress
+bd update 42 --presence together
+bd update 42 --clear-presence
 bd update 42 --body              # replace the body from stdin
 bd delete 42                     # soft-delete → moves to ~/braindump/.trash/
 ```

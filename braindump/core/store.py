@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Container, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -55,6 +55,35 @@ def file_stem(slug: str, when: datetime) -> str:
 
 def date_path(when: datetime) -> str:
     return when.strftime("%Y/%m")
+
+
+def claim_unique_path(
+    directory: Path, stem: str, suffix: str = ".md", *, reserved: Container[str] = ()
+) -> Path:
+    """Create and return an empty, previously nonexistent `<stem><suffix>`.
+
+    Two entries with the same title created in the same minute share a stem,
+    so on collision this falls back to `<stem>-2<suffix>`, `<stem>-3<suffix>`,
+    ... — the stamp stays intact and the `--` title separator unambiguous.
+    Each candidate is claimed with an exclusive create (`O_EXCL`), so
+    concurrent creators (two `bd` processes, the web UI, a loop) can never
+    both win the same name. Names in `reserved` are skipped even when absent
+    on disk (an index row whose file went missing still owns its name). The
+    caller then fills the placeholder, and should unlink it if that fails.
+    """
+    with _guard(directory, "write"):
+        directory.mkdir(parents=True, exist_ok=True)
+        n = 0
+        while True:
+            n += 1
+            name = f"{stem}{suffix}" if n == 1 else f"{stem}-{n}{suffix}"
+            if name in reserved:
+                continue
+            try:
+                (directory / name).open("x").close()
+            except FileExistsError:
+                continue
+            return directory / name
 
 
 # --- error translation -----------------------------------------------------
@@ -442,11 +471,26 @@ def full_path_for(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
     return cfg.type_dir(type_to_dir(type_or_dir)) / rel_file_path
 
 
-def move_to_trash(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path:
+def move_to_trash(cfg: Config, type_or_dir: str, rel_file_path: str) -> Path | None:
+    """Move an entry's markdown into `.trash/`; None when it is already gone.
+
+    An earlier trashed file of the same name is kept: the new one gets the
+    next free `-N` suffix instead of overwriting it.
+    """
     src = full_path_for(cfg, type_or_dir, rel_file_path)
-    dst = cfg.trash_dir / type_to_dir(type_or_dir) / rel_file_path
-    with _guard(dst, "write"):
-        dst.parent.mkdir(parents=True, exist_ok=True)
+    if not src.exists():
+        return None
+    rel = Path(rel_file_path)
+    dst = claim_unique_path(
+        cfg.trash_dir / type_to_dir(type_or_dir) / rel.parent, rel.stem, rel.suffix
+    )
     with _guard(src, "delete"):
-        shutil.move(str(src), str(dst))
+        try:
+            shutil.move(str(src), str(dst))
+        except FileNotFoundError:
+            dst.unlink(missing_ok=True)
+            return None
+        except BaseException:
+            dst.unlink(missing_ok=True)
+            raise
     return dst

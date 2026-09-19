@@ -177,6 +177,19 @@ def test_create_echoes_the_new_id(tmp_path, monkeypatch):
     assert "Fix auth bug" in shown.output
 
 
+def test_delete_with_missing_file_drops_the_row(tmp_path, monkeypatch):
+    """Regression #200: `bd delete` failed once the markdown was already gone."""
+    cfg = _make_cfg(tmp_path)
+    r = _create_todo(cfg)
+    r.full_path.unlink()
+    monkeypatch.setenv("BRAINDUMP_DIR", str(cfg.home))
+
+    res = runner.invoke(app, ["delete", str(r.entry.id)])
+
+    assert res.exit_code == 0
+    assert runner.invoke(app, ["doctor"]).exit_code == 0
+
+
 def test_done_and_update_echo_the_id(tmp_path, monkeypatch):
     cfg = _make_cfg(tmp_path)
     eid = _create_todo(cfg).entry.id

@@ -25,6 +25,14 @@
       <option value="medium" {% if priority == "medium" %}selected{% endif %}>medium</option>
       <option value="low" {% if priority == "low" %}selected{% endif %}>low</option>
     </select>
+    <select name="presence">
+      <option value="">all presence</option>
+      <option value="agent" {% if presence == "agent" %}selected{% endif %}>While I’m away · Agent can handle</option>
+      <option value="together" {% if presence == "together" %}selected{% endif %}>Needs us together</option>
+      <option value="personal" {% if presence == "personal" %}selected{% endif %}>I must do it</option>
+      <option value="needs-my-time" {% if presence == "needs-my-time" %}selected{% endif %}>Needs my time</option>
+      <option value="unclassified" {% if presence == "unclassified" %}selected{% endif %}>unclassified</option>
+    </select>
     <select name="coverage">
       <option value="">all coverage</option>
       <option value="unaudited" {% if coverage == "unaudited" %}selected{% endif %}>unaudited</option>
@@ -46,6 +54,12 @@
     <button type="submit">filter</button>
   </form>
 
+  <nav class="presence-shortcuts" aria-label="todo presence shortcuts">
+    <a href="{{ request.url.include_query_params(type='todo', presence='agent') }}">While I’m away</a>
+    <a href="{{ request.url.include_query_params(type='todo', presence='needs-my-time') }}">Needs my time</a>
+    <a href="{{ request.url.include_query_params(type='todo', presence='unclassified') }}">unclassified todos</a>
+  </nav>
+
   {% if hits %}
     <table class="entries-table">
       <thead>
@@ -56,7 +70,7 @@
               priority{% if sort == "priority" %} {{ "▲" if dir == "asc" else "▼" }}{% endif %}
             </a>
           </th>
-          <th>coverage</th><th>title</th><th>project</th><th>branch</th><th>tags</th></tr>
+          <th>coverage</th><th>presence</th><th>title</th><th>project</th><th>branch</th><th>tags</th></tr>
       </thead>
       <tbody>
       {% for h in hits %}
@@ -67,6 +81,7 @@
           <td>{{ h.entry.status or "" }}</td>
           <td>{{ h.entry.priority or "" }}</td>
           <td>{{ h.entry.coverage or ("unaudited" if h.entry.type == "pitch" else "") }}</td>
+          <td>{% if h.entry.type == "todo" and h.entry.presence %}<span class="state-pill presence-{{ h.entry.presence }}">{{ presence_labels.get(h.entry.presence, h.entry.presence) }}</span>{% elif h.entry.type == "todo" %}<span class="muted">unclassified</span>{% endif %}</td>
           <td><a href="/entries/{{ h.entry.id }}">{{ h.entry.title }}</a></td>
           <td>{{ h.entry.project or "" }}</td>
           <td>{{ h.entry.branch or "" }}</td>

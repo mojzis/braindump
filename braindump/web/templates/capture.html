@@ -53,6 +53,13 @@
       </select>
     </label>
 
+    <label id="field-presence">presence
+      <select name="presence" id="presence-select">
+        <option value="">(unclassified)</option>
+        {% for p in todo_presences %}<option value="{{ p }}">{{ presence_labels[p] }}</option>{% endfor %}
+      </select>
+    </label>
+
     <label id="field-coverage">pitch coverage
       <select name="coverage" id="coverage-select">
         <option value="">(unaudited)</option>
@@ -137,6 +144,8 @@
     var projRef = document.getElementById("field-project");
   var status = document.getElementById("field-status");
   var priority = document.getElementById("field-priority");
+  var presence = document.getElementById("field-presence");
+  var presenceSelect = document.getElementById("presence-select");
   var coverage = document.getElementById("field-coverage");
   var prioritySelect = document.getElementById("priority-select");
   var coverageSelect = document.getElementById("coverage-select");
@@ -149,9 +158,12 @@
     projRef.style.display = isProject ? "none" : "";
     status.style.display = isProject ? "none" : "";
     var priorityApplies = sel.value === "todo" || sel.value === "pitch";
+    var presenceApplies = sel.value === "todo";
     var coverageApplies = sel.value === "pitch";
     priority.style.display = priorityApplies ? "" : "none";
     prioritySelect.disabled = !priorityApplies;
+    presence.style.display = presenceApplies ? "" : "none";
+    presenceSelect.disabled = !presenceApplies;
     coverage.style.display = coverageApplies ? "" : "none";
     coverageSelect.disabled = !coverageApplies;
     relationFields.style.display = (sel.value === "initiative" || sel.value === "pitch" || sel.value === "todo") ? "" : "none";
