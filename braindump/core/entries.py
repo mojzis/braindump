@@ -532,11 +532,6 @@ def resolve_entry(
     return entry
 
 
-def resolve_relation(cfg: Config, entry_id: int, expected_type: str) -> Entry | None:
-    """Resolve one typed relation, returning None for stale or wrong links."""
-    return resolve_entry(cfg, entry_id, expected_type)
-
-
 def resolve_relations(cfg: Config, entry: Entry, field: str) -> list[Entry | None]:
     """Resolve all IDs in a canonical relation, retaining missing slots.
 
@@ -550,7 +545,7 @@ def resolve_relations(cfg: Config, entry: Entry, field: str) -> list[Entry | Non
     if raw_ids is None:
         return []
     ids = raw_ids if isinstance(raw_ids, list) else [raw_ids]
-    return [resolve_relation(cfg, relation_id, expected_type) for relation_id in ids]
+    return [resolve_entry(cfg, relation_id, expected_type) for relation_id in ids]
 
 
 def relation_target_ids(entry: Entry, field: str) -> list[int]:

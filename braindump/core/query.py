@@ -338,13 +338,10 @@ def related_entries(
     cfg: Config,
     relation_type: str,
     relation_id: int,
-    *,
-    types: Iterable[str] = (),
 ) -> list[Hit]:
     """List entries carrying a typed relation, including links to missing IDs."""
-    type_dirs = _normalize_types(types)
     hits: list[Hit] = []
-    for type_dir in type_dirs:
+    for type_dir in ALL_TYPE_DIRS:
         hits.extend(
             Hit(entry=entry, source="index", type_dir=type_dir)
             for entry in store.read_index(cfg, type_dir)
@@ -360,14 +357,12 @@ def related_entries(
 def list_recent(
     cfg: Config,
     *,
-    types: Iterable[str] = (),
     project: str | None = None,
     limit: int = 10,
 ) -> list[Hit]:
     return search(
         cfg,
         SearchFilters(
-            types=list(types),
             project=project,
             status="all",
             limit=limit,
