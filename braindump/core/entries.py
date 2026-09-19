@@ -448,13 +448,10 @@ def _create_entry_locked(  # noqa: PLR0913
     slug = store.slugify(title)
     stem = store.file_stem(slug, now)
     rel_dir = store.date_path(now)
-    rel_file_path = f"{rel_dir}/{stem}.md"
-    full_path = store.full_path_for(cfg, type_dir, rel_file_path)
 
     entry_fields: dict[str, Any] = {
         "type": canonical_type,
         "title": title,
-        "file_path": rel_file_path,
         "created_at": created_at,
         "tags": drop_self_project_tag(tags, project),
     }
@@ -472,13 +469,30 @@ def _create_entry_locked(  # noqa: PLR0913
         entry_fields["status"] = "pending"
 
     _validate_canonical_fields(cfg, canonical_type, entry_fields)
-    entry_fields["id"] = store.next_id(cfg)
-    entry = Entry.model_validate(entry_fields)
+    # Claim the filename before anything else is committed: same title in the
+    # same minute means the same stem, and the claim is what disambiguates it.
+    # Names still owned by an index row are skipped even if their file is
+    # gone, so a new entry never inherits a stale row's path.
+    taken = {
+        e.file_path.rpartition("/")[2]
+        for e in store.read_index(cfg, type_dir)
+        if e.file_path.startswith(f"{rel_dir}/")
+    }
+    full_path = store.claim_unique_path(
+        store.full_path_for(cfg, type_dir, rel_dir), stem, reserved=taken
+    )
+    try:
+        entry_fields["file_path"] = f"{rel_dir}/{full_path.name}"
+        entry_fields["id"] = store.next_id(cfg)
+        entry = Entry.model_validate(entry_fields)
 
-    frontmatter = _frontmatter_from_entry(entry)
-    full_body = wrap_with_original(body, original_input)
-    md_text = store.build_markdown(frontmatter, title, full_body)
-    store.atomic_write_text(full_path, md_text)
+        frontmatter = _frontmatter_from_entry(entry)
+        full_body = wrap_with_original(body, original_input)
+        md_text = store.build_markdown(frontmatter, title, full_body)
+        store.atomic_write_text(full_path, md_text)
+    except BaseException:
+        full_path.unlink(missing_ok=True)
+        raise
     store._append_index_locked(cfg, type_dir, entry)
     return CreateResult(entry=entry, full_path=full_path)
 
@@ -922,14 +936,20 @@ def record_qa_result(
 
 
 def delete_entry(cfg: Config, entry_id: int) -> Entry:
-    """Soft delete: move the markdown file to .trash/ and drop the index line."""
+    """Soft delete: move the markdown file to .trash/ and drop the index line.
+
+    The index line goes even when the file is already missing, and a file
+    another index line still points at stays put — both are left behind by
+    the pre-#200 same-title-same-minute filename collision.
+    """
     with store.mutation_lock(cfg):
         found = find_by_id(cfg, entry_id)
         if found is None:
             raise EntryNotFoundError(entry_id)
         type_dir, entry = found
 
-        store.move_to_trash(cfg, type_dir, entry.file_path)
         remaining = [e for e in store.read_index(cfg, type_dir) if e.id != entry_id]
+        if not any(e.file_path == entry.file_path for e in remaining):
+            store.move_to_trash(cfg, type_dir, entry.file_path)
         store._rewrite_index_atomic_locked(cfg, type_dir, remaining)
         return entry
