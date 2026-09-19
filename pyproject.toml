@@ -48,7 +48,7 @@ dev = [
     "pytest-cov",
     "freezegun>=1.5.5",
     "httpx>=0.28.1",
-    "ruff>=0.16.5",
+    "ruff>=0.16.8",
     "ty>=0.0.81",
     "vulture",
     "biston>=0.7.3",
