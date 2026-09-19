@@ -6,6 +6,7 @@ from datetime import datetime
 
 import httpx
 import pytest
+from mcp.types import CallToolResult
 from typer.testing import CliRunner
 
 from braindump.cli.main import app
@@ -130,7 +131,10 @@ def test_service_cli_and_mcp_presence_contract(cfg, monkeypatch):
     assert "presence" not in json.loads(cli_show.stdout)
 
     async def call(name, arguments):
-        _content, structured = await mcp.call_tool(name, arguments)
+        result = await mcp.call_tool(name, arguments)
+        if not isinstance(result, CallToolResult):
+            raise TypeError(f"unexpected MCP result: {result!r}")
+        structured = result.structured_content
         return (
             structured.get("result", structured)
             if isinstance(structured, dict)
