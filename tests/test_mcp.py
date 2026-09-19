@@ -6,6 +6,7 @@ import asyncio
 import json
 
 import pytest
+from mcp.types import CallToolResult
 from typer.testing import CliRunner
 
 from braindump.cli.main import app
@@ -13,7 +14,9 @@ from braindump.mcp import mcp
 
 
 def call_tool(name, arguments):
-    _content, structured = asyncio.run(mcp.call_tool(name, arguments))
+    result = asyncio.run(mcp.call_tool(name, arguments))
+    assert isinstance(result, CallToolResult)
+    structured = result.structured_content
     return (
         structured.get("result", structured)
         if isinstance(structured, dict)

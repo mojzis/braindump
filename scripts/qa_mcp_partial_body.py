@@ -27,10 +27,10 @@ def _text(result) -> str:
 
 
 def _payload(result):
-    if result.isError:
+    if result.is_error:
         text = result.content[0].text if result.content else "MCP tool error"
         raise AssertionError(text)
-    structured = result.structuredContent
+    structured = result.structured_content
     if isinstance(structured, dict) and "result" in structured:
         return structured["result"]
     if structured:
@@ -55,8 +55,8 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
         tool_names = {tool.name for tool in tool_list.tools}
         assert {"create", "show", "update"} <= tool_names
         update_tool = next(tool for tool in tool_list.tools if tool.name == "update")
-        assert "edits" in json.dumps(update_tool.inputSchema)
-        assert "body_revision" in json.dumps(update_tool.inputSchema)
+        assert "edits" in json.dumps(update_tool.input_schema)
+        assert "body_revision" in json.dumps(update_tool.input_schema)
 
         async def call(name: str, arguments: dict[str, object]):
             if name == "update":
@@ -115,7 +115,7 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
                 "edits": [{"match": "FIRST", "replacement": "stale"}],
             },
         )
-        assert stale.isError and "stale body revision" in _text(stale)
+        assert stale.is_error and "stale body revision" in _text(stale)
 
         current = after["entries"][0]["body_revision"]
         intervening = await call(
@@ -136,7 +136,7 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
                 "edits": [{"match": "second line", "replacement": "stale"}],
             },
         )
-        assert stale_after_intervening.isError
+        assert stale_after_intervening.is_error
         assert "stale body revision" in _text(stale_after_intervening)
 
         params_for_clients = StdioServerParameters(
@@ -184,10 +184,10 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
                     for client in concurrent_sessions
                 )
             )
-            assert sum(not result.isError for result in concurrent_updates) == 1
-            assert sum(result.isError for result in concurrent_updates) == 1
+            assert sum(not result.is_error for result in concurrent_updates) == 1
+            assert sum(result.is_error for result in concurrent_updates) == 1
             assert any(
-                result.isError and "stale body revision" in _text(result)
+                result.is_error and "stale body revision" in _text(result)
                 for result in concurrent_updates
             )
 
@@ -249,8 +249,8 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
             update_result, create_result = await asyncio.gather(
                 blocked_update, blocked_create
             )
-            assert not update_result.isError
-            assert not create_result.isError
+            assert not update_result.is_error
+            assert not create_result.is_error
             unrelated_id = _payload(create_result)["entry"]["id"]
             preserved = await call("show", {"ids": [entry_id, unrelated_id]})
             assert {item["entry"]["id"] for item in preserved["entries"]} == {
@@ -260,7 +260,7 @@ async def journey(store_dir: Path) -> dict[str, object]:  # noqa: PLR0915
 
         async def expected_error(arguments: dict[str, object], text: str) -> None:
             failed = await session.call_tool("update", arguments)
-            assert failed.isError and text in _text(failed)
+            assert failed.is_error and text in _text(failed)
 
         final_state = await call("show", {"ids": [entry_id]})
         current = final_state["entries"][0]["body_revision"]

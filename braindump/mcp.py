@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import functools
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import date
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel
 
 from braindump.core.config import load_config
+from braindump.core.errors import BraindumpError
 from braindump.core.query import SortDirection, SortField, StatusFilter
 from braindump.service import (
     BraindumpService,
@@ -22,32 +25,65 @@ from braindump.service import (
     UpdateRequest,
 )
 
-mcp = FastMCP(
+mcp = MCPServer(
     "Braindump",
     instructions="All tools use the same application service as the bd CLI.",
 )
 
 _READ = ToolAnnotations(
-    readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
+    read_only_hint=True,
+    destructive_hint=False,
+    idempotent_hint=True,
+    open_world_hint=False,
 )
 _MUTATION = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=False,
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
+    open_world_hint=False,
 )
 _CREATE = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=False,
-    openWorldHint=False,
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=False,
+    open_world_hint=False,
 )
 _APPEND = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=False,
-    openWorldHint=False,
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=False,
+    open_world_hint=False,
 )
+
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def _tool(
+    *, name: str, description: str, annotations: ToolAnnotations
+) -> Callable[[Callable[_P, _R]], Callable[_P, _R]]:
+    """Register an MCP tool whose anticipated failures reach the client verbatim.
+
+    mcp 2.x hides the text of any exception other than ``ToolError`` behind a
+    generic "Error executing tool <name>". Service validation failures
+    (``BraindumpError``, ``ValueError``) are the caller's to read and correct,
+    as the CLI reports them, so they are re-raised as ``ToolError``; anything
+    else stays an opaque crash.
+    """
+
+    def decorate(fn: Callable[_P, _R]) -> Callable[_P, _R]:
+        @functools.wraps(fn)
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+            try:
+                return fn(*args, **kwargs)
+            except (BraindumpError, ValueError) as exc:
+                raise ToolError(str(exc)) from exc
+
+        mcp.tool(name=name, description=description, annotations=annotations)(wrapper)
+        return wrapper
+
+    return decorate
 
 
 def _jsonable(value: Any) -> Any:
@@ -118,7 +154,7 @@ def _search_request(
     )
 
 
-@mcp.tool(
+@_tool(
     name="create",
     description="Create an entry through the shared braindump service.",
     annotations=_CREATE,
@@ -150,7 +186,7 @@ def create(
     return _jsonable(result)
 
 
-@mcp.tool(
+@_tool(
     name="show",
     description=(
         "Show entries by numeric ID, including authored markdown bodies and a "
@@ -176,7 +212,7 @@ def show(ids: list[int]) -> dict[str, Any]:
     }
 
 
-@mcp.tool(
+@_tool(
     name="search",
     description="Search entries with the same filters as bd search.",
     annotations=_READ,
@@ -232,7 +268,7 @@ def search(
     return [_jsonable(hit) for hit in hits]
 
 
-@mcp.tool(
+@_tool(
     name="list",
     description="List entries with the same filters as bd list.",
     annotations=_READ,
@@ -285,7 +321,7 @@ def list_entries(
     return [_jsonable(hit) for hit in hits]
 
 
-@mcp.tool(
+@_tool(
     name="update",
     description=(
         "Patch metadata or replace the authored body. For partial edits, pass "
@@ -315,7 +351,7 @@ def update(
     )
 
 
-@mcp.tool(
+@_tool(
     name="done",
     description="Mark a todo done by ID, file path, or unique open-todo query.",
     annotations=_MUTATION,
@@ -324,7 +360,7 @@ def done(arg: int | str) -> dict[str, Any]:
     return _jsonable(_service().done(arg))
 
 
-@mcp.tool(
+@_tool(
     name="project_context",
     description="Return the current active project context.",
     annotations=_READ,
@@ -333,7 +369,7 @@ def project_context() -> dict[str, Any]:
     return {"active_project": _service().get_active_project()}
 
 
-@mcp.tool(
+@_tool(
     name="project_list",
     description="List projects and their aggregate entry statistics.",
     annotations=_READ,
@@ -342,7 +378,7 @@ def project_list() -> list[dict[str, Any]]:
     return [_jsonable(item) for item in _service().project_list()]
 
 
-@mcp.tool(
+@_tool(
     name="project_show",
     description="Show aggregate statistics and metadata for one project.",
     annotations=_READ,
@@ -351,7 +387,7 @@ def project_show(name: str) -> dict[str, Any]:
     return _jsonable(_service().project_stats(name))
 
 
-@mcp.tool(
+@_tool(
     name="project_focus",
     description="Set, inspect, or clear the active project filter.",
     annotations=_MUTATION,
@@ -365,7 +401,7 @@ def project_focus(name: str | None = None, clear: bool = False) -> dict[str, Any
     return {"active_project": service.get_active_project()}
 
 
-@mcp.tool(
+@_tool(
     name="tag_stats",
     description="Return tag frequencies across all indexed entries.",
     annotations=_READ,
@@ -374,7 +410,7 @@ def tag_stats() -> dict[str, int]:
     return dict(_service().tag_frequency())
 
 
-@mcp.tool(
+@_tool(
     name="tag_show",
     description="List entries carrying a tag.",
     annotations=_READ,
@@ -386,7 +422,7 @@ def tag_show(tag: str) -> list[dict[str, Any]]:
     ]
 
 
-@mcp.tool(
+@_tool(
     name="journal_today",
     description="Ensure today's journal exists and return its body and metadata.",
     annotations=_MUTATION,
@@ -396,7 +432,7 @@ def journal_today() -> dict[str, Any]:
     return {"day": day.isoformat(), "entry": _jsonable(entry), "body": body}
 
 
-@mcp.tool(
+@_tool(
     name="journal_append",
     description="Append text to a journal day, defaulting to the logical current day.",
     annotations=_APPEND,
@@ -406,7 +442,7 @@ def journal_append(text: str, target_day: str | None = None) -> dict[str, Any]:
     return _jsonable(_service().journal_append(text, day))
 
 
-@mcp.tool(
+@_tool(
     name="journal_close",
     description="Close the logical current journal day and open the next one.",
     annotations=_MUTATION,
@@ -415,7 +451,7 @@ def journal_close() -> dict[str, Any]:
     return _jsonable(_service().journal_close())
 
 
-@mcp.tool(
+@_tool(
     name="journal_show",
     description="Read the authored body for a journal day.",
     annotations=_READ,
