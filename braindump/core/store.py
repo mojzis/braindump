@@ -16,7 +16,7 @@ import shutil
 import tempfile
 import threading
 import time
-from collections.abc import Container, Iterator
+from collections.abc import Container, Generator, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -90,7 +90,7 @@ def claim_unique_path(
 
 
 @contextlib.contextmanager
-def _guard(path: Path, action: str) -> Iterator[None]:
+def _guard(path: Path, action: str) -> Generator[None]:
     """Turn filesystem failures on `path` into a `StorageError` for the surface.
 
     A braindump directory that can't be written — a sandbox that only grants
@@ -108,7 +108,7 @@ def _guard(path: Path, action: str) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def _locked(path: Path, mode: str = "a+") -> Iterator[Any]:
+def _locked(path: Path, mode: str = "a+") -> Generator[Any]:
     """Open `path` with an exclusive fcntl lock. Ensures parent exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if mode == "r+" and not path.exists():
@@ -122,7 +122,7 @@ def _locked(path: Path, mode: str = "a+") -> Iterator[Any]:
 
 
 @contextlib.contextmanager
-def mutation_lock(cfg: Config) -> Iterator[None]:
+def mutation_lock(cfg: Config) -> Generator[None]:
     """Serialize read-modify-write mutations across processes."""
     with (
         _guard(cfg.home / ".mutation.lock", "write"),

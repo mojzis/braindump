@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
@@ -81,7 +81,7 @@ class SearchFilters:
     fulltext: bool = True
 
 
-def _normalize_types(types: Iterable[str]) -> list[str]:
+def _normalize_types(types: Sequence[str]) -> list[str]:
     return [type_to_dir(t) for t in types] if types else list(ALL_TYPE_DIRS)
 
 

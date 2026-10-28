@@ -554,14 +554,14 @@ class _FakePage:
 class _FakeQt5Settings(_FakeSettings):
     """Qt5 layout: the nested type exists but carries no members."""
 
-    class WebAttribute:
+    class WebAttribute:  # ty: ignore[invalid-attribute-override]  # Qt5: empty nested type
         pass
 
     JavascriptCanAccessClipboard = "clipboard"
 
 
 class _FakeQt5Page(_FakePage):
-    class WebAction:
+    class WebAction:  # ty: ignore[invalid-attribute-override]  # Qt5: empty nested type
         pass
 
     Copy = "copy"
