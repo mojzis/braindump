@@ -55,7 +55,7 @@ dev = [
     "deptry",
     "poethepoet>=0.48.0",
     "madoqua>=0.2.6",
-    "gerenuk>=0.5.0",
+    "gerenuk>=0.5.2",
     "zorilla>=0.2.2",
     "pycoati>=0.2.9",
     "ty-find>=0.5.1",
