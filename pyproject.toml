@@ -44,7 +44,7 @@ docs = [
 ]
 dev = [
     "mcp>=2.3.0,<3",
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "pytest-cov",
     "freezegun>=1.5.5",
     "httpx>=0.28.1",
