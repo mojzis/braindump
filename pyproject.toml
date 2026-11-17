@@ -34,7 +34,7 @@ app = [
     "qtpy>=2.4.3",
     # Same story on macOS: pywebview pulls pyobjc in there regardless, but
     # desktop.py imports AppKit/Foundation for screen geometry and app naming.
-    "pyobjc-framework-Cocoa>=12.2.2; sys_platform=='darwin'",
+    "pyobjc-framework-Cocoa>=13.0; sys_platform=='darwin'",
 ]
 
 [dependency-groups]
