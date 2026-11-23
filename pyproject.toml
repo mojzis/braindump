@@ -59,7 +59,7 @@ dev = [
     "zorilla>=0.2.6",
     "pycoati>=0.2.15",
     "ty-find>=0.5.5",
-    "playwright>=1.65.1",
+    "playwright>=1.65.2",
 ]
 
 [project.scripts]
