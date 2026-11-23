@@ -57,7 +57,7 @@ dev = [
     "madoqua>=0.2.12",
     "gerenuk>=0.5.7",
     "zorilla>=0.2.6",
-    "pycoati>=0.2.15",
+    "pycoati>=0.2.16",
     "ty-find>=0.5.5",
     "playwright>=1.65.1",
 ]
