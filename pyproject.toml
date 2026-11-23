@@ -9,7 +9,7 @@ authors = [{ name = "Matous Mojzis" }]
 dependencies = [
     "markdown>=3.11.3",
     "nh3>=0.3.7",
-    "pydantic>=2.14.3",
+    "pydantic>=2.14.4",
     "typer>=0.29.1",
     "typer-agentic>=0.1.4",
 ]
